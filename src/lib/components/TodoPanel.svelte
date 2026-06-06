@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { isTauri } from "@tauri-apps/api/core";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { onMount } from "svelte";
 
@@ -16,13 +17,15 @@
     const unlisteners: UnlistenFn[] = [];
 
     void todos.load();
-    void listen("focus-new-todo", () => {
-      showAbout = false;
-      requestAnimationFrame(() => inputElement?.focus());
-    }).then((unlisten) => unlisteners.push(unlisten));
-    void listen("show-about", () => {
-      showAbout = true;
-    }).then((unlisten) => unlisteners.push(unlisten));
+    if (isTauri()) {
+      void listen("focus-new-todo", () => {
+        showAbout = false;
+        requestAnimationFrame(() => inputElement?.focus());
+      }).then((unlisten) => unlisteners.push(unlisten));
+      void listen("show-about", () => {
+        showAbout = true;
+      }).then((unlisten) => unlisteners.push(unlisten));
+    }
 
     return () => unlisteners.forEach((unlisten) => unlisten());
   });
@@ -63,12 +66,7 @@
 <main class="panel-shell">
   <header class="panel-header">
     <div class="brand">
-      <div class="mascot" aria-hidden="true">
-        <span class="eye left"></span>
-        <span class="eye right"></span>
-        <span class="mouth"></span>
-        <span class="check">✓</span>
-      </div>
+      <img class="mascot" src="/eggdone-icon.png" alt="" aria-hidden="true" />
       <div>
         <h1>蛋定 Todo</h1>
         <p>拖拖蛋陪你慢慢完成</p>
@@ -111,7 +109,7 @@
       </div>
     {:else if $todos.items.length === 0}
       <div class="empty-state">
-        <div class="empty-yolk" aria-hidden="true">✓</div>
+        <img class="empty-mascot" src="/eggdone-icon.png" alt="" aria-hidden="true" />
         <strong>今天也要蛋定完成</strong>
         <span>先写下一件小事吧</span>
       </div>
@@ -132,7 +130,7 @@
   <div class="about-backdrop">
     <button class="about-dismiss" type="button" aria-label="关闭关于窗口" onclick={() => showAbout = false}></button>
     <div class="about-card" role="dialog" aria-modal="true" aria-labelledby="about-title">
-      <div class="about-mascot" aria-hidden="true">✓</div>
+      <img class="about-mascot" src="/eggdone-icon.png" alt="" aria-hidden="true" />
       <h2 id="about-title">EggDone</h2>
       <p>蛋定 Todo 0.1.0</p>
       <small>原创角色「拖拖蛋」陪你轻松处理待办。</small>
