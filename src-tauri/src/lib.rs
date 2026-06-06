@@ -11,7 +11,10 @@ pub fn run() {
         .setup(|app| {
             let database = db::Database::open(app.handle())?;
             app.manage(database);
-            tray::create_tray(app.handle())?;
+            // Tauri removes a tray icon when its last handle is dropped.
+            // Store the handle in application state for the whole process lifetime.
+            let tray_icon = tray::create_tray(app.handle())?;
+            app.manage(tray_icon);
             Ok(())
         })
         .on_window_event(|window, event| {

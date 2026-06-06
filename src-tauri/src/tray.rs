@@ -5,7 +5,7 @@ use std::{
 
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
-    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager, PhysicalPosition,
 };
 
@@ -39,7 +39,7 @@ impl PanelState {
     }
 }
 
-pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
+pub fn create_tray(app: &AppHandle) -> tauri::Result<TrayIcon> {
     let toggle_item = MenuItem::with_id(app, "toggle", "打开 / 隐藏面板", true, None::<&str>)?;
     let new_item = MenuItem::with_id(app, "new", "新增任务", true, None::<&str>)?;
     let about_item = MenuItem::with_id(app, "about", "关于 EggDone", true, None::<&str>)?;
@@ -92,9 +92,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
                 toggle_panel(app, Some(anchor));
             }
         })
-        .build(app)?;
-
-    Ok(())
+        .build(app)
 }
 
 fn toggle_panel(app: &AppHandle, anchor: Option<(f64, f64, f64, f64)>) {
