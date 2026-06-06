@@ -37,7 +37,7 @@ MVP 核心链路必须保持可用：
 
 - 使用蛋黄、checkbox、圆角卡片等原创通用元素。
 - 不得加入 Gudetama、蛋黄哥、Sanrio 或其他现有 IP 的名称、图像、轮廓复刻和素材。
-- 当前 `eggdone.svg` 是原创占位图，替换正式设计时保留跨平台图标生成流程。
+- `src-tauri/icons/app-icon.png` 是透明背景的应用图标源文件，更新后使用 `pnpm tauri icon <source>` 重新生成各平台图标。
 - 不引入大型 UI 框架；优先使用局部 Svelte 组件和原生 CSS。
 
 ## 跨平台要求
