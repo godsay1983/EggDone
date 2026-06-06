@@ -59,6 +59,12 @@ footer {
   gap: 11px;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .brand h1 {
   margin: 0 0 2px;
   font-size: 18px;
@@ -80,6 +86,7 @@ footer {
   filter: drop-shadow(0 4px 7px rgb(174 135 31 / 18%));
 }
 
+.theme-button,
 .close-button,
 .delete-button {
   display: grid;
@@ -89,6 +96,7 @@ footer {
   cursor: pointer;
 }
 
+.theme-button,
 .close-button {
   width: 30px;
   height: 30px;
@@ -96,12 +104,14 @@ footer {
   color: #a89c89;
 }
 
+.theme-button:hover,
 .close-button:hover,
 .delete-button:hover {
   color: #705f47;
   background: #eee8db;
 }
 
+.theme-button svg,
 .close-button svg,
 .delete-button svg {
   width: 17px;
@@ -392,4 +402,132 @@ footer button {
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
+}
+
+html[data-theme="dark"],
+html[data-theme="dark"] body {
+  color: #eee7da;
+  background: #1d1b18;
+  color-scheme: dark;
+}
+
+html[data-theme="dark"] .panel-shell {
+  background:
+    radial-gradient(circle at 90% 5%, rgb(246 201 76 / 12%), transparent 34%),
+    #1d1b18;
+}
+
+html[data-theme="dark"] .brand p {
+  color: #a99d8b;
+}
+
+html[data-theme="dark"] .theme-button,
+html[data-theme="dark"] .close-button {
+  color: #a99d8b;
+}
+
+html[data-theme="dark"] .theme-button:hover,
+html[data-theme="dark"] .close-button:hover,
+html[data-theme="dark"] .delete-button:hover {
+  color: #f3eadb;
+  background: #37322b;
+}
+
+html[data-theme="dark"] .quick-add {
+  border-color: #403a31;
+  background: rgb(44 41 35 / 92%);
+  box-shadow: 0 7px 22px rgb(0 0 0 / 20%);
+}
+
+html[data-theme="dark"] .quick-add:focus-within {
+  border-color: #aa8735;
+  box-shadow: 0 7px 24px rgb(246 201 76 / 8%);
+}
+
+html[data-theme="dark"] .quick-add input {
+  color: #f1e9dc;
+}
+
+html[data-theme="dark"] .quick-add input::placeholder {
+  color: #887e70;
+}
+
+html[data-theme="dark"] .summary {
+  color: #d1c6b5;
+}
+
+html[data-theme="dark"] .summary .count,
+html[data-theme="dark"] .status,
+html[data-theme="dark"] .empty-state {
+  color: #9f9483;
+}
+
+html[data-theme="dark"] .todo-list {
+  scrollbar-color: #4c453a transparent;
+}
+
+html[data-theme="dark"] .todo-item {
+  border-color: #3b362f;
+  background: rgb(43 40 35 / 82%);
+}
+
+html[data-theme="dark"] .todo-item:hover {
+  border-color: #51493d;
+}
+
+html[data-theme="dark"] .todo-item.completed p {
+  text-decoration-color: #817767;
+}
+
+html[data-theme="dark"] .checkbox {
+  border-color: #625949;
+  background: #25221e;
+}
+
+html[data-theme="dark"] .checkbox.checked {
+  border-color: #75977b;
+  background: #789d7e;
+}
+
+html[data-theme="dark"] .delete-button {
+  color: #7f7567;
+}
+
+html[data-theme="dark"] .status.error {
+  color: #d38a78;
+}
+
+html[data-theme="dark"] .status button {
+  color: #e0c46f;
+}
+
+html[data-theme="dark"] .empty-state strong {
+  color: #d9cebd;
+}
+
+html[data-theme="dark"] footer {
+  border-top-color: #39342d;
+  color: #817768;
+}
+
+html[data-theme="dark"] footer button {
+  color: #aaa08f;
+}
+
+html[data-theme="dark"] .about-backdrop {
+  background: rgb(4 4 3 / 55%);
+}
+
+html[data-theme="dark"] .about-card {
+  border-color: #494238;
+  background: #292621;
+  box-shadow: 0 20px 50px rgb(0 0 0 / 42%);
+}
+
+html[data-theme="dark"] .about-card p {
+  color: #9e9383;
+}
+
+html[data-theme="dark"] .about-card small {
+  color: #c6bcac;
 }

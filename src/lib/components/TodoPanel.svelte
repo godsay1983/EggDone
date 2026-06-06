@@ -8,13 +8,24 @@
   import type { Todo } from "$lib/types";
   import TodoItem from "./TodoItem.svelte";
 
+  type Theme = "light" | "dark";
+
   let title = "";
   let adding = false;
   let showAbout = false;
+  let theme: Theme = "light";
   let inputElement: HTMLInputElement;
 
   onMount(() => {
     const unlisteners: UnlistenFn[] = [];
+    const savedTheme = localStorage.getItem("eggdone-theme");
+    theme =
+      savedTheme === "light" || savedTheme === "dark"
+        ? savedTheme
+        : window.matchMedia("(prefers-color-scheme: dark)").matches
+          ? "dark"
+          : "light";
+    applyTheme(theme);
 
     void todos.load();
     if (isTauri()) {
@@ -29,6 +40,19 @@
 
     return () => unlisteners.forEach((unlisten) => unlisten());
   });
+
+  function toggleTheme() {
+    theme = theme === "light" ? "dark" : "light";
+    localStorage.setItem("eggdone-theme", theme);
+    applyTheme(theme);
+  }
+
+  function applyTheme(nextTheme: Theme) {
+    document.documentElement.dataset.theme = nextTheme;
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute("content", nextTheme === "dark" ? "#1d1b18" : "#f6c94c");
+  }
 
   async function addTodo() {
     const nextTitle = title.trim();
@@ -73,11 +97,32 @@
       </div>
     </div>
 
-    <button class="close-button" type="button" aria-label="隐藏面板" title="隐藏面板" onclick={() => todoApi.hidePanel()}>
-      <svg viewBox="0 0 20 20" aria-hidden="true">
-        <path d="m5 5 10 10m0-10L5 15" />
-      </svg>
-    </button>
+    <div class="header-actions">
+      <button
+        class="theme-button"
+        type="button"
+        aria-label={theme === "light" ? "切换到暗色主题" : "切换到亮色主题"}
+        title={theme === "light" ? "切换到暗色主题" : "切换到亮色主题"}
+        onclick={toggleTheme}
+      >
+        {#if theme === "light"}
+          <svg viewBox="0 0 20 20" aria-hidden="true">
+            <path d="M16.2 12.7A6.4 6.4 0 0 1 7.3 3.8 6.5 6.5 0 1 0 16.2 12.7Z" />
+          </svg>
+        {:else}
+          <svg viewBox="0 0 20 20" aria-hidden="true">
+            <circle cx="10" cy="10" r="3.2" />
+            <path d="M10 2v1.5M10 16.5V18M2 10h1.5M16.5 10H18M4.3 4.3l1 1M14.7 14.7l1 1M15.7 4.3l-1 1M5.3 14.7l-1 1" />
+          </svg>
+        {/if}
+      </button>
+
+      <button class="close-button" type="button" aria-label="隐藏面板" title="隐藏面板" onclick={() => todoApi.hidePanel()}>
+        <svg viewBox="0 0 20 20" aria-hidden="true">
+          <path d="m5 5 10 10m0-10L5 15" />
+        </svg>
+      </button>
+    </div>
   </header>
 
   <form class="quick-add" onsubmit={(event) => { event.preventDefault(); void addTodo(); }}>
