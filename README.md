@@ -103,3 +103,5 @@ EggDone/
 
 - 托盘附近定位使用平台提供的图标坐标；不可用时回退到主屏幕右下角。
 - MVP 暂不包含任务编辑、分组、提醒、同步、搜索和开机自启动。
+
+后续优化和版本规划见 [OPTIMIZATION_TODO.md](OPTIMIZATION_TODO.md)。
