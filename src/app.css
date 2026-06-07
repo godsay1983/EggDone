@@ -748,6 +748,8 @@ footer button {
   position: relative;
   z-index: 1;
   width: 306px;
+  max-height: calc(100vh - 28px);
+  overflow-y: auto;
   padding: 17px;
   border: 1px solid #e9dfcf;
   border-radius: 18px;
@@ -905,6 +907,178 @@ footer button {
   color: #985d50;
   background: #f8e9e5;
   font-size: 10px;
+  line-height: 1.4;
+}
+
+.sync-section {
+  margin-top: 2px;
+  padding-top: 12px;
+  border-top: 1px solid #eee7da;
+}
+
+.sync-heading,
+.credential-status,
+.sync-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sync-heading {
+  margin-bottom: 10px;
+}
+
+.sync-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.sync-heading strong,
+.credential-status > span {
+  color: #554b3d;
+  font-size: 11px;
+}
+
+.sync-heading div > span,
+.sync-field small {
+  color: #9c8e79;
+  font-size: 9px;
+  font-weight: 400;
+}
+
+.sync-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.sync-field > span {
+  color: #776a56;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.sync-field input {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid #e2d8c8;
+  border-radius: 8px;
+  outline: 0;
+  color: #655946;
+  background: #faf7f0;
+  font-size: 10px;
+}
+
+.sync-field input:focus {
+  border-color: #d9ad31;
+  box-shadow: 0 0 0 2px rgb(246 201 76 / 13%);
+}
+
+.sync-field input:disabled {
+  opacity: 0.55;
+}
+
+.sync-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.http-warning,
+.path-style {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0 0 9px;
+  color: #8b6548;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.http-warning {
+  padding: 7px 8px;
+  border: 1px solid #ead49d;
+  border-radius: 8px;
+  background: #fff7df;
+}
+
+.http-warning input,
+.path-style input {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  margin: 0;
+  accent-color: #88ad8d;
+}
+
+.credential-status {
+  margin: 10px 0 8px;
+  padding-top: 9px;
+  border-top: 1px dashed #e5dbcb;
+}
+
+.credential-status strong {
+  color: #a17468;
+  font-size: 9px;
+}
+
+.credential-status strong.configured {
+  color: #66856b;
+}
+
+.sync-actions {
+  justify-content: flex-end;
+  margin-top: 3px;
+}
+
+.sync-actions button,
+.delete-credentials {
+  padding: 6px 9px;
+  border: 1px solid #e0d5c4;
+  border-radius: 8px;
+  color: #675b48;
+  background: #faf7f0;
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.sync-actions button.primary {
+  border-color: #e2bd50;
+  color: #5f4c1e;
+  background: #f6c94c;
+  font-weight: 700;
+}
+
+.sync-actions button:disabled,
+.delete-credentials:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.delete-credentials {
+  width: 100%;
+  margin-top: 8px;
+  border-color: transparent;
+  color: #a36759;
+  background: transparent;
+}
+
+.delete-credentials:hover {
+  background: #f8e9e5;
+}
+
+.sync-placeholder,
+.sync-message {
+  margin: 6px 0 0;
+  padding: 7px 9px;
+  border-radius: 8px;
+  color: #55705a;
+  background: #eaf2e9;
+  font-size: 9px;
   line-height: 1.4;
 }
 
@@ -1275,6 +1449,56 @@ html[data-theme="dark"] .shortcut-select select {
 html[data-theme="dark"] .settings-error {
   color: #e2a090;
   background: #422d28;
+}
+
+html[data-theme="dark"] .sync-section,
+html[data-theme="dark"] .credential-status {
+  border-color: #403a32;
+}
+
+html[data-theme="dark"] .sync-heading strong,
+html[data-theme="dark"] .credential-status > span {
+  color: #ded4c4;
+}
+
+html[data-theme="dark"] .sync-heading div > span,
+html[data-theme="dark"] .sync-field small,
+html[data-theme="dark"] .sync-field > span {
+  color: #9e9383;
+}
+
+html[data-theme="dark"] .sync-field input,
+html[data-theme="dark"] .sync-actions button {
+  border-color: #534b3f;
+  color: #ded4c4;
+  background: #312e28;
+}
+
+html[data-theme="dark"] .http-warning {
+  border-color: #675933;
+  color: #d0b87b;
+  background: #3a3322;
+}
+
+html[data-theme="dark"] .sync-actions button.primary {
+  border-color: #d2aa3b;
+  color: #352c17;
+  background: #d8ae3c;
+}
+
+html[data-theme="dark"] .delete-credentials {
+  color: #d69787;
+  background: transparent;
+}
+
+html[data-theme="dark"] .delete-credentials:hover {
+  background: #422d28;
+}
+
+html[data-theme="dark"] .sync-placeholder,
+html[data-theme="dark"] .sync-message {
+  color: #a8c8ad;
+  background: #29392c;
 }
 
 html[data-theme="dark"] .about-backdrop {

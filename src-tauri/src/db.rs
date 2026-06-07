@@ -9,7 +9,7 @@ use rusqlite::{params, Connection, Transaction};
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
-const CURRENT_SCHEMA_VERSION: i64 = 3;
+const CURRENT_SCHEMA_VERSION: i64 = 4;
 const DEVICE_ID_KEY: &str = "device_id";
 
 pub struct Database {
@@ -66,6 +66,7 @@ pub(crate) fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {
     apply_migration(connection, 1, create_legacy_schema)?;
     apply_migration(connection, 2, migrate_todos_for_sync)?;
     apply_migration(connection, 3, add_sync_identity)?;
+    apply_migration(connection, 4, add_sync_settings)?;
 
     debug_assert_eq!(schema_version(connection)?, CURRENT_SCHEMA_VERSION);
     Ok(())
@@ -235,6 +236,36 @@ fn add_sync_identity(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
     Ok(())
 }
 
+fn add_sync_settings(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
+    transaction.execute(
+        "
+        CREATE TABLE sync_settings (
+            id INTEGER PRIMARY KEY CHECK(id = 1),
+            enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0, 1)),
+            endpoint TEXT NOT NULL DEFAULT '',
+            region TEXT NOT NULL DEFAULT 'us-east-1',
+            bucket TEXT NOT NULL DEFAULT '',
+            object_key TEXT NOT NULL DEFAULT 'eggdone/todos.json',
+            path_style INTEGER NOT NULL DEFAULT 1 CHECK(path_style IN (0, 1)),
+            allow_http INTEGER NOT NULL DEFAULT 0 CHECK(allow_http IN (0, 1)),
+            updated_at INTEGER NOT NULL
+        )
+        ",
+        [],
+    )?;
+    transaction.execute(
+        "
+        INSERT INTO sync_settings (
+            id, enabled, endpoint, region, bucket, object_key,
+            path_style, allow_http, updated_at
+        )
+        VALUES (1, 0, '', 'us-east-1', '', 'eggdone/todos.json', 1, 0, ?1)
+        ",
+        params![now_millis()],
+    )?;
+    Ok(())
+}
+
 pub(crate) fn device_id(connection: &Connection) -> rusqlite::Result<String> {
     connection.query_row(
         "SELECT value FROM app_metadata WHERE key = ?1",
@@ -288,6 +319,11 @@ mod tests {
         ] {
             assert!(columns.iter().any(|column| column == expected));
         }
+
+        let sync_settings_count: i64 = connection
+            .query_row("SELECT COUNT(*) FROM sync_settings", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(sync_settings_count, 1);
     }
 
     #[test]
@@ -398,5 +434,59 @@ mod tests {
             .unwrap();
         assert!(Uuid::parse_str(&identity).is_ok());
         assert_eq!(updated_by, identity);
+    }
+
+    #[test]
+    fn upgrades_v3_database_with_default_sync_settings() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "
+                CREATE TABLE schema_migrations (
+                    version INTEGER PRIMARY KEY,
+                    applied_at INTEGER NOT NULL
+                );
+                ",
+            )
+            .unwrap();
+        apply_migration(&mut connection, 1, create_legacy_schema).unwrap();
+        apply_migration(&mut connection, 2, migrate_todos_for_sync).unwrap();
+        apply_migration(&mut connection, 3, add_sync_identity).unwrap();
+
+        migrate(&mut connection).unwrap();
+
+        let settings = connection
+            .query_row(
+                "
+                SELECT enabled, endpoint, region, bucket, object_key, path_style, allow_http
+                FROM sync_settings WHERE id = 1
+                ",
+                [],
+                |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
+                        row.get::<_, String>(4)?,
+                        row.get::<_, i64>(5)?,
+                        row.get::<_, i64>(6)?,
+                    ))
+                },
+            )
+            .unwrap();
+
+        assert_eq!(
+            settings,
+            (
+                0,
+                String::new(),
+                "us-east-1".to_string(),
+                String::new(),
+                "eggdone/todos.json".to_string(),
+                1,
+                0,
+            )
+        );
     }
 }

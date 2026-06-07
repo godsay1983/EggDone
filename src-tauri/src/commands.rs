@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 use crate::{
     db::{device_id, now_millis, Database},
+    s3_sync::{self, ConnectionTestResult, SaveSyncSettings, SyncSettings},
     sync::{self, SyncDocument},
     tray::PanelState,
 };
@@ -111,6 +112,38 @@ pub fn apply_remote_sync_document(
 ) -> Result<SyncDocument, String> {
     let mut connection = lock_database(&database)?;
     sync::merge_remote_document(&mut connection, &remote, now_millis())
+}
+
+#[tauri::command]
+pub fn get_sync_settings(database: State<'_, Database>) -> Result<SyncSettings, String> {
+    let connection = lock_database(&database)?;
+    s3_sync::get_settings(&connection)
+}
+
+#[tauri::command]
+pub fn save_sync_settings(
+    settings: SaveSyncSettings,
+    database: State<'_, Database>,
+) -> Result<SyncSettings, String> {
+    let connection = lock_database(&database)?;
+    s3_sync::save_settings(&connection, settings)
+}
+
+#[tauri::command]
+pub fn delete_sync_credentials(database: State<'_, Database>) -> Result<(), String> {
+    let connection = lock_database(&database)?;
+    s3_sync::delete_credentials(&connection)
+}
+
+#[tauri::command]
+pub async fn test_sync_connection(
+    database: State<'_, Database>,
+) -> Result<ConnectionTestResult, String> {
+    let prepared = {
+        let connection = lock_database(&database)?;
+        s3_sync::prepare_connection_test(&connection)?
+    };
+    s3_sync::test_connection(prepared).await
 }
 
 fn lock_database<'a>(

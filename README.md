@@ -12,6 +12,8 @@ EggDone 是一个轻量级、跨平台、托盘常驻的 Todo 桌面应用。应
 - 快速新增、行内编辑、完成和取消完成 Todo
 - 拖动排序、清除已完成、软删除及 5 秒撤销
 - JSON 导入导出、UUID 合并和 SQLite 手动备份
+- 可配置 AWS S3、MinIO 和其他 S3 兼容存储
+- Access Key 和 Secret Key 保存到系统凭据库
 - 可配置全局快捷键，默认 `Ctrl + Shift + Space`
 - 可选开机自动运行，并静默进入托盘
 - 显示未完成任务数量和空状态
@@ -88,13 +90,15 @@ pnpm tauri build
 | `completed_at` | UTC 完成时间（毫秒时间戳，可空） |
 | `deleted_at` | UTC 软删除时间（毫秒时间戳，可空） |
 
-`schema_migrations` 表记录已执行的数据库版本，`app_metadata` 保存本机 `device_id`。开发时可以删除数据库以重置数据，具体根目录由 Tauri 的 `app_data_dir` 按平台决定。
+`schema_migrations` 表记录已执行的数据库版本，`app_metadata` 保存本机 `device_id`，`sync_settings` 只保存 Endpoint、Region、Bucket、Object Key 等非敏感配置。Access Key 和 Secret Key 保存到操作系统凭据库，不写入 SQLite。开发时可以删除数据库以重置数据，具体根目录由 Tauri 的 `app_data_dir` 按平台决定。
 
-项目已包含版本化同步文档和本地合并核心：按 Todo UUID 合并，优先采用较新的 `updated_at`；时间相同时优先保留删除记录，再通过 `updated_by` 稳定决胜。当前尚未接入 S3/MinIO 网络、凭据和 ETag。
+项目已包含版本化同步文档和本地合并核心：按 Todo UUID 合并，优先采用较新的 `updated_at`；时间相同时优先保留删除记录，再通过 `updated_by` 稳定决胜。设置页可配置 AWS S3 或自定义 S3 Endpoint，支持 MinIO 常用的 Path Style 和 HTTP。HTTP 必须显式确认明文传输风险。
+
+当前“测试连接”会向配置的 Bucket 和 Object Key 发起签名请求，验证 Endpoint、凭据和访问权限；返回 404 时会提示同步文件尚未创建，此时仍需确认 Bucket 已提前创建。实际上传、下载、ETag 冲突保护和“立即同步”仍在后续阶段。
 
 面板右上角的“数据管理”可导出版本化 JSON、预览并合并导入文件，或创建一致的 SQLite 快照。导入只更新 `updated_at` 更新的同 UUID 任务，不会直接覆盖整个本地数据库。
 
-面板右上角的“设置”可启用、禁用或修改全局快捷键，并切换系统开机启动。快捷键冲突时会保留之前的有效配置并显示错误。
+面板右上角的“设置”可管理全局快捷键、系统开机启动和 S3 / MinIO 同步连接。删除系统凭据时会同时禁用同步。快捷键冲突时会保留之前的有效配置并显示错误。
 
 ## 目录结构
 
@@ -103,6 +107,7 @@ EggDone/
 ├─ src/
 │  ├─ lib/
 │  │  ├─ api/todoApi.ts          # Tauri command 调用
+│  │  ├─ api/syncApi.ts          # 同步配置和连接测试调用
 │  │  ├─ components/             # Todo 面板和列表项
 │  │  ├─ stores/todoStore.ts     # Todo 状态与操作
 │  │  └─ types.ts
@@ -114,6 +119,7 @@ EggDone/
 │  │  ├─ commands.rs             # 前后端命令
 │  │  ├─ db.rs                   # SQLite 初始化
 │  │  ├─ panel_position.rs       # 多显示器面板定位计算
+│  │  ├─ s3_sync.rs              # S3 配置、系统凭据和连接测试
 │  │  ├─ sync.rs                 # 同步文档、冲突决胜和 UUID 合并
 │  │  ├─ tray.rs                 # 托盘菜单、事件和窗口定位
 │  │  ├─ lib.rs                  # Tauri 应用装配
@@ -126,6 +132,7 @@ EggDone/
 
 - 托盘附近定位使用平台提供的图标坐标；不可用时回退到主屏幕右下角。
 - Windows 混合 DPI 多显示器仍需在 125%、150% 和 200% 缩放下进行实机验收。
-- 当前暂不包含分组、提醒、同步和搜索。
+- 当前暂不包含分组、提醒、远端读写同步和搜索。
+- S3 / MinIO 尚未实现对象上传下载、ETag 冲突保护和自动同步。
 
 后续优化和版本规划见 [OPTIMIZATION_TODO.md](OPTIMIZATION_TODO.md)。

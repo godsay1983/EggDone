@@ -139,20 +139,20 @@ eggdone/
 
 ### S3 / MinIO 配置
 
-- [ ] 支持自定义 Endpoint。
-- [ ] 支持 AWS S3、MinIO 和其他 S3 兼容服务。
-- [ ] 支持 HTTP 和 HTTPS Endpoint。
-- [ ] HTTP 配置显示明文传输警告，但允许用户继续。
-- [ ] 支持 Region、Bucket、Object Key 和 Path Style。
-- [ ] 增加“测试连接”。
+- [x] 支持自定义 Endpoint。
+- [x] 支持 AWS S3、MinIO 和其他 S3 兼容服务。
+- [x] 支持 HTTP 和 HTTPS Endpoint。
+- [x] HTTP 配置显示明文传输警告，但允许用户继续。
+- [x] 支持 Region、Bucket、Object Key 和 Path Style。
+- [x] 增加“测试连接”。
 - [ ] 增加“立即同步”。
 
 ### 凭据安全
 
-- [ ] Access Key 和 Secret Key 保存到系统凭据库。
-- [ ] SQLite 只保存非敏感同步配置。
-- [ ] 日志和错误信息不得包含 Secret Key。
-- [ ] 提供删除凭据和禁用同步操作。
+- [x] Access Key 和 Secret Key 保存到系统凭据库。
+- [x] SQLite 只保存非敏感同步配置。
+- [x] 日志和错误信息不得包含 Secret Key。
+- [x] 提供删除凭据和禁用同步操作。
 
 ### 冲突保护
 

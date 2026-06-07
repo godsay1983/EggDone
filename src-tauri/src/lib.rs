@@ -2,6 +2,7 @@ mod commands;
 mod data_exchange;
 mod db;
 mod panel_position;
+mod s3_sync;
 mod sync;
 mod tray;
 
@@ -84,6 +85,10 @@ pub fn run() {
             commands::toggle_panel_from_shortcut,
             commands::prepare_sync_document,
             commands::apply_remote_sync_document,
+            commands::get_sync_settings,
+            commands::save_sync_settings,
+            commands::delete_sync_credentials,
+            commands::test_sync_connection,
             data_exchange::export_todos,
             data_exchange::preview_todo_import,
             data_exchange::confirm_todo_import,

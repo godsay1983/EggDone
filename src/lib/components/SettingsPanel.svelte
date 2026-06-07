@@ -5,6 +5,7 @@
     updateShortcut,
     type DesktopSettings,
   } from "$lib/api/desktopSettings";
+  import SyncSettings from "./SyncSettings.svelte";
 
   export let settings: DesktopSettings;
   export let onClose: () => void;
@@ -133,6 +134,8 @@
         <span></span>
       </label>
     </div>
+
+    <SyncSettings />
 
     {#if error}<p class="settings-error" role="alert">{error}</p>{/if}
   </section>
