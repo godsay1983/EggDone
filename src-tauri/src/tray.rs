@@ -4,16 +4,21 @@ use std::{
 };
 
 use tauri::{
+    image::Image,
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager, Monitor, PhysicalPosition,
 };
 
-use crate::panel_position::{self, Rect, Size};
+use crate::{
+    db::Database,
+    panel_position::{self, Rect, Size},
+};
 
 const RECENT_BLUR_DURATION: Duration = Duration::from_millis(350);
 const DIALOG_CLOSE_GRACE: Duration = Duration::from_millis(500);
 const INTERNAL_INTERACTION_GRACE: Duration = Duration::from_millis(300);
+const TRAY_ID: &str = "eggdone-tray";
 
 #[derive(Default)]
 struct PanelStateInner {
@@ -153,7 +158,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<TrayIcon> {
         .cloned()
         .expect("EggDone application icon is missing");
 
-    TrayIconBuilder::with_id("eggdone-tray")
+    let tray = TrayIconBuilder::with_id(TRAY_ID)
         .icon(tray_icon)
         .tooltip("蛋定 Todo")
         .menu(&menu)
@@ -204,7 +209,186 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<TrayIcon> {
             }
             _ => {}
         })
-        .build(app)
+        .build(app)?;
+    update_task_badge(app);
+    Ok(tray)
+}
+
+pub(crate) fn update_task_badge(app: &AppHandle) {
+    let Some(tray) = app.tray_by_id(TRAY_ID) else {
+        return;
+    };
+    let database = app.state::<Database>();
+    let Ok(connection) = database.connection.lock() else {
+        return;
+    };
+    let counts = connection.query_row(
+        "
+        SELECT
+            SUM(CASE WHEN completed = 0 THEN 1 ELSE 0 END),
+            COUNT(*)
+        FROM todos
+        WHERE deleted_at IS NULL
+        ",
+        [],
+        |row| Ok((row.get::<_, Option<u32>>(0)?.unwrap_or(0), row.get(1)?)),
+    );
+    let Ok((remaining, total)) = counts else {
+        return;
+    };
+    drop(connection);
+
+    let Some(base) = app.default_window_icon() else {
+        return;
+    };
+    let badge = draw_task_badge(base, remaining, total);
+    let _ = tray.set_icon(Some(badge));
+    let _ = tray.set_tooltip(Some(format!("蛋定 Todo · {remaining}/{total} 项未完成")));
+}
+
+fn draw_task_badge(base: &Image<'_>, remaining: u32, total: u32) -> Image<'static> {
+    let width = base.width();
+    let height = base.height();
+    let mut rgba = base.rgba().to_vec();
+    let scale = (height / 16).max(1);
+    let text = compact_badge_text(remaining, total);
+    let text_width = text_width(&text, scale);
+    let badge_height = (7 * scale).min(height);
+    let badge_width = (text_width + 4 * scale).min(width);
+    let left = width.saturating_sub(badge_width);
+    let top = height.saturating_sub(badge_height);
+
+    fill_rect(
+        &mut rgba,
+        width,
+        height,
+        left,
+        top,
+        badge_width,
+        badge_height,
+        [255, 249, 229, 255],
+    );
+    fill_rect(
+        &mut rgba,
+        width,
+        height,
+        left + scale.min(badge_width),
+        top + scale.min(badge_height),
+        badge_width.saturating_sub(scale * 2),
+        badge_height.saturating_sub(scale * 2),
+        [246, 201, 76, 255],
+    );
+    let text_left = left + badge_width.saturating_sub(text_width) / 2;
+    let text_top = top + scale;
+    draw_text(
+        &mut rgba,
+        width,
+        height,
+        text_left,
+        text_top,
+        scale,
+        &text,
+        [82, 61, 25, 255],
+    );
+
+    Image::new_owned(rgba, width, height)
+}
+
+fn compact_badge_text(remaining: u32, total: u32) -> String {
+    if remaining <= 9 && total <= 9 {
+        format!("{remaining}/{total}")
+    } else if remaining == 0 {
+        "0".to_string()
+    } else {
+        "9+".to_string()
+    }
+}
+
+fn text_width(text: &str, scale: u32) -> u32 {
+    let count = text.chars().count() as u32;
+    if count == 0 {
+        0
+    } else {
+        (count * 3 + count - 1) * scale
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn fill_rect(
+    rgba: &mut [u8],
+    canvas_width: u32,
+    canvas_height: u32,
+    left: u32,
+    top: u32,
+    width: u32,
+    height: u32,
+    color: [u8; 4],
+) {
+    for y in top..top.saturating_add(height).min(canvas_height) {
+        for x in left..left.saturating_add(width).min(canvas_width) {
+            set_pixel(rgba, canvas_width, x, y, color);
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn draw_text(
+    rgba: &mut [u8],
+    canvas_width: u32,
+    canvas_height: u32,
+    left: u32,
+    top: u32,
+    scale: u32,
+    text: &str,
+    color: [u8; 4],
+) {
+    let mut cursor = left;
+    for character in text.chars() {
+        let glyph = glyph(character);
+        for (row, bits) in glyph.iter().enumerate() {
+            for column in 0..3 {
+                if bits & (1 << (2 - column)) == 0 {
+                    continue;
+                }
+                fill_rect(
+                    rgba,
+                    canvas_width,
+                    canvas_height,
+                    cursor + column * scale,
+                    top + row as u32 * scale,
+                    scale,
+                    scale,
+                    color,
+                );
+            }
+        }
+        cursor += 4 * scale;
+    }
+}
+
+fn glyph(character: char) -> [u8; 5] {
+    match character {
+        '0' => [0b111, 0b101, 0b101, 0b101, 0b111],
+        '1' => [0b010, 0b110, 0b010, 0b010, 0b111],
+        '2' => [0b111, 0b001, 0b111, 0b100, 0b111],
+        '3' => [0b111, 0b001, 0b111, 0b001, 0b111],
+        '4' => [0b101, 0b101, 0b111, 0b001, 0b001],
+        '5' => [0b111, 0b100, 0b111, 0b001, 0b111],
+        '6' => [0b111, 0b100, 0b111, 0b101, 0b111],
+        '7' => [0b111, 0b001, 0b010, 0b010, 0b010],
+        '8' => [0b111, 0b101, 0b111, 0b101, 0b111],
+        '9' => [0b111, 0b101, 0b111, 0b001, 0b111],
+        '/' => [0b001, 0b001, 0b010, 0b100, 0b100],
+        '+' => [0b000, 0b010, 0b111, 0b010, 0b000],
+        _ => [0; 5],
+    }
+}
+
+fn set_pixel(rgba: &mut [u8], width: u32, x: u32, y: u32, color: [u8; 4]) {
+    let index = ((y * width + x) * 4) as usize;
+    if let Some(pixel) = rgba.get_mut(index..index + 4) {
+        pixel.copy_from_slice(&color);
+    }
 }
 
 pub(crate) fn toggle_panel(app: &AppHandle, anchor: Option<Rect>) -> bool {
@@ -354,5 +538,22 @@ mod tests {
         state.end_dialog_at(start + Duration::from_millis(20));
         assert!(!state.handle_blur_at(start + Duration::from_millis(200)));
         assert!(state.handle_blur_at(start + Duration::from_millis(520)));
+    }
+
+    #[test]
+    fn formats_single_digit_ratios_and_compacts_larger_counts() {
+        assert_eq!(compact_badge_text(3, 4), "3/4");
+        assert_eq!(compact_badge_text(0, 12), "0");
+        assert_eq!(compact_badge_text(12, 15), "9+");
+    }
+
+    #[test]
+    fn draws_badge_without_changing_image_dimensions() {
+        let base = Image::new_owned(vec![0; 32 * 32 * 4], 32, 32);
+        let badge = draw_task_badge(&base, 3, 4);
+
+        assert_eq!(badge.width(), 32);
+        assert_eq!(badge.height(), 32);
+        assert_ne!(badge.rgba(), base.rgba());
     }
 }

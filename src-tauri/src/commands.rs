@@ -10,7 +10,7 @@ use crate::{
         UploadOutcome,
     },
     sync::{self, SyncDocument},
-    tray::PanelState,
+    tray::{self, PanelState},
 };
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -33,56 +33,98 @@ pub fn list_todos(database: State<'_, Database>) -> Result<Vec<Todo>, String> {
 }
 
 #[tauri::command]
-pub fn create_todo(title: String, database: State<'_, Database>) -> Result<Todo, String> {
-    let connection = lock_database(&database)?;
-    create_todo_in_connection(&connection, &title)
+pub fn create_todo(
+    title: String,
+    app: AppHandle,
+    database: State<'_, Database>,
+) -> Result<Todo, String> {
+    let result = {
+        let connection = lock_database(&database)?;
+        create_todo_in_connection(&connection, &title)
+    };
+    refresh_badge_after_success(&app, &result);
+    result
 }
 
 #[tauri::command]
 pub fn set_todo_completed(
     id: i64,
     completed: bool,
+    app: AppHandle,
     database: State<'_, Database>,
 ) -> Result<Todo, String> {
-    let connection = lock_database(&database)?;
-    set_todo_completed_in_connection(&connection, id, completed)
+    let result = {
+        let connection = lock_database(&database)?;
+        set_todo_completed_in_connection(&connection, id, completed)
+    };
+    refresh_badge_after_success(&app, &result);
+    result
 }
 
 #[tauri::command]
 pub fn update_todo_title(
     id: i64,
     title: String,
+    app: AppHandle,
     database: State<'_, Database>,
 ) -> Result<Todo, String> {
-    let connection = lock_database(&database)?;
-    update_todo_title_in_connection(&connection, id, &title)
+    let result = {
+        let connection = lock_database(&database)?;
+        update_todo_title_in_connection(&connection, id, &title)
+    };
+    refresh_badge_after_success(&app, &result);
+    result
 }
 
 #[tauri::command]
 pub fn reorder_todos(
     ordered_ids: Vec<i64>,
+    app: AppHandle,
     database: State<'_, Database>,
 ) -> Result<Vec<Todo>, String> {
-    let mut connection = lock_database(&database)?;
-    reorder_todos_in_connection(&mut connection, &ordered_ids)
+    let result = {
+        let mut connection = lock_database(&database)?;
+        reorder_todos_in_connection(&mut connection, &ordered_ids)
+    };
+    refresh_badge_after_success(&app, &result);
+    result
 }
 
 #[tauri::command]
-pub fn delete_todo(id: i64, database: State<'_, Database>) -> Result<Todo, String> {
-    let connection = lock_database(&database)?;
-    soft_delete_todo_in_connection(&connection, id)
+pub fn delete_todo(id: i64, app: AppHandle, database: State<'_, Database>) -> Result<Todo, String> {
+    let result = {
+        let connection = lock_database(&database)?;
+        soft_delete_todo_in_connection(&connection, id)
+    };
+    refresh_badge_after_success(&app, &result);
+    result
 }
 
 #[tauri::command]
-pub fn restore_todo(id: i64, database: State<'_, Database>) -> Result<Todo, String> {
-    let connection = lock_database(&database)?;
-    restore_todo_in_connection(&connection, id)
+pub fn restore_todo(
+    id: i64,
+    app: AppHandle,
+    database: State<'_, Database>,
+) -> Result<Todo, String> {
+    let result = {
+        let connection = lock_database(&database)?;
+        restore_todo_in_connection(&connection, id)
+    };
+    refresh_badge_after_success(&app, &result);
+    result
 }
 
 #[tauri::command]
-pub fn clear_completed_todos(database: State<'_, Database>) -> Result<usize, String> {
-    let connection = lock_database(&database)?;
-    clear_completed_todos_in_connection(&connection)
+pub fn clear_completed_todos(
+    app: AppHandle,
+    database: State<'_, Database>,
+) -> Result<usize, String> {
+    let result = {
+        let connection = lock_database(&database)?;
+        clear_completed_todos_in_connection(&connection)
+    };
+    refresh_badge_after_success(&app, &result);
+    result
 }
 
 #[tauri::command]
@@ -172,6 +214,7 @@ pub async fn sync_now(
                 None => sync::build_document(&connection, now_millis())?,
             }
         };
+        tray::update_task_badge(&app);
         let _ = app.emit_to("main", "todos-changed", ());
 
         match s3_sync::upload_document(&prepared, &merged, &remote).await? {
@@ -196,6 +239,12 @@ pub async fn sync_now(
     }
 
     Err("同步未完成".to_string())
+}
+
+fn refresh_badge_after_success<T>(app: &AppHandle, result: &Result<T, String>) {
+    if result.is_ok() {
+        tray::update_task_badge(app);
+    }
 }
 
 fn lock_database<'a>(

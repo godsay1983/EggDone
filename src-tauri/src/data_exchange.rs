@@ -101,11 +101,18 @@ pub fn preview_todo_import(
 #[tauri::command]
 pub fn confirm_todo_import(
     path: String,
+    app: AppHandle,
     database: State<'_, Database>,
 ) -> Result<ImportResult, String> {
     let import = read_import_file(Path::new(&path))?;
-    let mut connection = lock_database(&database)?;
-    merge_todos(&mut connection, &import.todos)
+    let result = {
+        let mut connection = lock_database(&database)?;
+        merge_todos(&mut connection, &import.todos)
+    };
+    if result.is_ok() {
+        crate::tray::update_task_badge(&app);
+    }
+    result
 }
 
 #[tauri::command]
