@@ -1,10 +1,16 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+
+use http::{HeaderMap, HeaderName, HeaderValue};
 use keyring::{Entry, Error as KeyringError};
 use rusqlite::{params, Connection};
 use s3::{bucket::Bucket, creds::Credentials, region::Region};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::db::{device_id, now_millis};
+use crate::{
+    db::{device_id, now_millis},
+    sync::{self, SyncDocument},
+};
 
 const CREDENTIAL_SERVICE: &str = "com.eggdone.desktop.s3";
 
@@ -45,6 +51,39 @@ pub struct ConnectionTestResult {
 pub struct PreparedConnectionTest {
     bucket: Box<Bucket>,
     object_key: String,
+}
+
+pub struct PreparedManualSync {
+    bucket: Box<Bucket>,
+    object_key: String,
+}
+
+pub struct RemoteSyncObject {
+    pub document: Option<SyncDocument>,
+    etag: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManualSyncResult {
+    pub message: String,
+    pub todo_count: usize,
+    pub conflict_retried: bool,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum UploadOutcome {
+    Success,
+    Conflict,
+}
+
+#[derive(Default)]
+pub struct SyncRuntime {
+    in_progress: AtomicBool,
+}
+
+pub struct SyncGuard<'a> {
+    runtime: &'a SyncRuntime,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -153,6 +192,108 @@ pub async fn test_connection(
         }),
         401 | 403 => Err("连接失败：凭据无效或没有 Bucket 访问权限".to_string()),
         _ => Err(format!("连接失败，S3 服务返回状态码 {status}")),
+    }
+}
+
+impl SyncRuntime {
+    pub fn acquire(&self) -> Result<SyncGuard<'_>, String> {
+        self.in_progress
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .map(|_| SyncGuard { runtime: self })
+            .map_err(|_| "同步正在进行，请稍候".to_string())
+    }
+}
+
+impl Drop for SyncGuard<'_> {
+    fn drop(&mut self) {
+        self.runtime.in_progress.store(false, Ordering::Release);
+    }
+}
+
+pub fn prepare_manual_sync(connection: &Connection) -> Result<PreparedManualSync, String> {
+    let settings = read_settings(connection)?;
+    if !settings.enabled {
+        return Err("请先启用并保存同步配置".to_string());
+    }
+    settings.validate_connection()?;
+    let credentials = load_credentials(connection)?
+        .ok_or_else(|| "请先填写并保存 Access Key 和 Secret Key".to_string())?;
+    Ok(PreparedManualSync {
+        bucket: build_bucket(&settings, credentials)?,
+        object_key: settings.object_key,
+    })
+}
+
+pub async fn download_remote(prepared: &PreparedManualSync) -> Result<RemoteSyncObject, String> {
+    let response = prepared
+        .bucket
+        .get_object(&prepared.object_key)
+        .await
+        .map_err(|error| format!("下载同步文件失败：{error}"))?;
+
+    match response.status_code() {
+        200..=299 => {
+            let etag = response
+                .headers()
+                .into_iter()
+                .find_map(|(name, value)| name.eq_ignore_ascii_case("etag").then_some(value))
+                .ok_or_else(|| "远端同步文件缺少 ETag，无法安全写入".to_string())?;
+            let document = serde_json::from_slice::<SyncDocument>(response.as_slice())
+                .map_err(|error| format!("远端同步文件格式无效：{error}"))?;
+            sync::validate_document(&document)?;
+            Ok(RemoteSyncObject {
+                document: Some(document),
+                etag: Some(etag),
+            })
+        }
+        404 => Ok(RemoteSyncObject {
+            document: None,
+            etag: None,
+        }),
+        401 | 403 => Err("下载失败：凭据无效或没有对象读取权限".to_string()),
+        status => Err(format!("下载同步文件失败，S3 服务返回状态码 {status}")),
+    }
+}
+
+pub async fn upload_document(
+    prepared: &PreparedManualSync,
+    document: &SyncDocument,
+    remote: &RemoteSyncObject,
+) -> Result<UploadOutcome, String> {
+    let content = serde_json::to_vec_pretty(document)
+        .map_err(|error| format!("生成同步文件失败：{error}"))?;
+    let (header_name, header_value) = upload_condition(remote.etag.as_deref());
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        HeaderName::from_static(header_name),
+        HeaderValue::from_str(header_value)
+            .map_err(|error| format!("创建同步条件请求失败：{error}"))?,
+    );
+    let response = prepared
+        .bucket
+        .put_object_builder(&prepared.object_key, &content)
+        .with_content_type("application/json")
+        .with_headers(headers)
+        .execute()
+        .await
+        .map_err(|error| format!("上传同步文件失败：{error}"))?;
+
+    classify_upload_status(response.status_code())
+}
+
+fn upload_condition(etag: Option<&str>) -> (&'static str, &str) {
+    match etag {
+        Some(value) => ("if-match", value),
+        None => ("if-none-match", "*"),
+    }
+}
+
+fn classify_upload_status(status: u16) -> Result<UploadOutcome, String> {
+    match status {
+        200..=299 => Ok(UploadOutcome::Success),
+        409 | 412 => Ok(UploadOutcome::Conflict),
+        401 | 403 => Err("上传失败：凭据无效或没有对象写入权限".to_string()),
+        _ => Err(format!("上传同步文件失败，S3 服务返回状态码 {status}")),
     }
 }
 
@@ -376,5 +517,37 @@ mod tests {
         let mut value = input("https://s3.example.com", false);
         value.access_key = Some("access".to_string());
         assert!(validate_credential_input(&value).is_err());
+    }
+
+    #[test]
+    fn uses_etag_for_updates_and_create_guard_for_new_objects() {
+        assert_eq!(
+            upload_condition(Some("\"etag-value\"")),
+            ("if-match", "\"etag-value\"")
+        );
+        assert_eq!(upload_condition(None), ("if-none-match", "*"));
+    }
+
+    #[test]
+    fn retries_only_conditional_conflicts() {
+        assert_eq!(
+            classify_upload_status(412).unwrap(),
+            UploadOutcome::Conflict
+        );
+        assert_eq!(
+            classify_upload_status(409).unwrap(),
+            UploadOutcome::Conflict
+        );
+        assert_eq!(classify_upload_status(200).unwrap(), UploadOutcome::Success);
+        assert!(classify_upload_status(500).is_err());
+    }
+
+    #[test]
+    fn runtime_rejects_overlapping_syncs_and_recovers_after_drop() {
+        let runtime = SyncRuntime::default();
+        let guard = runtime.acquire().unwrap();
+        assert!(runtime.acquire().is_err());
+        drop(guard);
+        assert!(runtime.acquire().is_ok());
     }
 }

@@ -4,6 +4,7 @@
     deleteSyncCredentials,
     getSyncSettings,
     saveSyncSettings,
+    syncNow,
     testSyncConnection,
     type SyncSettings,
   } from "$lib/api/syncApi";
@@ -64,6 +65,35 @@
     }
   }
 
+  async function synchronize() {
+    if (!settings || busy) return;
+    busy = true;
+    error = "";
+    message = "正在下载并合并远端任务…";
+    try {
+      settings = await saveSyncSettings({
+        enabled: settings.enabled,
+        endpoint: settings.endpoint,
+        region: settings.region,
+        bucket: settings.bucket,
+        objectKey: settings.objectKey,
+        pathStyle: settings.pathStyle,
+        allowHttp: settings.allowHttp,
+        accessKey: accessKey.trim() || null,
+        secretKey: secretKey || null,
+      });
+      accessKey = "";
+      secretKey = "";
+      const result = await syncNow();
+      message = `${result.message}，共 ${result.todoCount} 条任务`;
+    } catch (reason) {
+      message = "";
+      error = errorMessage(reason);
+    } finally {
+      busy = false;
+    }
+  }
+
   async function removeCredentials() {
     if (!settings || busy) return;
     busy = true;
@@ -89,7 +119,7 @@
   <div class="sync-heading">
     <div>
       <strong id="sync-title">S3 / MinIO 同步</strong>
-      <span>当前阶段提供配置和连接验证</span>
+      <span>手动合并本地与远端任务</span>
     </div>
     {#if settings}
       <label class="switch">
@@ -176,12 +206,19 @@
         保存
       </button>
       <button
-        class="primary"
         type="button"
         disabled={busy}
         onclick={() => void save(true)}
       >
         测试连接
+      </button>
+      <button
+        class="primary"
+        type="button"
+        disabled={busy || !settings.enabled}
+        onclick={() => void synchronize()}
+      >
+        {busy ? "处理中…" : "立即同步"}
       </button>
     </div>
 

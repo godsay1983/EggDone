@@ -78,6 +78,9 @@
         showSettings = false;
         requestAnimationFrame(() => inputElement?.focus());
       }).then((unlisten) => unlisteners.push(unlisten));
+      void listen("todos-changed", () => {
+        void todos.load();
+      }).then((unlisten) => unlisteners.push(unlisten));
     }
 
     return () => {

@@ -14,6 +14,7 @@ EggDone 是一个轻量级、跨平台、托盘常驻的 Todo 桌面应用。应
 - JSON 导入导出、UUID 合并和 SQLite 手动备份
 - 可配置 AWS S3、MinIO 和其他 S3 兼容存储
 - Access Key 和 Secret Key 保存到系统凭据库
+- 支持手动下载、合并并上传 Todo，同步写入使用 ETag 冲突保护
 - 可配置全局快捷键，默认 `Ctrl + Shift + Space`
 - 可选开机自动运行，并静默进入托盘
 - 显示未完成任务数量和空状态
@@ -94,7 +95,9 @@ pnpm tauri build
 
 项目已包含版本化同步文档和本地合并核心：按 Todo UUID 合并，优先采用较新的 `updated_at`；时间相同时优先保留删除记录，再通过 `updated_by` 稳定决胜。设置页可配置 AWS S3 或自定义 S3 Endpoint，支持 MinIO 常用的 Path Style 和 HTTP。HTTP 必须显式确认明文传输风险。
 
-当前“测试连接”会向配置的 Bucket 和 Object Key 发起签名请求，验证 Endpoint、凭据和访问权限；返回 404 时会提示同步文件尚未创建，此时仍需确认 Bucket 已提前创建。实际上传、下载、ETag 冲突保护和“立即同步”仍在后续阶段。
+“测试连接”会向配置的 Bucket 和 Object Key 发起签名请求，验证 Endpoint、凭据和访问权限；返回 404 时会提示同步文件尚未创建，此时仍需确认 Bucket 已提前创建。
+
+“立即同步”先下载远端 `todos.json`，按 UUID 和更新时间与 SQLite 合并，再上传合并结果。更新已有对象使用 `If-Match`，首次创建使用 `If-None-Match: *`。若上传期间远端发生变化，应用会重新下载、合并并重试一次；再次冲突时停止上传并保留本地数据。
 
 面板右上角的“数据管理”可导出版本化 JSON、预览并合并导入文件，或创建一致的 SQLite 快照。导入只更新 `updated_at` 更新的同 UUID 任务，不会直接覆盖整个本地数据库。
 
@@ -132,7 +135,7 @@ EggDone/
 
 - 托盘附近定位使用平台提供的图标坐标；不可用时回退到主屏幕右下角。
 - Windows 混合 DPI 多显示器仍需在 125%、150% 和 200% 缩放下进行实机验收。
-- 当前暂不包含分组、提醒、远端读写同步和搜索。
-- S3 / MinIO 尚未实现对象上传下载、ETag 冲突保护和自动同步。
+- 当前暂不包含分组、提醒、自动同步和搜索。
+- S3 / MinIO 尚未实现启动同步、修改后延迟同步、离线重试和持久化同步状态。
 
 后续优化和版本规划见 [OPTIMIZATION_TODO.md](OPTIMIZATION_TODO.md)。

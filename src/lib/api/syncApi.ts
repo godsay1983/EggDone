@@ -24,6 +24,12 @@ export interface ConnectionTestResult {
   objectExists: boolean;
 }
 
+export interface ManualSyncResult {
+  message: string;
+  todoCount: number;
+  conflictRetried: boolean;
+}
+
 export function getSyncSettings(): Promise<SyncSettings> {
   return invoke("get_sync_settings");
 }
@@ -40,4 +46,8 @@ export function deleteSyncCredentials(): Promise<void> {
 
 export function testSyncConnection(): Promise<ConnectionTestResult> {
   return invoke("test_sync_connection");
+}
+
+export function syncNow(): Promise<ManualSyncResult> {
+  return invoke("sync_now");
 }

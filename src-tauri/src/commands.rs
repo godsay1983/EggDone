@@ -5,7 +5,10 @@ use uuid::Uuid;
 
 use crate::{
     db::{device_id, now_millis, Database},
-    s3_sync::{self, ConnectionTestResult, SaveSyncSettings, SyncSettings},
+    s3_sync::{
+        self, ConnectionTestResult, ManualSyncResult, SaveSyncSettings, SyncRuntime, SyncSettings,
+        UploadOutcome,
+    },
     sync::{self, SyncDocument},
     tray::PanelState,
 };
@@ -144,6 +147,55 @@ pub async fn test_sync_connection(
         s3_sync::prepare_connection_test(&connection)?
     };
     s3_sync::test_connection(prepared).await
+}
+
+#[tauri::command]
+pub async fn sync_now(
+    app: AppHandle,
+    database: State<'_, Database>,
+    runtime: State<'_, SyncRuntime>,
+) -> Result<ManualSyncResult, String> {
+    let _guard = runtime.acquire()?;
+    let prepared = {
+        let connection = lock_database(&database)?;
+        s3_sync::prepare_manual_sync(&connection)?
+    };
+    let mut remote = s3_sync::download_remote(&prepared).await?;
+
+    for attempt in 0..=1 {
+        let merged = {
+            let mut connection = lock_database(&database)?;
+            match &remote.document {
+                Some(document) => {
+                    sync::merge_remote_document(&mut connection, document, now_millis())?
+                }
+                None => sync::build_document(&connection, now_millis())?,
+            }
+        };
+        let _ = app.emit_to("main", "todos-changed", ());
+
+        match s3_sync::upload_document(&prepared, &merged, &remote).await? {
+            UploadOutcome::Success => {
+                return Ok(ManualSyncResult {
+                    message: if attempt == 0 {
+                        "同步完成".to_string()
+                    } else {
+                        "检测到远端更新，重新合并后同步完成".to_string()
+                    },
+                    todo_count: merged.todos.len(),
+                    conflict_retried: attempt > 0,
+                });
+            }
+            UploadOutcome::Conflict if attempt == 0 => {
+                remote = s3_sync::download_remote(&prepared).await?;
+            }
+            UploadOutcome::Conflict => {
+                return Err("远端文件持续发生变化，已停止上传并保留本地数据".to_string());
+            }
+        }
+    }
+
+    Err("同步未完成".to_string())
 }
 
 fn lock_database<'a>(

@@ -41,6 +41,7 @@ pub fn run() {
             Some(vec!["--autostart"]),
         ))
         .manage(tray::PanelState::default())
+        .manage(s3_sync::SyncRuntime::default())
         .setup(|app| {
             let database = db::Database::open(app.handle())?;
             app.manage(database);
@@ -89,6 +90,7 @@ pub fn run() {
             commands::save_sync_settings,
             commands::delete_sync_credentials,
             commands::test_sync_connection,
+            commands::sync_now,
             data_exchange::export_todos,
             data_exchange::preview_todo_import,
             data_exchange::confirm_todo_import,
