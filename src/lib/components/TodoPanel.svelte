@@ -432,7 +432,7 @@
             canMoveUp={groupIndex > 0}
             canMoveDown={groupIndex < group.length - 1}
             isDragging={draggedTodo?.id === todo.id}
-            isDragTarget={dragTargetId === todo.id && draggedTodo?.id !== todo.id}
+            isDragTarget={draggedTodo?.id === todo.id && dragTargetId !== todo.id}
           />
         </div>
       {/each}

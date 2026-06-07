@@ -20,12 +20,26 @@
   let editError = "";
   let saving = false;
   let editInput: HTMLInputElement;
+  let itemElement: HTMLElement;
   let animationDuration = 140;
 
   onMount(() => {
     animationDuration = window.matchMedia("(prefers-reduced-motion: reduce)").matches
       ? 0
       : 140;
+
+    function handlePointerDown(event: PointerEvent) {
+      if (
+        editing &&
+        event.target instanceof Node &&
+        !itemElement.contains(event.target)
+      ) {
+        void saveEdit();
+      }
+    }
+
+    window.addEventListener("pointerdown", handlePointerDown, true);
+    return () => window.removeEventListener("pointerdown", handlePointerDown, true);
   });
 
   async function beginEdit() {
@@ -44,6 +58,8 @@
   }
 
   async function saveEdit() {
+    if (saving) return;
+
     const nextTitle = editTitle.trim();
     if (!nextTitle) {
       editError = "任务内容不能为空";
@@ -80,6 +96,7 @@
 </script>
 
 <article
+  bind:this={itemElement}
   class:completed={todo.completed}
   class:editing
   class:dragging={isDragging}
