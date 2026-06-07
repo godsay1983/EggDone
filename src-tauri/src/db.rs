@@ -1,31 +1,29 @@
-use std::{fs, path::PathBuf, sync::Mutex};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    sync::Mutex,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
-use rusqlite::Connection;
+use rusqlite::{params, Connection, Transaction};
 use tauri::{AppHandle, Manager};
+use uuid::Uuid;
+
+const CURRENT_SCHEMA_VERSION: i64 = 2;
 
 pub struct Database {
-    pub connection: Mutex<Connection>,
+    pub(crate) connection: Mutex<Connection>,
 }
 
 impl Database {
     pub fn open(app: &AppHandle) -> Result<Self, Box<dyn std::error::Error>> {
-        let database_path = database_path(app)?;
-        let connection = Connection::open(database_path)?;
+        Self::open_path(database_path(app)?)
+    }
 
-        connection.execute_batch(
-            "
-            PRAGMA journal_mode = WAL;
-            PRAGMA foreign_keys = ON;
-
-            CREATE TABLE IF NOT EXISTS todos (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT NOT NULL CHECK(length(trim(title)) > 0),
-                completed INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            );
-            ",
-        )?;
+    fn open_path(path: impl AsRef<Path>) -> Result<Self, Box<dyn std::error::Error>> {
+        let mut connection = Connection::open(path)?;
+        configure_connection(&connection)?;
+        migrate(&mut connection)?;
 
         Ok(Self {
             connection: Mutex::new(connection),
@@ -33,9 +31,291 @@ impl Database {
     }
 }
 
+pub(crate) fn now_millis() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as i64
+}
+
+pub(crate) fn configure_connection(connection: &Connection) -> rusqlite::Result<()> {
+    connection.execute_batch(
+        "
+        PRAGMA journal_mode = WAL;
+        PRAGMA foreign_keys = ON;
+        PRAGMA busy_timeout = 5000;
+        ",
+    )
+}
+
+pub(crate) fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {
+    connection.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            version INTEGER PRIMARY KEY,
+            applied_at INTEGER NOT NULL
+        );
+        ",
+    )?;
+
+    if schema_version(connection)? > CURRENT_SCHEMA_VERSION {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+
+    apply_migration(connection, 1, create_legacy_schema)?;
+    apply_migration(connection, 2, migrate_todos_for_sync)?;
+
+    debug_assert_eq!(schema_version(connection)?, CURRENT_SCHEMA_VERSION);
+    Ok(())
+}
+
+fn apply_migration(
+    connection: &mut Connection,
+    version: i64,
+    migration: fn(&Transaction<'_>) -> rusqlite::Result<()>,
+) -> rusqlite::Result<()> {
+    if migration_applied(connection, version)? {
+        return Ok(());
+    }
+
+    let transaction = connection.transaction()?;
+    migration(&transaction)?;
+    transaction.execute(
+        "INSERT INTO schema_migrations (version, applied_at) VALUES (?1, ?2)",
+        params![version, now_millis()],
+    )?;
+    transaction.commit()
+}
+
+fn migration_applied(connection: &Connection, version: i64) -> rusqlite::Result<bool> {
+    connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version = ?1)",
+        params![version],
+        |row| row.get(0),
+    )
+}
+
+fn schema_version(connection: &Connection) -> rusqlite::Result<i64> {
+    connection.query_row(
+        "SELECT COALESCE(MAX(version), 0) FROM schema_migrations",
+        [],
+        |row| row.get(0),
+    )
+}
+
+fn create_legacy_schema(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
+    transaction.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS todos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL CHECK(length(trim(title)) > 0),
+            completed INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        ",
+    )
+}
+
+#[derive(Debug)]
+struct LegacyTodo {
+    id: i64,
+    title: String,
+    completed: bool,
+    created_at: i64,
+    updated_at: i64,
+}
+
+fn migrate_todos_for_sync(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
+    let legacy_todos = {
+        let mut statement = transaction.prepare(
+            "
+            SELECT
+                id,
+                title,
+                completed,
+                CASE
+                    WHEN typeof(created_at) = 'integer' THEN created_at
+                    ELSE CAST((julianday(created_at) - 2440587.5) * 86400000 AS INTEGER)
+                END,
+                CASE
+                    WHEN typeof(updated_at) = 'integer' THEN updated_at
+                    ELSE CAST((julianday(updated_at) - 2440587.5) * 86400000 AS INTEGER)
+                END
+            FROM todos
+            ORDER BY completed ASC, created_at DESC, id DESC
+            ",
+        )?;
+
+        let todos = statement
+            .query_map([], |row| {
+                Ok(LegacyTodo {
+                    id: row.get(0)?,
+                    title: row.get(1)?,
+                    completed: row.get::<_, i64>(2)? != 0,
+                    created_at: row.get(3)?,
+                    updated_at: row.get(4)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        todos
+    };
+
+    transaction.execute_batch(
+        "
+        ALTER TABLE todos RENAME TO todos_legacy;
+
+        CREATE TABLE todos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            uuid TEXT NOT NULL UNIQUE,
+            title TEXT NOT NULL CHECK(length(trim(title)) > 0),
+            completed INTEGER NOT NULL DEFAULT 0 CHECK(completed IN (0, 1)),
+            sort_order INTEGER NOT NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            completed_at INTEGER,
+            deleted_at INTEGER
+        );
+
+        CREATE INDEX idx_todos_active_order
+            ON todos(deleted_at, completed, sort_order);
+        CREATE INDEX idx_todos_updated_at ON todos(updated_at);
+        ",
+    )?;
+
+    for (index, todo) in legacy_todos.into_iter().enumerate() {
+        let completed_at = todo.completed.then_some(todo.updated_at);
+        transaction.execute(
+            "
+            INSERT INTO todos (
+                id, uuid, title, completed, sort_order,
+                created_at, updated_at, completed_at, deleted_at
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, NULL)
+            ",
+            params![
+                todo.id,
+                Uuid::new_v4().to_string(),
+                todo.title,
+                todo.completed,
+                index as i64 * 1024,
+                todo.created_at,
+                todo.updated_at,
+                completed_at,
+            ],
+        )?;
+    }
+
+    transaction.execute_batch("DROP TABLE todos_legacy;")
+}
+
 fn database_path(app: &AppHandle) -> Result<PathBuf, Box<dyn std::error::Error>> {
     // Use the platform-specific app data directory on Windows, macOS, and Linux.
     let directory = app.path().app_data_dir()?;
     fs::create_dir_all(&directory)?;
     Ok(directory.join("eggdone.sqlite3"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn open_memory_database() -> Database {
+        let mut connection = Connection::open_in_memory().unwrap();
+        configure_connection(&connection).unwrap();
+        migrate(&mut connection).unwrap();
+        Database {
+            connection: Mutex::new(connection),
+        }
+    }
+
+    #[test]
+    fn creates_current_schema_for_new_database() {
+        let database = open_memory_database();
+        let connection = database.connection.lock().unwrap();
+
+        assert_eq!(schema_version(&connection).unwrap(), CURRENT_SCHEMA_VERSION);
+        let columns: Vec<String> = connection
+            .prepare("PRAGMA table_info(todos)")
+            .unwrap()
+            .query_map([], |row| row.get(1))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        for expected in [
+            "uuid",
+            "completed_at",
+            "deleted_at",
+            "sort_order",
+            "created_at",
+            "updated_at",
+        ] {
+            assert!(columns.iter().any(|column| column == expected));
+        }
+    }
+
+    #[test]
+    fn upgrades_legacy_database_without_losing_rows() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        let transaction = connection.transaction().unwrap();
+        create_legacy_schema(&transaction).unwrap();
+        transaction.commit().unwrap();
+        connection
+            .execute(
+                "
+                INSERT INTO todos (title, completed, created_at, updated_at)
+                VALUES ('旧任务', 1, '2026-06-06 12:00:00', '2026-06-06 13:00:00')
+                ",
+                [],
+            )
+            .unwrap();
+
+        migrate(&mut connection).unwrap();
+
+        let todo = connection
+            .query_row(
+                "
+                SELECT title, completed, created_at, updated_at, completed_at, deleted_at, uuid
+                FROM todos
+                ",
+                [],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, i64>(1)?,
+                        row.get::<_, i64>(2)?,
+                        row.get::<_, i64>(3)?,
+                        row.get::<_, Option<i64>>(4)?,
+                        row.get::<_, Option<i64>>(5)?,
+                        row.get::<_, String>(6)?,
+                    ))
+                },
+            )
+            .unwrap();
+
+        assert_eq!(todo.0, "旧任务");
+        assert_eq!(todo.1, 1);
+        assert!(todo.2 > 0);
+        assert!(todo.3 >= todo.2);
+        assert_eq!(todo.4, Some(todo.3));
+        assert_eq!(todo.5, None);
+        assert!(Uuid::parse_str(&todo.6).is_ok());
+    }
+
+    #[test]
+    fn migrations_are_idempotent() {
+        let mut connection = Connection::open_in_memory().unwrap();
+
+        migrate(&mut connection).unwrap();
+        migrate(&mut connection).unwrap();
+
+        assert_eq!(schema_version(&connection).unwrap(), CURRENT_SCHEMA_VERSION);
+        let migration_count: i64 = connection
+            .query_row("SELECT COUNT(*) FROM schema_migrations", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(migration_count, CURRENT_SCHEMA_VERSION);
+    }
 }

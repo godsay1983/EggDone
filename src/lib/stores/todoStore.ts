@@ -74,7 +74,7 @@ function sortTodos(left: Todo, right: Todo) {
   if (left.completed !== right.completed) {
     return Number(left.completed) - Number(right.completed);
   }
-  return right.id - left.id;
+  return left.sort_order - right.sort_order;
 }
 
 function getErrorMessage(error: unknown) {

@@ -36,6 +36,10 @@
       void listen("show-about", () => {
         showAbout = true;
       }).then((unlisten) => unlisteners.push(unlisten));
+      void listen("single-instance", () => {
+        showAbout = false;
+        requestAnimationFrame(() => inputElement?.focus());
+      }).then((unlisten) => unlisteners.push(unlisten));
     }
 
     return () => unlisteners.forEach((unlisten) => unlisten());

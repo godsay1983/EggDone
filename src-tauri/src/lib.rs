@@ -2,11 +2,33 @@ mod commands;
 mod db;
 mod tray;
 
-use tauri::{Manager, WindowEvent};
+use serde::Serialize;
+use tauri::{Emitter, Manager, WindowEvent};
+
+#[cfg(desktop)]
+#[derive(Clone, Serialize)]
+struct SingleInstancePayload {
+    args: Vec<String>,
+    cwd: String,
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+
+    // The single-instance plugin must be registered before every other plugin.
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+        tray::show_panel(app, None);
+        let _ = app.emit_to(
+            "main",
+            "single-instance",
+            SingleInstancePayload { args, cwd },
+        );
+        let _ = app.emit_to("main", "focus-new-todo", ());
+    }));
+
+    builder
         .manage(tray::PanelState::default())
         .setup(|app| {
             let database = db::Database::open(app.handle())?;

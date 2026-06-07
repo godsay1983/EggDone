@@ -22,4 +22,5 @@ tauri = { version = "2", features = ["tray-icon"] }
 rusqlite = { version = "0.37", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-
+uuid = { version = "1", features = ["v4"] }
+tauri-plugin-single-instance = "2"

@@ -115,7 +115,7 @@ fn toggle_panel(app: &AppHandle, anchor: Option<(f64, f64, f64, f64)>) {
     show_panel(app, anchor);
 }
 
-fn show_panel(app: &AppHandle, anchor: Option<(f64, f64, f64, f64)>) {
+pub(crate) fn show_panel(app: &AppHandle, anchor: Option<(f64, f64, f64, f64)>) {
     let Some(window) = app.get_webview_window("main") else {
         return;
     };
