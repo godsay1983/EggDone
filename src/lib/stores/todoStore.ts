@@ -36,6 +36,18 @@ export function createTodoStore(api = todoApi, onChanged = scheduleAutoSync) {
       }
     },
 
+    async refresh() {
+      try {
+        const items = await api.list();
+        update((state) => ({ ...state, items, error: null }));
+      } catch (error) {
+        update((state) => ({
+          ...state,
+          error: getErrorMessage(error),
+        }));
+      }
+    },
+
     async add(title: string) {
       const todo = await api.create(title);
       update((state) => ({

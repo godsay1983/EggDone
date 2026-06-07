@@ -95,4 +95,29 @@ describe("todo store", () => {
     expect(get(store).items.map((todo) => todo.id)).toEqual([1, 2]);
     expect(get(store).error).toBe("offline");
   });
+
+  it("refreshes synchronized todos without showing the initial loading state", async () => {
+    const first = makeTodo(1);
+    const api = createApi([first]);
+    const store = createTodoStore(api, vi.fn());
+    await store.load();
+
+    let resolveList: ((items: Todo[]) => void) | undefined;
+    vi.mocked(api.list).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveList = resolve;
+        }),
+    );
+
+    const refresh = store.refresh();
+    expect(get(store).loading).toBe(false);
+    expect(get(store).items).toEqual([first]);
+
+    const synchronized = makeTodo(2);
+    resolveList?.([synchronized]);
+    await refresh;
+    expect(get(store).items).toEqual([synchronized]);
+    expect(get(store).loading).toBe(false);
+  });
 });
