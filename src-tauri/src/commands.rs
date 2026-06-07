@@ -41,9 +41,40 @@ pub fn set_todo_completed(
 }
 
 #[tauri::command]
-pub fn delete_todo(id: i64, database: State<'_, Database>) -> Result<(), String> {
+pub fn update_todo_title(
+    id: i64,
+    title: String,
+    database: State<'_, Database>,
+) -> Result<Todo, String> {
+    let connection = lock_database(&database)?;
+    update_todo_title_in_connection(&connection, id, &title)
+}
+
+#[tauri::command]
+pub fn reorder_todos(
+    ordered_ids: Vec<i64>,
+    database: State<'_, Database>,
+) -> Result<Vec<Todo>, String> {
+    let mut connection = lock_database(&database)?;
+    reorder_todos_in_connection(&mut connection, &ordered_ids)
+}
+
+#[tauri::command]
+pub fn delete_todo(id: i64, database: State<'_, Database>) -> Result<Todo, String> {
     let connection = lock_database(&database)?;
     soft_delete_todo_in_connection(&connection, id)
+}
+
+#[tauri::command]
+pub fn restore_todo(id: i64, database: State<'_, Database>) -> Result<Todo, String> {
+    let connection = lock_database(&database)?;
+    restore_todo_in_connection(&connection, id)
+}
+
+#[tauri::command]
+pub fn clear_completed_todos(database: State<'_, Database>) -> Result<usize, String> {
+    let connection = lock_database(&database)?;
+    clear_completed_todos_in_connection(&connection)
 }
 
 #[tauri::command]
@@ -143,7 +174,65 @@ fn set_todo_completed_in_connection(
     find_todo(connection, id)?.ok_or_else(|| "更新后未能读取任务".to_string())
 }
 
-fn soft_delete_todo_in_connection(connection: &Connection, id: i64) -> Result<(), String> {
+fn update_todo_title_in_connection(
+    connection: &Connection,
+    id: i64,
+    title: &str,
+) -> Result<Todo, String> {
+    let title = title.trim();
+    if title.is_empty() {
+        return Err("任务内容不能为空".to_string());
+    }
+
+    let changed = connection
+        .execute(
+            "
+            UPDATE todos
+            SET title = ?1, updated_at = ?2
+            WHERE id = ?3 AND deleted_at IS NULL
+            ",
+            params![title, now_millis(), id],
+        )
+        .map_err(database_error)?;
+
+    if changed == 0 {
+        return Err("任务不存在".to_string());
+    }
+
+    find_todo(connection, id)?.ok_or_else(|| "编辑后未能读取任务".to_string())
+}
+
+fn reorder_todos_in_connection(
+    connection: &mut Connection,
+    ordered_ids: &[i64],
+) -> Result<Vec<Todo>, String> {
+    if ordered_ids.is_empty() {
+        return Ok(list_todos_from_connection(connection)?);
+    }
+
+    let now = now_millis();
+    let transaction = connection.transaction().map_err(database_error)?;
+    for (index, id) in ordered_ids.iter().enumerate() {
+        let changed = transaction
+            .execute(
+                "
+                UPDATE todos
+                SET sort_order = ?1, updated_at = ?2
+                WHERE id = ?3 AND deleted_at IS NULL
+                ",
+                params![index as i64 * 1024, now, id],
+            )
+            .map_err(database_error)?;
+        if changed == 0 {
+            return Err("排序中包含不存在的任务".to_string());
+        }
+    }
+    transaction.commit().map_err(database_error)?;
+
+    list_todos_from_connection(connection)
+}
+
+fn soft_delete_todo_in_connection(connection: &Connection, id: i64) -> Result<Todo, String> {
     let now = now_millis();
     let changed = connection
         .execute(
@@ -159,7 +248,41 @@ fn soft_delete_todo_in_connection(connection: &Connection, id: i64) -> Result<()
     if changed == 0 {
         return Err("任务不存在".to_string());
     }
-    Ok(())
+
+    find_todo(connection, id)?.ok_or_else(|| "删除后未能读取任务".to_string())
+}
+
+fn restore_todo_in_connection(connection: &Connection, id: i64) -> Result<Todo, String> {
+    let changed = connection
+        .execute(
+            "
+            UPDATE todos
+            SET deleted_at = NULL, updated_at = ?1
+            WHERE id = ?2 AND deleted_at IS NOT NULL
+            ",
+            params![now_millis(), id],
+        )
+        .map_err(database_error)?;
+
+    if changed == 0 {
+        return Err("任务未删除或不存在".to_string());
+    }
+
+    find_todo(connection, id)?.ok_or_else(|| "恢复后未能读取任务".to_string())
+}
+
+fn clear_completed_todos_in_connection(connection: &Connection) -> Result<usize, String> {
+    let now = now_millis();
+    connection
+        .execute(
+            "
+            UPDATE todos
+            SET deleted_at = ?1, updated_at = ?1
+            WHERE completed = 1 AND deleted_at IS NULL
+            ",
+            params![now],
+        )
+        .map_err(database_error)
 }
 
 fn find_todo(connection: &Connection, id: i64) -> Result<Option<Todo>, String> {
@@ -230,13 +353,13 @@ mod tests {
         assert!(!reopened.completed);
         assert_eq!(reopened.completed_at, None);
 
-        soft_delete_todo_in_connection(&connection, created.id).unwrap();
+        let deleted = soft_delete_todo_in_connection(&connection, created.id).unwrap();
+        assert!(deleted.deleted_at.is_some());
         assert!(list_todos_from_connection(&connection).unwrap().is_empty());
-        assert!(find_todo(&connection, created.id)
-            .unwrap()
-            .unwrap()
-            .deleted_at
-            .is_some());
+
+        let restored = restore_todo_in_connection(&connection, created.id).unwrap();
+        assert_eq!(restored.deleted_at, None);
+        assert_eq!(list_todos_from_connection(&connection).unwrap().len(), 1);
     }
 
     #[test]
@@ -249,5 +372,27 @@ mod tests {
         assert_eq!(todos[0].id, second.id);
         assert_eq!(todos[1].id, first.id);
         assert!(second.sort_order < first.sort_order);
+    }
+
+    #[test]
+    fn edits_reorders_and_clears_completed_todos() {
+        let mut connection = connection();
+        let first = create_todo_in_connection(&connection, "first").unwrap();
+        let second = create_todo_in_connection(&connection, "second").unwrap();
+
+        let edited = update_todo_title_in_connection(&connection, first.id, "  edited  ").unwrap();
+        assert_eq!(edited.title, "edited");
+        assert!(update_todo_title_in_connection(&connection, first.id, " ").is_err());
+
+        let reordered =
+            reorder_todos_in_connection(&mut connection, &[first.id, second.id]).unwrap();
+        assert_eq!(reordered[0].id, first.id);
+        assert_eq!(reordered[1].id, second.id);
+
+        set_todo_completed_in_connection(&connection, first.id, true).unwrap();
+        assert_eq!(clear_completed_todos_in_connection(&connection).unwrap(), 1);
+        let remaining = list_todos_from_connection(&connection).unwrap();
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].id, second.id);
     }
 }

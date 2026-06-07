@@ -175,6 +175,32 @@ footer {
   font-weight: 700;
 }
 
+.summary-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.summary-actions button {
+  padding: 2px 5px;
+  border: 0;
+  border-radius: 6px;
+  color: #a28f70;
+  background: transparent;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.summary-actions button:hover {
+  color: #765d2b;
+  background: #f1eadc;
+}
+
+.summary-actions button.confirming {
+  color: #9b5548;
+  background: #f7e4df;
+}
+
 .summary .count {
   color: #aa9c87;
   font-size: 11px;
@@ -206,6 +232,11 @@ footer {
   border-color: #e6dac5;
 }
 
+.todo-item.editing {
+  align-items: flex-start;
+  border-color: #e8c45c;
+}
+
 .todo-item p {
   min-width: 0;
   flex: 1;
@@ -215,6 +246,35 @@ footer {
   line-height: 1.45;
 }
 
+.drag-handle {
+  display: grid;
+  width: 16px;
+  height: 24px;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  color: #d0c5b4;
+  background: transparent;
+  cursor: grab;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.drag-handle svg {
+  width: 16px;
+  fill: currentColor;
+}
+
+.todo-item:hover .drag-handle,
+.drag-handle:focus-visible {
+  opacity: 1;
+}
+
 .todo-item.completed {
   opacity: 0.58;
 }
@@ -222,6 +282,34 @@ footer {
 .todo-item.completed p {
   text-decoration: line-through;
   text-decoration-color: #a99b85;
+}
+
+.edit-area {
+  min-width: 0;
+  flex: 1;
+}
+
+.edit-area input {
+  width: 100%;
+  padding: 4px 7px;
+  border: 1px solid #e1d5c2;
+  border-radius: 8px;
+  outline: 0;
+  color: #463e31;
+  background: #fffdf8;
+  font-size: 13px;
+}
+
+.edit-area input:focus {
+  border-color: #d9ad31;
+  box-shadow: 0 0 0 2px rgb(246 201 76 / 16%);
+}
+
+.edit-area small {
+  display: block;
+  margin: 4px 2px 0;
+  color: #a76455;
+  font-size: 10px;
 }
 
 .checkbox {
@@ -235,11 +323,16 @@ footer {
   border-radius: 7px;
   background: #fffdf8;
   cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    transform 140ms ease;
 }
 
 .checkbox.checked {
   border-color: #7ca281;
   background: #88ad8d;
+  transform: scale(0.94);
 }
 
 .checkbox svg {
@@ -261,6 +354,12 @@ footer {
   transition: opacity 120ms ease;
 }
 
+.delete-button:disabled,
+.checkbox:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
 .todo-item:hover .delete-button,
 .delete-button:focus-visible {
   opacity: 1;
@@ -275,6 +374,16 @@ footer {
   justify-content: center;
   color: #aa9c87;
   font-size: 12px;
+}
+
+.inline-error {
+  margin-bottom: 8px;
+  padding: 7px 9px;
+  border-radius: 9px;
+  color: #985d50;
+  background: #f8e9e5;
+  font-size: 10px;
+  line-height: 1.4;
 }
 
 .status {
@@ -337,6 +446,51 @@ footer button {
   background: transparent;
   font-size: 10px;
   cursor: pointer;
+}
+
+.undo-toast {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  left: 14px;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #e8dcc8;
+  border-radius: 12px;
+  color: #5e5343;
+  background: #fffdf8;
+  box-shadow: 0 10px 30px rgb(70 54 28 / 18%);
+  font-size: 11px;
+  animation: toast-enter 140ms ease-out;
+}
+
+.undo-toast span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.undo-toast button {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 7px;
+  color: #654e18;
+  background: #f6c94c;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+@keyframes toast-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
 }
 
 .about-backdrop {
@@ -462,6 +616,20 @@ html[data-theme="dark"] .empty-state {
   color: #9f9483;
 }
 
+html[data-theme="dark"] .summary-actions button {
+  color: #9f917b;
+}
+
+html[data-theme="dark"] .summary-actions button:hover {
+  color: #e0c46f;
+  background: #37322b;
+}
+
+html[data-theme="dark"] .summary-actions button.confirming {
+  color: #e19a88;
+  background: #49312c;
+}
+
 html[data-theme="dark"] .todo-list {
   scrollbar-color: #4c453a transparent;
 }
@@ -475,8 +643,31 @@ html[data-theme="dark"] .todo-item:hover {
   border-color: #51493d;
 }
 
+html[data-theme="dark"] .todo-item.editing {
+  border-color: #9f7e2f;
+}
+
+html[data-theme="dark"] .drag-handle {
+  color: #665e52;
+}
+
 html[data-theme="dark"] .todo-item.completed p {
   text-decoration-color: #817767;
+}
+
+html[data-theme="dark"] .edit-area input {
+  border-color: #534b3f;
+  color: #f1e9dc;
+  background: #211f1b;
+}
+
+html[data-theme="dark"] .edit-area input:focus {
+  border-color: #aa8735;
+  box-shadow: 0 0 0 2px rgb(246 201 76 / 10%);
+}
+
+html[data-theme="dark"] .edit-area small {
+  color: #d38a78;
 }
 
 html[data-theme="dark"] .checkbox {
@@ -497,6 +688,11 @@ html[data-theme="dark"] .status.error {
   color: #d38a78;
 }
 
+html[data-theme="dark"] .inline-error {
+  color: #e2a090;
+  background: #422d28;
+}
+
 html[data-theme="dark"] .status button {
   color: #e0c46f;
 }
@@ -512,6 +708,13 @@ html[data-theme="dark"] footer {
 
 html[data-theme="dark"] footer button {
   color: #aaa08f;
+}
+
+html[data-theme="dark"] .undo-toast {
+  border-color: #4c4439;
+  color: #ddd3c3;
+  background: #2b2823;
+  box-shadow: 0 12px 34px rgb(0 0 0 / 38%);
 }
 
 html[data-theme="dark"] .about-backdrop {
@@ -530,4 +733,15 @@ html[data-theme="dark"] .about-card p {
 
 html[data-theme="dark"] .about-card small {
   color: #c6bcac;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }

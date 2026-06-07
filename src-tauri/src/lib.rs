@@ -64,7 +64,11 @@ pub fn run() {
             commands::list_todos,
             commands::create_todo,
             commands::set_todo_completed,
+            commands::update_todo_title,
+            commands::reorder_todos,
             commands::delete_todo,
+            commands::restore_todo,
+            commands::clear_completed_todos,
             commands::hide_panel,
         ])
         .run(tauri::generate_context!())

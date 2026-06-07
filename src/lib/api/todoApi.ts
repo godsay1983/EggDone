@@ -15,8 +15,24 @@ export const todoApi = {
     return invoke<Todo>("set_todo_completed", { id, completed });
   },
 
-  delete(id: number): Promise<void> {
-    return invoke<void>("delete_todo", { id });
+  updateTitle(id: number, title: string): Promise<Todo> {
+    return invoke<Todo>("update_todo_title", { id, title });
+  },
+
+  reorder(orderedIds: number[]): Promise<Todo[]> {
+    return invoke<Todo[]>("reorder_todos", { orderedIds });
+  },
+
+  delete(id: number): Promise<Todo> {
+    return invoke<Todo>("delete_todo", { id });
+  },
+
+  restore(id: number): Promise<Todo> {
+    return invoke<Todo>("restore_todo", { id });
+  },
+
+  clearCompleted(): Promise<number> {
+    return invoke<number>("clear_completed_todos");
   },
 
   hidePanel(): Promise<void> {

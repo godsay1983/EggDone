@@ -4,7 +4,11 @@
   import { onMount } from "svelte";
 
   import { todoApi } from "$lib/api/todoApi";
-  import { remainingCount, todos } from "$lib/stores/todoStore";
+  import {
+    completedCount,
+    remainingCount,
+    todos,
+  } from "$lib/stores/todoStore";
   import type { Todo } from "$lib/types";
   import TodoItem from "./TodoItem.svelte";
 
@@ -15,6 +19,11 @@
   let showAbout = false;
   let theme: Theme = "light";
   let inputElement: HTMLInputElement;
+  let draggedTodo: Todo | null = null;
+  let undoTodo: Todo | null = null;
+  let undoTimer: ReturnType<typeof setTimeout> | null = null;
+  let confirmingClear = false;
+  let clearTimer: ReturnType<typeof setTimeout> | null = null;
 
   onMount(() => {
     const unlisteners: UnlistenFn[] = [];
@@ -42,7 +51,11 @@
       }).then((unlisten) => unlisteners.push(unlisten));
     }
 
-    return () => unlisteners.forEach((unlisten) => unlisten());
+    return () => {
+      unlisteners.forEach((unlisten) => unlisten());
+      if (undoTimer) clearTimeout(undoTimer);
+      if (clearTimer) clearTimeout(clearTimer);
+    };
   });
 
   function toggleTheme() {
@@ -82,11 +95,95 @@
     }
   }
 
-  async function deleteTodo(id: number) {
+  async function editTodo(id: number, nextTitle: string) {
     try {
-      await todos.remove(id);
+      await todos.edit(id, nextTitle);
     } catch (error) {
       todos.reportError(error);
+      throw error;
+    }
+  }
+
+  async function deleteTodo(id: number) {
+    try {
+      undoTodo = await todos.remove(id);
+      if (undoTimer) clearTimeout(undoTimer);
+      undoTimer = setTimeout(() => {
+        undoTodo = null;
+        undoTimer = null;
+      }, 5000);
+    } catch (error) {
+      todos.reportError(error);
+    }
+  }
+
+  async function undoDelete() {
+    if (!undoTodo) return;
+    const todoToRestore = undoTodo;
+    undoTodo = null;
+    if (undoTimer) {
+      clearTimeout(undoTimer);
+      undoTimer = null;
+    }
+    try {
+      await todos.restore(todoToRestore.id);
+    } catch (error) {
+      undoTodo = todoToRestore;
+      todos.reportError(error);
+    }
+  }
+
+  function requestClearCompleted() {
+    if (confirmingClear) {
+      void clearCompleted();
+      return;
+    }
+    confirmingClear = true;
+    if (clearTimer) clearTimeout(clearTimer);
+    clearTimer = setTimeout(() => {
+      confirmingClear = false;
+      clearTimer = null;
+    }, 3000);
+  }
+
+  async function clearCompleted() {
+    confirmingClear = false;
+    if (clearTimer) {
+      clearTimeout(clearTimer);
+      clearTimer = null;
+    }
+    try {
+      await todos.clearCompleted();
+    } catch (error) {
+      todos.reportError(error);
+    }
+  }
+
+  function startDrag(todo: Todo) {
+    draggedTodo = todo;
+  }
+
+  async function dropTodo(target: Todo) {
+    const source = draggedTodo;
+    draggedTodo = null;
+    if (!source || source.id === target.id || source.completed !== target.completed) {
+      return;
+    }
+
+    const group = $todos.items.filter(
+      (todo) => todo.completed === source.completed,
+    );
+    const sourceIndex = group.findIndex((todo) => todo.id === source.id);
+    const targetIndex = group.findIndex((todo) => todo.id === target.id);
+    if (sourceIndex < 0 || targetIndex < 0) return;
+
+    const reordered = [...group];
+    const [moved] = reordered.splice(sourceIndex, 1);
+    reordered.splice(targetIndex, 0, moved);
+    try {
+      await todos.reorder(reordered.map((todo) => todo.id));
+    } catch {
+      // The store restores the previous order and exposes the error.
     }
   }
 </script>
@@ -145,13 +242,24 @@
 
   <section class="summary">
     <span>待办清单</span>
-    <span class="count">{$remainingCount} 项未完成</span>
+    <div class="summary-actions">
+      {#if $completedCount > 0}
+        <button
+          class:confirming={confirmingClear}
+          type="button"
+          onclick={requestClearCompleted}
+        >
+          {confirmingClear ? "确认清除？" : "清除已完成"}
+        </button>
+      {/if}
+      <span class="count">{$remainingCount} 项未完成</span>
+    </div>
   </section>
 
   <section class="todo-list" aria-live="polite">
     {#if $todos.loading}
       <div class="status">正在唤醒拖拖蛋…</div>
-    {:else if $todos.error}
+    {:else if $todos.error && $todos.items.length === 0}
       <div class="status error">
         <span>{$todos.error}</span>
         <button type="button" onclick={() => todos.load()}>重试</button>
@@ -163,8 +271,18 @@
         <span>先写下一件小事吧</span>
       </div>
     {:else}
+      {#if $todos.error}
+        <div class="inline-error" role="alert">{$todos.error}</div>
+      {/if}
       {#each $todos.items as todo (todo.id)}
-        <TodoItem {todo} onToggle={toggleTodo} onDelete={deleteTodo} />
+        <TodoItem
+          {todo}
+          onToggle={toggleTodo}
+          onEdit={editTodo}
+          onDelete={deleteTodo}
+          onDragStart={startDrag}
+          onDrop={dropTodo}
+        />
       {/each}
     {/if}
   </section>
@@ -174,6 +292,13 @@
     <button type="button" onclick={() => showAbout = true}>关于</button>
   </footer>
 </main>
+
+{#if undoTodo}
+  <div class="undo-toast" role="status">
+    <span>已删除“{undoTodo.title}”</span>
+    <button type="button" onclick={() => void undoDelete()}>撤销</button>
+  </div>
+{/if}
 
 {#if showAbout}
   <div class="about-backdrop">

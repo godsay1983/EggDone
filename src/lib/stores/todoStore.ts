@@ -3,7 +3,7 @@ import { derived, writable } from "svelte/store";
 import { todoApi } from "$lib/api/todoApi";
 import type { Todo } from "$lib/types";
 
-interface TodoState {
+export interface TodoState {
   items: Todo[];
   loading: boolean;
   error: string | null;
@@ -15,7 +15,7 @@ const initialState: TodoState = {
   error: null,
 };
 
-function createTodoStore() {
+export function createTodoStore(api = todoApi) {
   const { subscribe, update } = writable(initialState);
 
   return {
@@ -24,7 +24,7 @@ function createTodoStore() {
     async load() {
       update((state) => ({ ...state, loading: true, error: null }));
       try {
-        const items = await todoApi.list();
+        const items = await api.list();
         update(() => ({ items, loading: false, error: null }));
       } catch (error) {
         update((state) => ({
@@ -36,7 +36,7 @@ function createTodoStore() {
     },
 
     async add(title: string) {
-      const todo = await todoApi.create(title);
+      const todo = await api.create(title);
       update((state) => ({
         ...state,
         items: [todo, ...state.items],
@@ -45,7 +45,7 @@ function createTodoStore() {
     },
 
     async toggle(todo: Todo) {
-      const updatedTodo = await todoApi.setCompleted(todo.id, !todo.completed);
+      const updatedTodo = await api.setCompleted(todo.id, !todo.completed);
       update((state) => ({
         ...state,
         items: state.items
@@ -55,13 +55,75 @@ function createTodoStore() {
       }));
     },
 
+    async edit(id: number, title: string) {
+      const updatedTodo = await api.updateTitle(id, title);
+      update((state) => ({
+        ...state,
+        items: state.items.map((item) =>
+          item.id === updatedTodo.id ? updatedTodo : item,
+        ),
+        error: null,
+      }));
+    },
+
+    async reorder(orderedIds: number[]) {
+      let previousItems: Todo[] = [];
+      update((state) => {
+        previousItems = state.items;
+        const order = new Map(orderedIds.map((id, index) => [id, index]));
+        const reorderedGroup = state.items
+          .filter((item) => order.has(item.id))
+          .sort((left, right) => order.get(left.id)! - order.get(right.id)!);
+        let groupIndex = 0;
+        return {
+          ...state,
+          items: state.items.map((item) =>
+            order.has(item.id) ? reorderedGroup[groupIndex++] : item,
+          ),
+          error: null,
+        };
+      });
+
+      try {
+        const items = await api.reorder(orderedIds);
+        update((state) => ({ ...state, items, error: null }));
+      } catch (error) {
+        update((state) => ({
+          ...state,
+          items: previousItems,
+          error: getErrorMessage(error),
+        }));
+        throw error;
+      }
+    },
+
     async remove(id: number) {
-      await todoApi.delete(id);
+      const deletedTodo = await api.delete(id);
       update((state) => ({
         ...state,
         items: state.items.filter((item) => item.id !== id),
         error: null,
       }));
+      return deletedTodo;
+    },
+
+    async restore(id: number) {
+      const restoredTodo = await api.restore(id);
+      update((state) => ({
+        ...state,
+        items: [...state.items, restoredTodo].sort(sortTodos),
+        error: null,
+      }));
+    },
+
+    async clearCompleted() {
+      const clearedCount = await api.clearCompleted();
+      update((state) => ({
+        ...state,
+        items: state.items.filter((item) => !item.completed),
+        error: null,
+      }));
+      return clearedCount;
     },
 
     reportError(error: unknown) {
@@ -85,4 +147,8 @@ export const todos = createTodoStore();
 export const remainingCount = derived(
   todos,
   ($todos) => $todos.items.filter((todo) => !todo.completed).length,
+);
+export const completedCount = derived(
+  todos,
+  ($todos) => $todos.items.filter((todo) => todo.completed).length,
 );
