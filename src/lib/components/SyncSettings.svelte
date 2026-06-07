@@ -4,10 +4,14 @@
     deleteSyncCredentials,
     getSyncSettings,
     saveSyncSettings,
-    syncNow,
     testSyncConnection,
     type SyncSettings,
   } from "$lib/api/syncApi";
+  import {
+    configureAutoSync,
+    runManualSync,
+    syncStatus,
+  } from "$lib/sync/autoSync";
 
   let settings: SyncSettings | null = null;
   let accessKey = "";
@@ -53,6 +57,7 @@
       });
       accessKey = "";
       secretKey = "";
+      configureAutoSync(settings);
       message = "同步配置已保存";
       if (testAfterSave) {
         const result = await testSyncConnection();
@@ -84,7 +89,8 @@
       });
       accessKey = "";
       secretKey = "";
-      const result = await syncNow();
+      configureAutoSync(settings);
+      const result = await runManualSync();
       message = `${result.message}，共 ${result.todoCount} 条任务`;
     } catch (reason) {
       message = "";
@@ -102,6 +108,7 @@
     try {
       await deleteSyncCredentials();
       settings = { ...settings, enabled: false, credentialsConfigured: false };
+      configureAutoSync(settings);
       message = "同步凭据已删除，同步已禁用";
     } catch (reason) {
       error = errorMessage(reason);
@@ -133,6 +140,15 @@
       </label>
     {/if}
   </div>
+
+  {#if settings?.enabled}
+    <p class:status-error={["offline", "conflict", "failed"].includes($syncStatus.kind)} class="sync-status">
+      {$syncStatus.message}
+      {#if $syncStatus.updatedAt}
+        <small>{new Date($syncStatus.updatedAt).toLocaleTimeString()}</small>
+      {/if}
+    </p>
+  {/if}
 
   {#if !settings}
     <p class="sync-placeholder">{busy ? "正在读取同步配置…" : "无法读取同步配置"}</p>

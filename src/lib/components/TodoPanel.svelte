@@ -14,6 +14,7 @@
     remainingCount,
     todos,
   } from "$lib/stores/todoStore";
+  import { initializeAutoSync } from "$lib/sync/autoSync";
   import type { Todo } from "$lib/types";
   import { movePreviewByPointer } from "$lib/utils/reorderPreview";
   import DataManager from "./DataManager.svelte";
@@ -58,6 +59,7 @@
 
     void todos.load();
     if (isTauri()) {
+      void initializeAutoSync();
       void initializeDesktopSettings()
         .then((settings) => (desktopSettings = settings))
         .catch((error) => todos.reportError(error));

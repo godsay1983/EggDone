@@ -1,6 +1,7 @@
 import { derived, writable } from "svelte/store";
 
 import { todoApi } from "$lib/api/todoApi";
+import { scheduleAutoSync } from "$lib/sync/autoSync";
 import type { Todo } from "$lib/types";
 
 export interface TodoState {
@@ -15,7 +16,7 @@ const initialState: TodoState = {
   error: null,
 };
 
-export function createTodoStore(api = todoApi) {
+export function createTodoStore(api = todoApi, onChanged = scheduleAutoSync) {
   const { subscribe, update } = writable(initialState);
 
   return {
@@ -42,6 +43,7 @@ export function createTodoStore(api = todoApi) {
         items: [todo, ...state.items],
         error: null,
       }));
+      onChanged();
     },
 
     async toggle(todo: Todo) {
@@ -53,6 +55,7 @@ export function createTodoStore(api = todoApi) {
           .sort(sortTodos),
         error: null,
       }));
+      onChanged();
     },
 
     async edit(id: number, title: string) {
@@ -64,6 +67,7 @@ export function createTodoStore(api = todoApi) {
         ),
         error: null,
       }));
+      onChanged();
     },
 
     async reorder(orderedIds: number[]) {
@@ -87,6 +91,7 @@ export function createTodoStore(api = todoApi) {
       try {
         const items = await api.reorder(orderedIds);
         update((state) => ({ ...state, items, error: null }));
+        onChanged();
       } catch (error) {
         update((state) => ({
           ...state,
@@ -104,6 +109,7 @@ export function createTodoStore(api = todoApi) {
         items: state.items.filter((item) => item.id !== id),
         error: null,
       }));
+      onChanged();
       return deletedTodo;
     },
 
@@ -114,6 +120,7 @@ export function createTodoStore(api = todoApi) {
         items: [...state.items, restoredTodo].sort(sortTodos),
         error: null,
       }));
+      onChanged();
     },
 
     async clearCompleted() {
@@ -123,6 +130,7 @@ export function createTodoStore(api = todoApi) {
         items: state.items.filter((item) => !item.completed),
         error: null,
       }));
+      if (clearedCount > 0) onChanged();
       return clearedCount;
     },
 

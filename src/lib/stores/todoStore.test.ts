@@ -50,7 +50,8 @@ describe("todo store", () => {
   it("handles the todo lifecycle", async () => {
     const first = makeTodo(1);
     const api = createApi([first]);
-    const store = createTodoStore(api);
+    const onChanged = vi.fn();
+    const store = createTodoStore(api, onChanged);
 
     await store.load();
     await store.add("new");
@@ -66,6 +67,7 @@ describe("todo store", () => {
 
     await store.restore(1);
     expect(get(store).items.some((todo) => todo.id === 1)).toBe(true);
+    expect(onChanged).toHaveBeenCalledTimes(5);
   });
 
   it("clears completed todos", async () => {
@@ -73,7 +75,7 @@ describe("todo store", () => {
       makeTodo(1),
       makeTodo(2, { completed: true, completed_at: 100 }),
     ]);
-    const store = createTodoStore(api);
+    const store = createTodoStore(api, vi.fn());
 
     await store.load();
     expect(await store.clearCompleted()).toBe(1);
@@ -85,7 +87,7 @@ describe("todo store", () => {
     const second = makeTodo(2, { sort_order: 1024 });
     const api = createApi([first, second]);
     vi.mocked(api.reorder).mockRejectedValueOnce(new Error("offline"));
-    const store = createTodoStore(api);
+    const store = createTodoStore(api, vi.fn());
 
     await store.load();
     await expect(store.reorder([2, 1])).rejects.toThrow("offline");

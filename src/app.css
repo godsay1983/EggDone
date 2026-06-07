@@ -1082,6 +1082,45 @@ footer button {
   line-height: 1.4;
 }
 
+.sync-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: -2px 0 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  color: #55705a;
+  background: #eaf2e9;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.sync-status::before {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #78a07f;
+  content: "";
+}
+
+.sync-status small {
+  margin-left: auto;
+  color: #829485;
+  font-size: 8px;
+  white-space: nowrap;
+}
+
+.sync-status.status-error {
+  color: #985d50;
+  background: #f8e9e5;
+}
+
+.sync-status.status-error::before {
+  background: #bd7767;
+}
+
 .data-message {
   color: #55705a;
   background: #eaf2e9;
@@ -1499,6 +1538,20 @@ html[data-theme="dark"] .sync-placeholder,
 html[data-theme="dark"] .sync-message {
   color: #a8c8ad;
   background: #29392c;
+}
+
+html[data-theme="dark"] .sync-status {
+  color: #a8c8ad;
+  background: #29392c;
+}
+
+html[data-theme="dark"] .sync-status small {
+  color: #829b86;
+}
+
+html[data-theme="dark"] .sync-status.status-error {
+  color: #e2a090;
+  background: #422d28;
 }
 
 html[data-theme="dark"] .about-backdrop {
