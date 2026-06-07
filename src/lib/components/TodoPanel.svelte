@@ -1,6 +1,7 @@
 <script lang="ts">
   import { isTauri } from "@tauri-apps/api/core";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+  import { flip } from "svelte/animate";
   import { onMount } from "svelte";
 
   import { todoApi } from "$lib/api/todoApi";
@@ -18,14 +19,17 @@
   let adding = false;
   let showAbout = false;
   let theme: Theme = "light";
+  let reorderAnimationDuration = 170;
   let inputElement: HTMLInputElement;
   let draggedTodo: Todo | null = null;
   let dragTargetId: number | null = null;
   let dragPointerId: number | null = null;
+  let previewOrderIds: number[] | null = null;
   let undoTodo: Todo | null = null;
   let undoTimer: ReturnType<typeof setTimeout> | null = null;
   let confirmingClear = false;
   let clearTimer: ReturnType<typeof setTimeout> | null = null;
+  $: renderedTodos = applyPreviewOrder($todos.items, previewOrderIds);
 
   onMount(() => {
     const unlisteners: UnlistenFn[] = [];
@@ -37,6 +41,11 @@
           ? "dark"
           : "light";
     applyTheme(theme);
+    reorderAnimationDuration = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches
+      ? 0
+      : 170;
 
     void todos.load();
     if (isTauri()) {
@@ -167,7 +176,9 @@
     draggedTodo = todo;
     dragTargetId = todo.id;
     dragPointerId = event.pointerId;
-    updateDragTarget(event.clientY);
+    previewOrderIds = $todos.items
+      .filter((item) => item.completed === todo.completed)
+      .map((item) => item.id);
     window.addEventListener("pointermove", moveDrag, true);
     window.addEventListener("pointerup", endDrag, true);
     window.addEventListener("pointercancel", cancelDrag, true);
@@ -181,16 +192,19 @@
 
   function updateDragTarget(clientY: number) {
     if (!draggedTodo) return;
+    const source = draggedTodo;
 
     const candidates = Array.from(
       document.querySelectorAll<HTMLElement>("[data-todo-id]"),
     )
       .map((element) => {
-        const todo = $todos.items.find(
+        const todo = renderedTodos.find(
           (item) => item.id === Number(element.dataset.todoId),
         );
         const rect = element.getBoundingClientRect();
-        return todo && todo.completed === draggedTodo?.completed
+        return todo &&
+          todo.id !== source.id &&
+          todo.completed === source.completed
           ? { todo, distance: Math.abs(clientY - (rect.top + rect.height / 2)) }
           : null;
       })
@@ -200,34 +214,46 @@
       )
       .sort((left, right) => left.distance - right.distance);
 
-    dragTargetId = candidates[0]?.todo.id ?? draggedTodo.id;
+    const nextTargetId = candidates[0]?.todo.id;
+    if (!nextTargetId || nextTargetId === dragTargetId || !previewOrderIds) {
+      return;
+    }
+
+    const sourceIndex = previewOrderIds.indexOf(source.id);
+    const targetIndex = previewOrderIds.indexOf(nextTargetId);
+    if (sourceIndex < 0 || targetIndex < 0) return;
+
+    const nextOrder = [...previewOrderIds];
+    const [movedId] = nextOrder.splice(sourceIndex, 1);
+    nextOrder.splice(targetIndex, 0, movedId);
+    dragTargetId = nextTargetId;
+    previewOrderIds = nextOrder;
   }
 
   async function endDrag(event: PointerEvent) {
     if (!draggedTodo || event.pointerId !== dragPointerId) return;
     event.preventDefault();
     updateDragTarget(event.clientY);
-    const source = draggedTodo;
-    const target = $todos.items.find((todo) => todo.id === dragTargetId);
+    const orderedIds = previewOrderIds;
+    const sourceCompleted = draggedTodo.completed;
     removeDragListeners();
-    if (!source || !target || source.id === target.id) {
+    if (!orderedIds) {
       resetDragState();
       return;
     }
 
-    const group = $todos.items.filter(
-      (todo) => todo.completed === source.completed,
-    );
-    const sourceIndex = group.findIndex((todo) => todo.id === source.id);
-    const targetIndex = group.findIndex((todo) => todo.id === target.id);
-    if (sourceIndex < 0 || targetIndex < 0) return;
+    const currentIds = $todos.items
+      .filter((todo) => todo.completed === sourceCompleted)
+      .map((todo) => todo.id);
+    if (orderedIds.every((id, index) => id === currentIds[index])) {
+      resetDragState();
+      return;
+    }
 
-    const reordered = [...group];
-    const [moved] = reordered.splice(sourceIndex, 1);
-    reordered.splice(targetIndex, 0, moved);
+    const persistence = todos.reorder(orderedIds);
     resetDragState();
     try {
-      await todos.reorder(reordered.map((todo) => todo.id));
+      await persistence;
     } catch {
       // The store restores the previous order and exposes the error.
     }
@@ -268,6 +294,20 @@
     draggedTodo = null;
     dragTargetId = null;
     dragPointerId = null;
+    previewOrderIds = null;
+  }
+
+  function applyPreviewOrder(items: Todo[], orderedIds: number[] | null) {
+    if (!orderedIds) return items;
+
+    const order = new Map(orderedIds.map((id, index) => [id, index]));
+    const reorderedGroup = items
+      .filter((item) => order.has(item.id))
+      .sort((left, right) => order.get(left.id)! - order.get(right.id)!);
+    let groupIndex = 0;
+    return items.map((item) =>
+      order.has(item.id) ? reorderedGroup[groupIndex++] : item,
+    );
   }
 </script>
 
@@ -357,21 +397,26 @@
       {#if $todos.error}
         <div class="inline-error" role="alert">{$todos.error}</div>
       {/if}
-      {#each $todos.items as todo (todo.id)}
-        {@const group = $todos.items.filter((item) => item.completed === todo.completed)}
+      {#each renderedTodos as todo (todo.id)}
+        {@const group = renderedTodos.filter((item) => item.completed === todo.completed)}
         {@const groupIndex = group.findIndex((item) => item.id === todo.id)}
-        <TodoItem
-          {todo}
-          onToggle={toggleTodo}
-          onEdit={editTodo}
-          onDelete={deleteTodo}
-          onMove={moveTodo}
-          onDragStart={startDrag}
-          canMoveUp={groupIndex > 0}
-          canMoveDown={groupIndex < group.length - 1}
-          isDragging={draggedTodo?.id === todo.id}
-          isDragTarget={dragTargetId === todo.id && draggedTodo?.id !== todo.id}
-        />
+        <div
+          class="todo-row"
+          animate:flip={{ duration: reorderAnimationDuration }}
+        >
+          <TodoItem
+            {todo}
+            onToggle={toggleTodo}
+            onEdit={editTodo}
+            onDelete={deleteTodo}
+            onMove={moveTodo}
+            onDragStart={startDrag}
+            canMoveUp={groupIndex > 0}
+            canMoveDown={groupIndex < group.length - 1}
+            isDragging={draggedTodo?.id === todo.id}
+            isDragTarget={dragTargetId === todo.id && draggedTodo?.id !== todo.id}
+          />
+        </div>
       {/each}
     {/if}
   </section>
