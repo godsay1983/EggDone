@@ -96,7 +96,9 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<TrayIcon> {
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
-            "toggle" => toggle_panel(app, None),
+            "toggle" => {
+                toggle_panel(app, None);
+            }
             "new" => {
                 show_panel(app, None);
                 let _ = app.emit_to("main", "focus-new-todo", ());
@@ -130,24 +132,25 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<TrayIcon> {
         .build(app)
 }
 
-fn toggle_panel(app: &AppHandle, anchor: Option<(f64, f64, f64, f64)>) {
+pub(crate) fn toggle_panel(app: &AppHandle, anchor: Option<(f64, f64, f64, f64)>) -> bool {
     let Some(window) = app.get_webview_window("main") else {
-        return;
+        return false;
     };
     let visible = window.is_visible().unwrap_or(false);
 
     if visible {
         let _ = window.hide();
-        return;
+        return false;
     }
 
     // On Windows, clicking the tray first blurs the panel. Keep that click as a
     // hide action instead of immediately reopening the panel.
     if app.state::<PanelState>().take_recent_blur_hide() {
-        return;
+        return false;
     }
 
     show_panel(app, anchor);
+    true
 }
 
 pub(crate) fn show_panel(app: &AppHandle, anchor: Option<(f64, f64, f64, f64)>) {

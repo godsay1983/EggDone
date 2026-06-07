@@ -6,6 +6,10 @@
 
   import { todoApi } from "$lib/api/todoApi";
   import {
+    initializeDesktopSettings,
+    type DesktopSettings,
+  } from "$lib/api/desktopSettings";
+  import {
     completedCount,
     remainingCount,
     todos,
@@ -13,6 +17,7 @@
   import type { Todo } from "$lib/types";
   import { movePreviewByPointer } from "$lib/utils/reorderPreview";
   import DataManager from "./DataManager.svelte";
+  import SettingsPanel from "./SettingsPanel.svelte";
   import TodoItem from "./TodoItem.svelte";
 
   type Theme = "light" | "dark";
@@ -21,6 +26,8 @@
   let adding = false;
   let showAbout = false;
   let showDataManager = false;
+  let showSettings = false;
+  let desktopSettings: DesktopSettings | null = null;
   let theme: Theme = "light";
   let reorderAnimationDuration = 170;
   let inputElement: HTMLInputElement;
@@ -51,18 +58,24 @@
 
     void todos.load();
     if (isTauri()) {
+      void initializeDesktopSettings()
+        .then((settings) => (desktopSettings = settings))
+        .catch((error) => todos.reportError(error));
       void listen("focus-new-todo", () => {
         showAbout = false;
         showDataManager = false;
+        showSettings = false;
         requestAnimationFrame(() => inputElement?.focus());
       }).then((unlisten) => unlisteners.push(unlisten));
       void listen("show-about", () => {
         showDataManager = false;
+        showSettings = false;
         showAbout = true;
       }).then((unlisten) => unlisteners.push(unlisten));
       void listen("single-instance", () => {
         showAbout = false;
         showDataManager = false;
+        showSettings = false;
         requestAnimationFrame(() => inputElement?.focus());
       }).then((unlisten) => unlisteners.push(unlisten));
     }
@@ -318,11 +331,33 @@
 
     <div class="header-actions">
       <button
+        class="settings-button"
+        type="button"
+        aria-label="设置"
+        title="设置"
+        onclick={() => {
+          showAbout = false;
+          showDataManager = false;
+          showSettings = true;
+        }}
+        disabled={!desktopSettings}
+      >
+        <svg viewBox="0 0 20 20" aria-hidden="true">
+          <circle cx="10" cy="10" r="2.5" />
+          <path d="M10 3.2v1.3M10 15.5v1.3M3.2 10h1.3M15.5 10h1.3M5.2 5.2l.9.9M13.9 13.9l.9.9M14.8 5.2l-.9.9M6.1 13.9l-.9.9" />
+        </svg>
+      </button>
+
+      <button
         class="data-button"
         type="button"
         aria-label="数据管理"
         title="数据管理"
-        onclick={() => (showDataManager = true)}
+        onclick={() => {
+          showAbout = false;
+          showSettings = false;
+          showDataManager = true;
+        }}
       >
         <svg viewBox="0 0 20 20" aria-hidden="true">
           <ellipse cx="10" cy="5" rx="5.5" ry="2.5" />
@@ -431,7 +466,14 @@
 
   <footer>
     <span>一步一点，不着急</span>
-    <button type="button" onclick={() => showAbout = true}>关于</button>
+    <button
+      type="button"
+      onclick={() => {
+        showDataManager = false;
+        showSettings = false;
+        showAbout = true;
+      }}>关于</button
+    >
   </footer>
 </main>
 
@@ -439,6 +481,14 @@
   <DataManager
     onClose={() => (showDataManager = false)}
     onImported={async () => todos.load()}
+  />
+{/if}
+
+{#if showSettings && desktopSettings}
+  <SettingsPanel
+    settings={desktopSettings}
+    onClose={() => (showSettings = false)}
+    onChange={(settings) => (desktopSettings = settings)}
   />
 {/if}
 

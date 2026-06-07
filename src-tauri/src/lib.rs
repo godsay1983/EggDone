@@ -5,6 +5,7 @@ mod tray;
 
 use serde::Serialize;
 use tauri::{Emitter, Manager, WindowEvent};
+use tauri_plugin_autostart::MacosLauncher;
 
 #[cfg(desktop)]
 #[derive(Clone, Serialize)]
@@ -31,6 +32,11 @@ pub fn run() {
 
     builder
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_autostart::init(
+            MacosLauncher::LaunchAgent,
+            Some(vec!["--autostart"]),
+        ))
         .manage(tray::PanelState::default())
         .setup(|app| {
             let database = db::Database::open(app.handle())?;
@@ -79,6 +85,7 @@ pub fn run() {
             commands::restore_todo,
             commands::clear_completed_todos,
             commands::hide_panel,
+            commands::toggle_panel_from_shortcut,
             data_exchange::export_todos,
             data_exchange::preview_todo_import,
             data_exchange::confirm_todo_import,

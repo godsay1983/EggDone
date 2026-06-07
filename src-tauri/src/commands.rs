@@ -1,6 +1,6 @@
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
-use tauri::{State, WebviewWindow};
+use tauri::{AppHandle, Emitter, State, WebviewWindow};
 use uuid::Uuid;
 
 use crate::db::{now_millis, Database};
@@ -80,6 +80,13 @@ pub fn clear_completed_todos(database: State<'_, Database>) -> Result<usize, Str
 #[tauri::command]
 pub fn hide_panel(window: WebviewWindow) -> Result<(), String> {
     window.hide().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn toggle_panel_from_shortcut(app: AppHandle) {
+    if crate::tray::toggle_panel(&app, None) {
+        let _ = app.emit_to("main", "focus-new-todo", ());
+    }
 }
 
 fn lock_database<'a>(
