@@ -6,8 +6,10 @@ use std::{
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Manager, PhysicalPosition,
+    AppHandle, Emitter, Manager, Monitor, PhysicalPosition,
 };
+
+use crate::panel_position::{self, Rect, Size};
 
 #[derive(Default)]
 pub struct PanelState {
@@ -119,20 +121,23 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<TrayIcon> {
             } = event
             {
                 let app = tray.app_handle();
-                let scale_factor = app
-                    .get_webview_window("main")
-                    .and_then(|window| window.scale_factor().ok())
-                    .unwrap_or(1.0);
-                let position = rect.position.to_physical::<f64>(scale_factor);
-                let size = rect.size.to_physical::<f64>(scale_factor);
-                let anchor = (position.x, position.y, size.width, size.height);
+                // Tauri exposes tray rectangles in physical pixels. The scale
+                // argument is ignored for physical Position/Size variants.
+                let position = rect.position.to_physical::<f64>(1.0);
+                let size = rect.size.to_physical::<f64>(1.0);
+                let anchor = Rect {
+                    x: position.x,
+                    y: position.y,
+                    width: size.width,
+                    height: size.height,
+                };
                 toggle_panel(app, Some(anchor));
             }
         })
         .build(app)
 }
 
-pub(crate) fn toggle_panel(app: &AppHandle, anchor: Option<(f64, f64, f64, f64)>) -> bool {
+pub(crate) fn toggle_panel(app: &AppHandle, anchor: Option<Rect>) -> bool {
     let Some(window) = app.get_webview_window("main") else {
         return false;
     };
@@ -153,14 +158,14 @@ pub(crate) fn toggle_panel(app: &AppHandle, anchor: Option<(f64, f64, f64, f64)>
     true
 }
 
-pub(crate) fn show_panel(app: &AppHandle, anchor: Option<(f64, f64, f64, f64)>) {
+pub(crate) fn show_panel(app: &AppHandle, anchor: Option<Rect>) {
     let Some(window) = app.get_webview_window("main") else {
         return;
     };
     app.state::<PanelState>().clear_blur_hide();
 
-    if let Some((x, y, width, height)) = anchor {
-        place_near_tray(&window, x, y, width, height);
+    if let Some(anchor) = anchor {
+        place_near_tray(&window, anchor);
     } else {
         place_at_screen_corner(&window);
     }
@@ -169,43 +174,32 @@ pub(crate) fn show_panel(app: &AppHandle, anchor: Option<(f64, f64, f64, f64)>) 
     let _ = window.set_focus();
 }
 
-fn place_near_tray(
-    window: &tauri::WebviewWindow,
-    tray_x: f64,
-    tray_y: f64,
-    tray_width: f64,
-    tray_height: f64,
-) {
+fn place_near_tray(window: &tauri::WebviewWindow, anchor: Rect) {
     let Ok(panel_size) = window.outer_size() else {
         return;
     };
-    let panel_width = f64::from(panel_size.width);
-    let panel_height = f64::from(panel_size.height);
-
-    let mut x = tray_x + tray_width - panel_width;
-    let mut y = if tray_y >= panel_height {
-        tray_y - panel_height - 8.0
-    } else {
-        tray_y + tray_height + 8.0
+    let panel = Size {
+        width: f64::from(panel_size.width),
+        height: f64::from(panel_size.height),
     };
-
+    let anchor_center = anchor.center();
     let monitor = window
-        .current_monitor()
+        .monitor_from_point(anchor_center.x, anchor_center.y)
         .ok()
         .flatten()
+        .or_else(|| window.current_monitor().ok().flatten())
         .or_else(|| window.primary_monitor().ok().flatten());
     if let Some(monitor) = monitor {
-        let position = monitor.position();
-        let size = monitor.size();
-        let min_x = f64::from(position.x) + 8.0;
-        let min_y = f64::from(position.y) + 8.0;
-        let max_x = f64::from(position.x) + f64::from(size.width) - panel_width - 8.0;
-        let max_y = f64::from(position.y) + f64::from(size.height) - panel_height - 8.0;
-        x = x.clamp(min_x, max_x.max(min_x));
-        y = y.clamp(min_y, max_y.max(min_y));
+        set_panel_position(
+            window,
+            panel_position::near_tray(
+                anchor,
+                monitor_work_area(&monitor),
+                panel,
+                monitor.scale_factor(),
+            ),
+        );
     }
-
-    let _ = window.set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32));
 }
 
 fn place_at_screen_corner(window: &tauri::WebviewWindow) {
@@ -213,9 +207,29 @@ fn place_at_screen_corner(window: &tauri::WebviewWindow) {
     else {
         return;
     };
-    let monitor_position = monitor.position();
-    let monitor_size = monitor.size();
-    let x = monitor_position.x + monitor_size.width.saturating_sub(panel_size.width) as i32 - 16;
-    let y = monitor_position.y + monitor_size.height.saturating_sub(panel_size.height) as i32 - 56;
-    let _ = window.set_position(PhysicalPosition::new(x, y));
+    let panel = Size {
+        width: f64::from(panel_size.width),
+        height: f64::from(panel_size.height),
+    };
+    set_panel_position(
+        window,
+        panel_position::at_bottom_right(monitor_work_area(&monitor), panel, monitor.scale_factor()),
+    );
+}
+
+fn monitor_work_area(monitor: &Monitor) -> Rect {
+    let work_area = monitor.work_area();
+    Rect {
+        x: f64::from(work_area.position.x),
+        y: f64::from(work_area.position.y),
+        width: f64::from(work_area.size.width),
+        height: f64::from(work_area.size.height),
+    }
+}
+
+fn set_panel_position(window: &tauri::WebviewWindow, point: panel_position::Point) {
+    let _ = window.set_position(PhysicalPosition::new(
+        point.x.round() as i32,
+        point.y.round() as i32,
+    ));
 }

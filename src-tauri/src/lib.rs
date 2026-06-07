@@ -1,6 +1,7 @@
 mod commands;
 mod data_exchange;
 mod db;
+mod panel_position;
 mod tray;
 
 use serde::Serialize;
