@@ -83,6 +83,8 @@ pnpm build:windows
 
 输出目录为 `src-tauri/target/release/bundle/nsis/`。安装器使用当前用户模式，无需管理员权限；正式公开发布前仍需配置 Windows 代码签名。
 
+仓库提供 `scripts/verify-windows-installer.ps1`，用于使用两个相邻版本的安装包自动验证安装、覆盖升级、降级拦截和卸载。具体命令见 Windows 发布流程。
+
 发布前完整检查：
 
 ```bash
@@ -151,6 +153,7 @@ EggDone/
 │  │  └─ main.rs
 │  └─ tauri.conf.json
 ├─ docs/                         # 手动回归和发布流程
+├─ scripts/                      # Windows 安装包自动验证脚本
 ├─ LICENSE
 └─ AGENTS.md
 ```

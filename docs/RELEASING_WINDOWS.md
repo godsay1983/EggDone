@@ -29,6 +29,20 @@ src-tauri/target/release/bundle/nsis/
 
 当前安装器使用当前用户安装模式，不要求管理员权限；WebView2 缺失时会静默下载安装引导程序。安装器禁止用低版本覆盖高版本。
 
+## 自动验证安装器
+
+准备两个相邻版本的 NSIS 安装包后运行：
+
+```powershell
+.\scripts\verify-windows-installer.ps1 `
+  -BaseInstaller .\src-tauri\target\release\bundle\nsis\EggDone_0.1.0_x64-setup.exe `
+  -UpgradeInstaller .\src-tauri\target\release\bundle\nsis\EggDone_0.1.1_x64-setup.exe
+```
+
+脚本会验证当前用户模式的全新安装、覆盖升级、降级拦截、版本元数据和静默卸载。为避免破坏开发机上的真实安装，只要检测到 EggDone 已安装或正在运行，脚本就会停止。
+
+Tauri 2.11.2 的 NSIS 静默安装路径可能跳过内置版本比较。`src-tauri/windows/installer-hooks.nsh` 会在复制文件前再次检查版本，确保低版本安装器无法覆盖高版本。
+
 ## 代码签名
 
 正式公开发布前应配置可信 Windows 代码签名证书。证书指纹、私钥和时间戳服务属于发布环境机密，不提交到仓库。
@@ -43,6 +57,8 @@ src-tauri/target/release/bundle/nsis/
 2. 覆盖安装升级，确认 SQLite、设置和系统凭据仍可用。
 3. 卸载后确认程序文件、开机启动项和运行进程已移除。
 4. 重新安装，确认保留的用户数据符合发布策略。
+
+自动脚本不启动应用，也不修改应用数据目录。SQLite、设置和系统凭据的升级保留仍需按手动回归清单验证。
 
 ## 回滚
 
