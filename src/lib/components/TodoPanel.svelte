@@ -14,7 +14,7 @@
     remainingCount,
     todos,
   } from "$lib/stores/todoStore";
-  import { initializeAutoSync } from "$lib/sync/autoSync";
+  import { initializeAutoSync, syncStatus } from "$lib/sync/autoSync";
   import type { Todo } from "$lib/types";
   import { movePreviewByPointer } from "$lib/utils/reorderPreview";
   import DataManager from "./DataManager.svelte";
@@ -110,6 +110,17 @@
     document
       .querySelector('meta[name="theme-color"]')
       ?.setAttribute("content", nextTheme === "dark" ? "#1d1b18" : "#f6c94c");
+  }
+
+  function footerSyncLabel(
+    kind: import("$lib/sync/autoSync").SyncStatusKind,
+  ) {
+    if (kind === "syncing") return "同步中";
+    if (kind === "synced") return "已同步";
+    if (kind === "offline") return "离线";
+    if (kind === "conflict") return "有冲突";
+    if (kind === "failed") return "同步失败";
+    return "未同步";
   }
 
   async function addTodo() {
@@ -479,6 +490,24 @@
 
   <footer>
     <span>一步一点，不着急</span>
+    <button
+      class:syncing={$syncStatus.kind === "syncing"}
+      class:sync-ok={$syncStatus.kind === "synced"}
+      class:sync-problem={["offline", "conflict", "failed"].includes(
+        $syncStatus.kind,
+      )}
+      class="footer-sync-status"
+      type="button"
+      title={$syncStatus.message}
+      onclick={() => {
+        showAbout = false;
+        showDataManager = false;
+        showSettings = true;
+      }}
+    >
+      <span aria-hidden="true"></span>
+      {footerSyncLabel($syncStatus.kind)}
+    </button>
     <button
       type="button"
       onclick={() => {

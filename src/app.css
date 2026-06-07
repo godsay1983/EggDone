@@ -519,6 +519,59 @@ footer button {
   cursor: pointer;
 }
 
+.footer-sync-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 5px;
+  border-radius: 6px;
+}
+
+.footer-sync-status:hover {
+  color: #705f47;
+  background: #eee8db;
+}
+
+.footer-sync-status > span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #b8ad9c;
+}
+
+.footer-sync-status.syncing > span {
+  background: #d5aa30;
+  animation: sync-pulse 900ms ease-in-out infinite alternate;
+}
+
+.footer-sync-status.sync-ok {
+  color: #718e75;
+}
+
+.footer-sync-status.sync-ok > span {
+  background: #7ea684;
+}
+
+.footer-sync-status.sync-problem {
+  color: #a56658;
+}
+
+.footer-sync-status.sync-problem > span {
+  background: #bd7767;
+}
+
+@keyframes sync-pulse {
+  from {
+    opacity: 0.4;
+    transform: scale(0.8);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
+
 .undo-toast {
   position: fixed;
   right: 14px;
@@ -1364,6 +1417,19 @@ html[data-theme="dark"] footer {
 
 html[data-theme="dark"] footer button {
   color: #aaa08f;
+}
+
+html[data-theme="dark"] .footer-sync-status:hover {
+  color: #f0e6d6;
+  background: #37322b;
+}
+
+html[data-theme="dark"] .footer-sync-status.sync-ok {
+  color: #9fbea4;
+}
+
+html[data-theme="dark"] .footer-sync-status.sync-problem {
+  color: #dfa08f;
 }
 
 html[data-theme="dark"] .undo-toast {
