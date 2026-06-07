@@ -86,6 +86,7 @@ footer {
   filter: drop-shadow(0 4px 7px rgb(174 135 31 / 18%));
 }
 
+.data-button,
 .theme-button,
 .close-button,
 .move-button,
@@ -97,6 +98,7 @@ footer {
   cursor: pointer;
 }
 
+.data-button,
 .theme-button,
 .close-button {
   width: 30px;
@@ -105,6 +107,7 @@ footer {
   color: #a89c89;
 }
 
+.data-button:hover,
 .theme-button:hover,
 .close-button:hover,
 .move-button:hover,
@@ -113,6 +116,7 @@ footer {
   background: #eee8db;
 }
 
+.data-button svg,
 .theme-button svg,
 .close-button svg,
 .move-button svg,
@@ -544,6 +548,183 @@ footer button {
   cursor: pointer;
 }
 
+.data-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 12;
+  display: grid;
+  place-items: center;
+  background: rgb(70 62 49 / 24%);
+  backdrop-filter: blur(3px);
+}
+
+.data-dismiss {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.data-card {
+  position: relative;
+  z-index: 1;
+  width: 306px;
+  max-height: 500px;
+  overflow-y: auto;
+  padding: 17px;
+  border: 1px solid #e9dfcf;
+  border-radius: 18px;
+  background: #fffdf8;
+  box-shadow: 0 18px 45px rgb(79 60 27 / 22%);
+}
+
+.data-card > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 13px;
+}
+
+.data-card h2 {
+  margin: 0 0 3px;
+  font-size: 16px;
+}
+
+.data-card header p {
+  margin: 0;
+  color: #9b8d77;
+  font-size: 10px;
+}
+
+.data-card header button {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  color: #a99c88;
+  background: transparent;
+  font-size: 19px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.data-card header button:hover {
+  color: #6f604b;
+  background: #f0eadf;
+}
+
+.data-actions {
+  display: grid;
+  gap: 7px;
+}
+
+.data-actions > button {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 11px;
+  border: 1px solid #ede4d6;
+  border-radius: 12px;
+  color: #554b3d;
+  background: #faf7f0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.data-actions > button:hover {
+  border-color: #ddc98d;
+  background: #fffaf0;
+}
+
+.data-actions strong {
+  font-size: 11px;
+}
+
+.data-actions span {
+  color: #9c8e79;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.data-actions button:disabled,
+.preview-actions button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.import-preview {
+  margin-top: 11px;
+  padding: 11px;
+  border: 1px solid #ead89e;
+  border-radius: 12px;
+  background: #fff9e8;
+  font-size: 10px;
+}
+
+.import-preview > strong,
+.import-preview > span {
+  display: block;
+}
+
+.import-preview > span {
+  margin-top: 3px;
+  color: #9a8b73;
+}
+
+.import-preview > div:not(.preview-actions) {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+  color: #6f6048;
+}
+
+.preview-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+  margin-top: 11px;
+}
+
+.preview-actions button {
+  padding: 5px 9px;
+  border: 0;
+  border-radius: 7px;
+  color: #6d5d43;
+  background: #eee7da;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.preview-actions button:last-child {
+  color: #5c4917;
+  background: #f6c94c;
+  font-weight: 700;
+}
+
+.data-message,
+.data-error {
+  margin: 10px 1px 0;
+  padding: 7px 9px;
+  border-radius: 8px;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.data-message {
+  color: #55705a;
+  background: #eaf2e9;
+}
+
+.data-error {
+  color: #985d50;
+  background: #f8e9e5;
+}
+
 @keyframes toast-enter {
   from {
     opacity: 0;
@@ -633,11 +814,13 @@ html[data-theme="dark"] .brand p {
   color: #a99d8b;
 }
 
+html[data-theme="dark"] .data-button,
 html[data-theme="dark"] .theme-button,
 html[data-theme="dark"] .close-button {
   color: #a99d8b;
 }
 
+html[data-theme="dark"] .data-button:hover,
 html[data-theme="dark"] .theme-button:hover,
 html[data-theme="dark"] .close-button:hover,
 html[data-theme="dark"] .move-button:hover,
@@ -780,6 +963,71 @@ html[data-theme="dark"] .undo-toast {
   color: #ddd3c3;
   background: #2b2823;
   box-shadow: 0 12px 34px rgb(0 0 0 / 38%);
+}
+
+html[data-theme="dark"] .data-backdrop {
+  background: rgb(4 4 3 / 58%);
+}
+
+html[data-theme="dark"] .data-card {
+  border-color: #494238;
+  background: #292621;
+  box-shadow: 0 20px 50px rgb(0 0 0 / 45%);
+}
+
+html[data-theme="dark"] .data-card header p,
+html[data-theme="dark"] .data-actions span,
+html[data-theme="dark"] .import-preview > span {
+  color: #9e9383;
+}
+
+html[data-theme="dark"] .data-card header button {
+  color: #a99d8b;
+}
+
+html[data-theme="dark"] .data-card header button:hover {
+  color: #f3eadb;
+  background: #37322b;
+}
+
+html[data-theme="dark"] .data-actions > button {
+  border-color: #423c33;
+  color: #ded4c4;
+  background: #312e28;
+}
+
+html[data-theme="dark"] .data-actions > button:hover {
+  border-color: #796637;
+  background: #383329;
+}
+
+html[data-theme="dark"] .import-preview {
+  border-color: #6f5c2c;
+  background: #373024;
+}
+
+html[data-theme="dark"] .import-preview > div:not(.preview-actions) {
+  color: #d1c4af;
+}
+
+html[data-theme="dark"] .preview-actions button {
+  color: #cfc4b3;
+  background: #454038;
+}
+
+html[data-theme="dark"] .preview-actions button:last-child {
+  color: #4e3f18;
+  background: #e4ba43;
+}
+
+html[data-theme="dark"] .data-message {
+  color: #a8c8ad;
+  background: #29392c;
+}
+
+html[data-theme="dark"] .data-error {
+  color: #e2a090;
+  background: #422d28;
 }
 
 html[data-theme="dark"] .about-backdrop {

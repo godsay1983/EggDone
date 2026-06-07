@@ -1,4 +1,5 @@
 mod commands;
+mod data_exchange;
 mod db;
 mod tray;
 
@@ -29,6 +30,7 @@ pub fn run() {
     }));
 
     builder
+        .plugin(tauri_plugin_dialog::init())
         .manage(tray::PanelState::default())
         .setup(|app| {
             let database = db::Database::open(app.handle())?;
@@ -50,6 +52,13 @@ pub fn run() {
                     let _ = window.hide();
                 }
                 WindowEvent::Focused(false) => {
+                    if window
+                        .app_handle()
+                        .state::<tray::PanelState>()
+                        .should_keep_visible_on_blur()
+                    {
+                        return;
+                    }
                     // Keep the process alive and treat the panel like a native tray popover.
                     window
                         .app_handle()
@@ -70,6 +79,10 @@ pub fn run() {
             commands::restore_todo,
             commands::clear_completed_todos,
             commands::hide_panel,
+            data_exchange::export_todos,
+            data_exchange::preview_todo_import,
+            data_exchange::confirm_todo_import,
+            data_exchange::backup_database,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

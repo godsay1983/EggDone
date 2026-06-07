@@ -12,6 +12,8 @@ use tauri::{
 #[derive(Default)]
 pub struct PanelState {
     last_blur_hide: Mutex<Option<Instant>>,
+    dialog_closed_at: Mutex<Option<Instant>>,
+    dialog_active: Mutex<bool>,
 }
 
 impl PanelState {
@@ -19,6 +21,39 @@ impl PanelState {
         if let Ok(mut last_blur_hide) = self.last_blur_hide.lock() {
             *last_blur_hide = Some(Instant::now());
         }
+    }
+
+    pub fn begin_dialog(&self) {
+        if let Ok(mut dialog_active) = self.dialog_active.lock() {
+            *dialog_active = true;
+        }
+    }
+
+    pub fn end_dialog(&self) {
+        if let Ok(mut dialog_active) = self.dialog_active.lock() {
+            *dialog_active = false;
+        }
+        if let Ok(mut dialog_closed_at) = self.dialog_closed_at.lock() {
+            *dialog_closed_at = Some(Instant::now());
+        }
+    }
+
+    pub fn should_keep_visible_on_blur(&self) -> bool {
+        if self
+            .dialog_active
+            .lock()
+            .map(|active| *active)
+            .unwrap_or(false)
+        {
+            return true;
+        }
+
+        self.dialog_closed_at
+            .lock()
+            .ok()
+            .and_then(|closed_at| *closed_at)
+            .map(|instant| instant.elapsed() < Duration::from_millis(500))
+            .unwrap_or(false)
     }
 
     fn take_recent_blur_hide(&self) -> bool {

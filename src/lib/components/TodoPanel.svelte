@@ -11,6 +11,7 @@
     todos,
   } from "$lib/stores/todoStore";
   import type { Todo } from "$lib/types";
+  import DataManager from "./DataManager.svelte";
   import TodoItem from "./TodoItem.svelte";
 
   type Theme = "light" | "dark";
@@ -18,6 +19,7 @@
   let title = "";
   let adding = false;
   let showAbout = false;
+  let showDataManager = false;
   let theme: Theme = "light";
   let reorderAnimationDuration = 170;
   let inputElement: HTMLInputElement;
@@ -51,13 +53,16 @@
     if (isTauri()) {
       void listen("focus-new-todo", () => {
         showAbout = false;
+        showDataManager = false;
         requestAnimationFrame(() => inputElement?.focus());
       }).then((unlisten) => unlisteners.push(unlisten));
       void listen("show-about", () => {
+        showDataManager = false;
         showAbout = true;
       }).then((unlisten) => unlisteners.push(unlisten));
       void listen("single-instance", () => {
         showAbout = false;
+        showDataManager = false;
         requestAnimationFrame(() => inputElement?.focus());
       }).then((unlisten) => unlisteners.push(unlisten));
     }
@@ -323,6 +328,19 @@
 
     <div class="header-actions">
       <button
+        class="data-button"
+        type="button"
+        aria-label="数据管理"
+        title="数据管理"
+        onclick={() => (showDataManager = true)}
+      >
+        <svg viewBox="0 0 20 20" aria-hidden="true">
+          <ellipse cx="10" cy="5" rx="5.5" ry="2.5" />
+          <path d="M4.5 5v5c0 1.4 2.5 2.5 5.5 2.5s5.5-1.1 5.5-2.5V5M4.5 10v5c0 1.4 2.5 2.5 5.5 2.5s5.5-1.1 5.5-2.5v-5" />
+        </svg>
+      </button>
+
+      <button
         class="theme-button"
         type="button"
         aria-label={theme === "light" ? "切换到暗色主题" : "切换到亮色主题"}
@@ -426,6 +444,13 @@
     <button type="button" onclick={() => showAbout = true}>关于</button>
   </footer>
 </main>
+
+{#if showDataManager}
+  <DataManager
+    onClose={() => (showDataManager = false)}
+    onImported={async () => todos.load()}
+  />
+{/if}
 
 {#if undoTodo}
   <div class="undo-toast" role="status">
