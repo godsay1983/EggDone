@@ -20,6 +20,8 @@
   let theme: Theme = "light";
   let inputElement: HTMLInputElement;
   let draggedTodo: Todo | null = null;
+  let dragTargetId: number | null = null;
+  let dragPointerId: number | null = null;
   let undoTodo: Todo | null = null;
   let undoTimer: ReturnType<typeof setTimeout> | null = null;
   let confirmingClear = false;
@@ -55,6 +57,7 @@
       unlisteners.forEach((unlisten) => unlisten());
       if (undoTimer) clearTimeout(undoTimer);
       if (clearTimer) clearTimeout(clearTimer);
+      removeDragListeners();
     };
   });
 
@@ -159,14 +162,56 @@
     }
   }
 
-  function startDrag(todo: Todo) {
+  function startDrag(todo: Todo, event: PointerEvent) {
+    cancelDrag();
     draggedTodo = todo;
+    dragTargetId = todo.id;
+    dragPointerId = event.pointerId;
+    updateDragTarget(event.clientY);
+    window.addEventListener("pointermove", moveDrag, true);
+    window.addEventListener("pointerup", endDrag, true);
+    window.addEventListener("pointercancel", cancelDrag, true);
   }
 
-  async function dropTodo(target: Todo) {
+  function moveDrag(event: PointerEvent) {
+    if (!draggedTodo || event.pointerId !== dragPointerId) return;
+    event.preventDefault();
+    updateDragTarget(event.clientY);
+  }
+
+  function updateDragTarget(clientY: number) {
+    if (!draggedTodo) return;
+
+    const candidates = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-todo-id]"),
+    )
+      .map((element) => {
+        const todo = $todos.items.find(
+          (item) => item.id === Number(element.dataset.todoId),
+        );
+        const rect = element.getBoundingClientRect();
+        return todo && todo.completed === draggedTodo?.completed
+          ? { todo, distance: Math.abs(clientY - (rect.top + rect.height / 2)) }
+          : null;
+      })
+      .filter(
+        (candidate): candidate is { todo: Todo; distance: number } =>
+          candidate !== null,
+      )
+      .sort((left, right) => left.distance - right.distance);
+
+    dragTargetId = candidates[0]?.todo.id ?? draggedTodo.id;
+  }
+
+  async function endDrag(event: PointerEvent) {
+    if (!draggedTodo || event.pointerId !== dragPointerId) return;
+    event.preventDefault();
+    updateDragTarget(event.clientY);
     const source = draggedTodo;
-    draggedTodo = null;
-    if (!source || source.id === target.id || source.completed !== target.completed) {
+    const target = $todos.items.find((todo) => todo.id === dragTargetId);
+    removeDragListeners();
+    if (!source || !target || source.id === target.id) {
+      resetDragState();
       return;
     }
 
@@ -180,11 +225,49 @@
     const reordered = [...group];
     const [moved] = reordered.splice(sourceIndex, 1);
     reordered.splice(targetIndex, 0, moved);
+    resetDragState();
     try {
       await todos.reorder(reordered.map((todo) => todo.id));
     } catch {
       // The store restores the previous order and exposes the error.
     }
+  }
+
+  async function moveTodo(todo: Todo, direction: -1 | 1) {
+    const group = $todos.items.filter(
+      (item) => item.completed === todo.completed,
+    );
+    const currentIndex = group.findIndex((item) => item.id === todo.id);
+    const nextIndex = currentIndex + direction;
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= group.length) return;
+
+    const reordered = [...group];
+    [reordered[currentIndex], reordered[nextIndex]] = [
+      reordered[nextIndex],
+      reordered[currentIndex],
+    ];
+    try {
+      await todos.reorder(reordered.map((item) => item.id));
+    } catch {
+      // The store restores the previous order and exposes the error.
+    }
+  }
+
+  function cancelDrag() {
+    removeDragListeners();
+    resetDragState();
+  }
+
+  function removeDragListeners() {
+    window.removeEventListener("pointermove", moveDrag, true);
+    window.removeEventListener("pointerup", endDrag, true);
+    window.removeEventListener("pointercancel", cancelDrag, true);
+  }
+
+  function resetDragState() {
+    draggedTodo = null;
+    dragTargetId = null;
+    dragPointerId = null;
   }
 </script>
 
@@ -275,13 +358,19 @@
         <div class="inline-error" role="alert">{$todos.error}</div>
       {/if}
       {#each $todos.items as todo (todo.id)}
+        {@const group = $todos.items.filter((item) => item.completed === todo.completed)}
+        {@const groupIndex = group.findIndex((item) => item.id === todo.id)}
         <TodoItem
           {todo}
           onToggle={toggleTodo}
           onEdit={editTodo}
           onDelete={deleteTodo}
+          onMove={moveTodo}
           onDragStart={startDrag}
-          onDrop={dropTodo}
+          canMoveUp={groupIndex > 0}
+          canMoveDown={groupIndex < group.length - 1}
+          isDragging={draggedTodo?.id === todo.id}
+          isDragTarget={dragTargetId === todo.id && draggedTodo?.id !== todo.id}
         />
       {/each}
     {/if}

@@ -88,6 +88,7 @@ footer {
 
 .theme-button,
 .close-button,
+.move-button,
 .delete-button {
   display: grid;
   place-items: center;
@@ -106,6 +107,7 @@ footer {
 
 .theme-button:hover,
 .close-button:hover,
+.move-button:hover,
 .delete-button:hover {
   color: #705f47;
   background: #eee8db;
@@ -113,6 +115,7 @@ footer {
 
 .theme-button svg,
 .close-button svg,
+.move-button svg,
 .delete-button svg {
   width: 17px;
   fill: none;
@@ -232,6 +235,16 @@ footer {
   border-color: #e6dac5;
 }
 
+.todo-item.dragging {
+  opacity: 0.62;
+  transform: scale(0.985);
+}
+
+.todo-item.drag-target {
+  border-color: #d9ad31;
+  box-shadow: 0 0 0 2px rgb(246 201 76 / 16%);
+}
+
 .todo-item.editing {
   align-items: flex-start;
   border-color: #e8c45c;
@@ -258,11 +271,19 @@ footer {
   background: transparent;
   cursor: grab;
   opacity: 0;
+  touch-action: none;
+  user-select: none;
   transition: opacity 120ms ease;
 }
 
 .drag-handle:active {
   cursor: grabbing;
+}
+
+body:has(.todo-item.dragging),
+body:has(.todo-item.dragging) * {
+  cursor: grabbing !important;
+  user-select: none;
 }
 
 .drag-handle svg {
@@ -354,6 +375,31 @@ footer {
   transition: opacity 120ms ease;
 }
 
+.item-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 1px;
+}
+
+.move-button {
+  width: 22px;
+  height: 28px;
+  border-radius: 7px;
+  color: #c5b9a7;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.move-button svg {
+  width: 14px;
+}
+
+.move-button:disabled {
+  pointer-events: none;
+  opacity: 0 !important;
+}
+
 .delete-button:disabled,
 .checkbox:disabled {
   cursor: default;
@@ -361,6 +407,8 @@ footer {
 }
 
 .todo-item:hover .delete-button,
+.todo-item:hover .move-button:not(:disabled),
+.move-button:focus-visible,
 .delete-button:focus-visible {
   opacity: 1;
 }
@@ -582,6 +630,7 @@ html[data-theme="dark"] .close-button {
 
 html[data-theme="dark"] .theme-button:hover,
 html[data-theme="dark"] .close-button:hover,
+html[data-theme="dark"] .move-button:hover,
 html[data-theme="dark"] .delete-button:hover {
   color: #f3eadb;
   background: #37322b;
@@ -643,6 +692,11 @@ html[data-theme="dark"] .todo-item:hover {
   border-color: #51493d;
 }
 
+html[data-theme="dark"] .todo-item.drag-target {
+  border-color: #aa8735;
+  box-shadow: 0 0 0 2px rgb(246 201 76 / 10%);
+}
+
 html[data-theme="dark"] .todo-item.editing {
   border-color: #9f7e2f;
 }
@@ -680,6 +734,7 @@ html[data-theme="dark"] .checkbox.checked {
   background: #789d7e;
 }
 
+html[data-theme="dark"] .move-button,
 html[data-theme="dark"] .delete-button {
   color: #7f7567;
 }
