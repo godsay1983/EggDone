@@ -166,3 +166,5 @@ EggDone/
 - 同步状态仅保存在当前运行会话中，尚未持久化最后成功时间。
 
 后续优化和版本规划见 [OPTIMIZATION_TODO.md](OPTIMIZATION_TODO.md)。
+
+面向个人使用的搜索、提醒、今天视图、分组和重复任务规划见 [FUNCTION_OPTIMIZATION_TODO.md](FUNCTION_OPTIMIZATION_TODO.md)。
