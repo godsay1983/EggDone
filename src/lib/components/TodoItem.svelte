@@ -14,6 +14,7 @@
   export let canMoveDown = false;
   export let isDragging = false;
   export let isDragTarget = false;
+  export let reorderDisabled = false;
 
   let editing = false;
   let editTitle = "";
@@ -115,9 +116,10 @@
     class="drag-handle"
     type="button"
     aria-label={`拖动排序：${todo.title}`}
-    title="拖动排序"
+    title={reorderDisabled ? "搜索时不可排序" : "拖动排序"}
+    disabled={reorderDisabled}
     onpointerdown={(event) => {
-      if (event.button !== 0) return;
+      if (event.button !== 0 || reorderDisabled) return;
       event.preventDefault();
       event.stopPropagation();
       onDragStart(todo, event);
@@ -171,7 +173,7 @@
       aria-label={`上移任务：${todo.title}`}
       title="上移"
       onclick={() => void onMove(todo, -1)}
-      disabled={editing || !canMoveUp}
+      disabled={editing || reorderDisabled || !canMoveUp}
     >
       <svg viewBox="0 0 20 20" aria-hidden="true">
         <path d="m6 12 4-4 4 4" />
@@ -183,7 +185,7 @@
       aria-label={`下移任务：${todo.title}`}
       title="下移"
       onclick={() => void onMove(todo, 1)}
-      disabled={editing || !canMoveDown}
+      disabled={editing || reorderDisabled || !canMoveDown}
     >
       <svg viewBox="0 0 20 20" aria-hidden="true">
         <path d="m6 8 4 4 4-4" />

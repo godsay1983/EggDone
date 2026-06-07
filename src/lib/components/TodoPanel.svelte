@@ -2,7 +2,7 @@
   import { isTauri } from "@tauri-apps/api/core";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { flip } from "svelte/animate";
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
 
   import { todoApi } from "$lib/api/todoApi";
   import {
@@ -17,6 +17,7 @@
   import { initializeAutoSync, syncStatus } from "$lib/sync/autoSync";
   import type { Todo } from "$lib/types";
   import { movePreviewByPointer } from "$lib/utils/reorderPreview";
+  import { filterTodos } from "$lib/utils/todoFilters";
   import DataManager from "./DataManager.svelte";
   import SettingsPanel from "./SettingsPanel.svelte";
   import TodoItem from "./TodoItem.svelte";
@@ -39,11 +40,19 @@
   let undoTimer: ReturnType<typeof setTimeout> | null = null;
   let confirmingClear = false;
   let clearTimer: ReturnType<typeof setTimeout> | null = null;
-  $: renderedTodos = applyPreviewOrder($todos.items, previewOrderIds);
+  let showSearch = false;
+  let searchQuery = "";
+  let showCompleted = true;
+  let searchInput: HTMLInputElement;
+  $: searchActive = searchQuery.trim().length > 0;
+  $: filteredTodos = filterTodos($todos.items, searchQuery, showCompleted);
+  $: renderedTodos = applyPreviewOrder(filteredTodos, previewOrderIds);
 
   onMount(() => {
     const unlisteners: UnlistenFn[] = [];
     const savedTheme = localStorage.getItem("eggdone-theme");
+    showCompleted =
+      localStorage.getItem("eggdone-show-completed") !== "false";
     theme =
       savedTheme === "light" || savedTheme === "dark"
         ? savedTheme
@@ -97,6 +106,35 @@
     theme = theme === "light" ? "dark" : "light";
     localStorage.setItem("eggdone-theme", theme);
     applyTheme(theme);
+  }
+
+  async function toggleSearch() {
+    showSearch = !showSearch;
+    if (!showSearch) {
+      searchQuery = "";
+      cancelDrag();
+      inputElement?.focus();
+      return;
+    }
+
+    await tick();
+    searchInput?.focus();
+  }
+
+  function handleSearchKeydown(event: KeyboardEvent) {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    if (searchQuery) {
+      searchQuery = "";
+      return;
+    }
+    void toggleSearch();
+  }
+
+  function toggleCompletedVisibility() {
+    showCompleted = !showCompleted;
+    localStorage.setItem("eggdone-show-completed", String(showCompleted));
+    cancelDrag();
   }
 
   function markPanelInteraction() {
@@ -212,6 +250,7 @@
   }
 
   function startDrag(todo: Todo, event: PointerEvent) {
+    if (searchActive) return;
     cancelDrag();
     draggedTodo = todo;
     dragPointerId = event.pointerId;
@@ -291,6 +330,7 @@
   }
 
   async function moveTodo(todo: Todo, direction: -1 | 1) {
+    if (searchActive) return;
     const group = $todos.items.filter(
       (item) => item.completed === todo.completed,
     );
@@ -430,9 +470,58 @@
     </button>
   </form>
 
+  {#if showSearch}
+    <div class="todo-search">
+      <svg viewBox="0 0 20 20" aria-hidden="true">
+        <circle cx="8.5" cy="8.5" r="4.5" />
+        <path d="m12 12 4 4" />
+      </svg>
+      <input
+        bind:this={searchInput}
+        bind:value={searchQuery}
+        type="search"
+        maxlength="200"
+        placeholder="搜索任务"
+        aria-label="搜索任务"
+        autocomplete="off"
+        onkeydown={handleSearchKeydown}
+      />
+      {#if searchQuery}
+        <button
+          type="button"
+          aria-label="清空搜索"
+          title="清空搜索"
+          onclick={() => {
+            searchQuery = "";
+            searchInput?.focus();
+          }}
+        >×</button>
+      {/if}
+    </div>
+  {/if}
+
   <section class="summary">
     <span>待办清单</span>
     <div class="summary-actions">
+      <button
+        class:active={showSearch}
+        type="button"
+        aria-label={showSearch ? "关闭搜索" : "搜索任务"}
+        title={showSearch ? "关闭搜索" : "搜索任务"}
+        onclick={() => void toggleSearch()}
+      >
+        搜索
+      </button>
+      {#if $completedCount > 0}
+        <button
+          class:active={!showCompleted}
+          type="button"
+          aria-pressed={!showCompleted}
+          onclick={toggleCompletedVisibility}
+        >
+          {showCompleted ? "隐藏已完成" : "显示已完成"}
+        </button>
+      {/if}
       {#if $completedCount > 0}
         <button
           class:confirming={confirmingClear}
@@ -460,6 +549,11 @@
         <strong>今天也要蛋定完成</strong>
         <span>先写下一件小事吧</span>
       </div>
+    {:else if renderedTodos.length === 0}
+      <div class="empty-state filtered-empty">
+        <strong>{searchActive ? "没有找到匹配任务" : "已完成任务已隐藏"}</strong>
+        <span>{searchActive ? "换个关键词试试" : "需要时可以重新显示"}</span>
+      </div>
     {:else}
       {#if $todos.error}
         <div class="inline-error" role="alert">{$todos.error}</div>
@@ -482,6 +576,7 @@
             canMoveDown={groupIndex < group.length - 1}
             isDragging={draggedTodo?.id === todo.id}
             isDragTarget={draggedTodo?.id === todo.id}
+            reorderDisabled={searchActive}
           />
         </div>
       {/each}
