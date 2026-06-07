@@ -19,6 +19,10 @@ export const todoApi = {
     return invoke<Todo>("update_todo_title", { id, title });
   },
 
+  setPinned(id: number, pinned: boolean): Promise<Todo> {
+    return invoke<Todo>("set_todo_pinned", { id, pinned });
+  },
+
   reorder(orderedIds: number[]): Promise<Todo[]> {
     return invoke<Todo[]>("reorder_todos", { orderedIds });
   },

@@ -90,6 +90,7 @@ footer {
 .data-button,
 .theme-button,
 .close-button,
+.pin-button,
 .move-button,
 .delete-button {
   display: grid;
@@ -113,6 +114,7 @@ footer {
 .data-button:hover,
 .theme-button:hover,
 .close-button:hover,
+.pin-button:hover,
 .move-button:hover,
 .delete-button:hover {
   color: #705f47;
@@ -128,6 +130,7 @@ footer {
 .data-button svg,
 .theme-button svg,
 .close-button svg,
+.pin-button svg,
 .move-button svg,
 .delete-button svg {
   width: 17px;
@@ -468,6 +471,27 @@ body:has(.todo-item.dragging) * {
   transition: opacity 120ms ease;
 }
 
+.pin-button {
+  width: 24px;
+  height: 28px;
+  flex: 0 0 auto;
+  border-radius: 7px;
+  color: #c5b9a7;
+  opacity: 0;
+  transition:
+    color 120ms ease,
+    opacity 120ms ease;
+}
+
+.pin-button.active {
+  color: #bf9120;
+  opacity: 0.82;
+}
+
+.pin-button svg {
+  width: 14px;
+}
+
 .item-actions {
   display: flex;
   flex: 0 0 auto;
@@ -494,13 +518,16 @@ body:has(.todo-item.dragging) * {
 }
 
 .delete-button:disabled,
+.pin-button:disabled,
 .checkbox:disabled {
   cursor: default;
   opacity: 0.35;
 }
 
 .todo-item:hover .delete-button,
+.todo-item:hover .pin-button,
 .todo-item:hover .move-button:not(:disabled),
+.pin-button:focus-visible,
 .move-button:focus-visible,
 .delete-button:focus-visible {
   opacity: 1;
@@ -1358,6 +1385,7 @@ html[data-theme="dark"] .settings-button:hover,
 html[data-theme="dark"] .data-button:hover,
 html[data-theme="dark"] .theme-button:hover,
 html[data-theme="dark"] .close-button:hover,
+html[data-theme="dark"] .pin-button:hover,
 html[data-theme="dark"] .move-button:hover,
 html[data-theme="dark"] .delete-button:hover {
   color: #f3eadb;
@@ -1496,8 +1524,13 @@ html[data-theme="dark"] .checkbox.checked {
 }
 
 html[data-theme="dark"] .move-button,
+html[data-theme="dark"] .pin-button,
 html[data-theme="dark"] .delete-button {
   color: #7f7567;
+}
+
+html[data-theme="dark"] .pin-button.active {
+  color: #d9b34e;
 }
 
 html[data-theme="dark"] .status.error {

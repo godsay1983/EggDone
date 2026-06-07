@@ -11,6 +11,7 @@ function makeTodo(id: number, overrides: Partial<Todo> = {}): Todo {
     uuid: `00000000-0000-4000-8000-${id.toString().padStart(12, "0")}`,
     title: `todo-${id}`,
     completed: false,
+    pinned: false,
     sort_order: id * 1024,
     created_at: id,
     updated_at: id,
@@ -32,6 +33,7 @@ function createApi(initialItems: Todo[] = []) {
       }),
     ),
     updateTitle: vi.fn(async (id, title) => makeTodo(id, { title })),
+    setPinned: vi.fn(async (id, pinned) => makeTodo(id, { pinned })),
     reorder: vi.fn(async (orderedIds: number[]) =>
       orderedIds.map((id: number, index: number) =>
         makeTodo(id, { sort_order: index * 1024 }),
@@ -58,6 +60,9 @@ describe("todo store", () => {
     await store.edit(1, "edited");
     expect(get(store).items.find((todo) => todo.id === 1)?.title).toBe("edited");
 
+    await store.setPinned(get(store).items.find((todo) => todo.id === 1)!, true);
+    expect(get(store).items.find((todo) => todo.id === 1)?.pinned).toBe(true);
+
     await store.toggle(get(store).items.find((todo) => todo.id === 1)!);
     expect(get(store).items.find((todo) => todo.id === 1)?.completed).toBe(true);
 
@@ -67,7 +72,7 @@ describe("todo store", () => {
 
     await store.restore(1);
     expect(get(store).items.some((todo) => todo.id === 1)).toBe(true);
-    expect(onChanged).toHaveBeenCalledTimes(5);
+    expect(onChanged).toHaveBeenCalledTimes(6);
   });
 
   it("clears completed todos", async () => {
@@ -80,6 +85,32 @@ describe("todo store", () => {
     await store.load();
     expect(await store.clearCompleted()).toBe(1);
     expect(get(store).items.map((todo) => todo.id)).toEqual([1]);
+  });
+
+  it("orders pinned todos before normal todos within each completion group", async () => {
+    const api = createApi([
+      makeTodo(1, { sort_order: 0 }),
+      makeTodo(2, { sort_order: 1024 }),
+      makeTodo(3, {
+        completed: true,
+        completed_at: 100,
+        sort_order: 0,
+      }),
+    ]);
+    vi.mocked(api.setPinned).mockImplementation(async (id, pinned) =>
+      makeTodo(id, {
+        pinned,
+        completed: id === 3,
+        completed_at: id === 3 ? 100 : null,
+        sort_order: id === 1 ? 0 : 1024,
+      }),
+    );
+    const store = createTodoStore(api, vi.fn());
+
+    await store.load();
+    await store.setPinned(get(store).items[1], true);
+
+    expect(get(store).items.map((todo) => todo.id)).toEqual([2, 1, 3]);
   });
 
   it("restores the previous order when persistence fails", async () => {

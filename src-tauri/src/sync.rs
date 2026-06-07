@@ -16,6 +16,8 @@ pub(crate) struct SyncTodo {
     pub uuid: String,
     pub title: String,
     pub completed: bool,
+    #[serde(default)]
+    pub pinned: bool,
     pub sort_order: i64,
     pub created_at: i64,
     pub updated_at: i64,
@@ -40,7 +42,7 @@ pub(crate) fn build_document(
     let mut statement = connection
         .prepare(
             "
-            SELECT uuid, title, completed, sort_order, created_at, updated_at,
+            SELECT uuid, title, completed, pinned, sort_order, created_at, updated_at,
                    completed_at, deleted_at, updated_by
             FROM todos
             ORDER BY uuid ASC
@@ -103,13 +105,14 @@ pub(crate) fn merge_remote_document(
             .execute(
                 "
                 INSERT INTO todos (
-                    uuid, title, completed, sort_order, created_at, updated_at,
+                    uuid, title, completed, pinned, sort_order, created_at, updated_at,
                     completed_at, deleted_at, updated_by
                 )
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
                 ON CONFLICT(uuid) DO UPDATE SET
                     title = excluded.title,
                     completed = excluded.completed,
+                    pinned = excluded.pinned,
                     sort_order = excluded.sort_order,
                     created_at = excluded.created_at,
                     updated_at = excluded.updated_at,
@@ -121,6 +124,7 @@ pub(crate) fn merge_remote_document(
                     todo.uuid,
                     todo.title.trim(),
                     todo.completed,
+                    todo.pinned,
                     todo.sort_order,
                     todo.created_at,
                     todo.updated_at,
@@ -180,9 +184,10 @@ fn compare_todos(left: &SyncTodo, right: &SyncTodo) -> Ordering {
         .then_with(|| canonical_tie_break(left).cmp(&canonical_tie_break(right)))
 }
 
-fn canonical_tie_break(todo: &SyncTodo) -> (bool, Option<i64>, i64, &str, i64) {
+fn canonical_tie_break(todo: &SyncTodo) -> (bool, bool, Option<i64>, i64, &str, i64) {
     (
         todo.completed,
+        todo.pinned,
         todo.completed_at,
         todo.sort_order,
         todo.title.as_str(),
@@ -195,12 +200,13 @@ fn map_sync_todo(row: &rusqlite::Row<'_>) -> rusqlite::Result<SyncTodo> {
         uuid: row.get(0)?,
         title: row.get(1)?,
         completed: row.get::<_, i64>(2)? != 0,
-        sort_order: row.get(3)?,
-        created_at: row.get(4)?,
-        updated_at: row.get(5)?,
-        completed_at: row.get(6)?,
-        deleted_at: row.get(7)?,
-        updated_by: row.get(8)?,
+        pinned: row.get::<_, i64>(3)? != 0,
+        sort_order: row.get(4)?,
+        created_at: row.get(5)?,
+        updated_at: row.get(6)?,
+        completed_at: row.get(7)?,
+        deleted_at: row.get(8)?,
+        updated_by: row.get(9)?,
     })
 }
 
@@ -231,6 +237,7 @@ mod tests {
             uuid: TODO_ID.to_string(),
             title: title.to_string(),
             completed: false,
+            pinned: false,
             sort_order: 0,
             created_at: 1,
             updated_at,
@@ -331,6 +338,7 @@ mod tests {
         .unwrap();
 
         let mut remote_todo = todo("remote deleted", 11, DEVICE_B);
+        remote_todo.pinned = true;
         remote_todo.deleted_at = Some(11);
         let merged =
             merge_remote_document(&mut connection, &document(DEVICE_B, vec![remote_todo]), 30)
@@ -339,7 +347,34 @@ mod tests {
         assert_eq!(merged.todos[0].title, "remote deleted");
         let persisted = build_document(&connection, 31).unwrap();
         assert_eq!(persisted.todos[0].deleted_at, Some(11));
+        assert!(persisted.todos[0].pinned);
         assert_eq!(persisted.todos[0].updated_by, DEVICE_B);
+    }
+
+    #[test]
+    fn reads_legacy_sync_document_without_pinned_field() {
+        let json = format!(
+            r#"{{
+                "format_version": 1,
+                "device_id": "{DEVICE_A}",
+                "generated_at": 20,
+                "todos": [{{
+                    "uuid": "{TODO_ID}",
+                    "title": "legacy",
+                    "completed": false,
+                    "sort_order": 0,
+                    "created_at": 1,
+                    "updated_at": 1,
+                    "completed_at": null,
+                    "deleted_at": null,
+                    "updated_by": "{DEVICE_A}"
+                }}]
+            }}"#
+        );
+
+        let document: SyncDocument = serde_json::from_str(&json).unwrap();
+        assert!(!document.todos[0].pinned);
+        validate_document(&document).unwrap();
     }
 
     fn todo_with_order(sort_order: i64, updated_by: &str) -> SyncTodo {

@@ -22,6 +22,8 @@ struct TransferTodo {
     uuid: String,
     title: String,
     completed: bool,
+    #[serde(default)]
+    pinned: bool,
     sort_order: i64,
     created_at: i64,
     updated_at: i64,
@@ -237,10 +239,10 @@ fn read_all_todos(connection: &Connection) -> Result<Vec<TransferTodo>, String> 
     let mut statement = connection
         .prepare(
             "
-            SELECT uuid, title, completed, sort_order, created_at, updated_at,
+            SELECT uuid, title, completed, pinned, sort_order, created_at, updated_at,
                    completed_at, deleted_at
             FROM todos
-            ORDER BY completed ASC, sort_order ASC, created_at DESC, id DESC
+            ORDER BY completed ASC, pinned DESC, sort_order ASC, created_at DESC, id DESC
             ",
         )
         .map_err(database_error)?;
@@ -335,15 +337,16 @@ fn insert_todo(
         .execute(
             "
             INSERT INTO todos (
-                uuid, title, completed, sort_order, created_at, updated_at,
+                uuid, title, completed, pinned, sort_order, created_at, updated_at,
                 completed_at, deleted_at, updated_by
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
             ",
             params![
                 todo.uuid,
                 todo.title.trim(),
                 todo.completed,
+                todo.pinned,
                 todo.sort_order,
                 todo.created_at,
                 todo.updated_at,
@@ -365,14 +368,15 @@ fn update_todo(
         .execute(
             "
             UPDATE todos
-            SET title = ?1, completed = ?2, sort_order = ?3, created_at = ?4,
-                updated_at = ?5, completed_at = ?6, deleted_at = ?7,
-                updated_by = ?8
-            WHERE uuid = ?9
+            SET title = ?1, completed = ?2, pinned = ?3, sort_order = ?4,
+                created_at = ?5, updated_at = ?6, completed_at = ?7,
+                deleted_at = ?8, updated_by = ?9
+            WHERE uuid = ?10
             ",
             params![
                 todo.title.trim(),
                 todo.completed,
+                todo.pinned,
                 todo.sort_order,
                 todo.created_at,
                 todo.updated_at,
@@ -391,11 +395,12 @@ fn map_transfer_todo(row: &rusqlite::Row<'_>) -> rusqlite::Result<TransferTodo> 
         uuid: row.get(0)?,
         title: row.get(1)?,
         completed: row.get::<_, i64>(2)? != 0,
-        sort_order: row.get(3)?,
-        created_at: row.get(4)?,
-        updated_at: row.get(5)?,
-        completed_at: row.get(6)?,
-        deleted_at: row.get(7)?,
+        pinned: row.get::<_, i64>(3)? != 0,
+        sort_order: row.get(4)?,
+        created_at: row.get(5)?,
+        updated_at: row.get(6)?,
+        completed_at: row.get(7)?,
+        deleted_at: row.get(8)?,
     })
 }
 
@@ -429,6 +434,7 @@ mod tests {
             uuid: uuid.to_string(),
             title: title.to_string(),
             completed: false,
+            pinned: false,
             sort_order: 0,
             created_at: 1,
             updated_at,
@@ -440,7 +446,8 @@ mod tests {
     #[test]
     fn export_and_import_round_trip_including_deleted_todos() {
         let mut source = connection();
-        let active = todo("00000000-0000-4000-8000-000000000001", "active", 2);
+        let mut active = todo("00000000-0000-4000-8000-000000000001", "active", 2);
+        active.pinned = true;
         let mut deleted = todo("00000000-0000-4000-8000-000000000002", "deleted", 3);
         deleted.deleted_at = Some(3);
         merge_todos(&mut source, &[active.clone(), deleted.clone()]).unwrap();
@@ -508,5 +515,27 @@ mod tests {
             todos: vec![shared.clone(), shared],
         };
         assert!(validate_import(&duplicated).is_err());
+    }
+
+    #[test]
+    fn imports_legacy_json_without_pinned_field() {
+        let json = r#"{
+            "format_version": 1,
+            "exported_at": 1,
+            "todos": [{
+                "uuid": "00000000-0000-4000-8000-000000000006",
+                "title": "legacy",
+                "completed": false,
+                "sort_order": 0,
+                "created_at": 1,
+                "updated_at": 1,
+                "completed_at": null,
+                "deleted_at": null
+            }]
+        }"#;
+
+        let import: TodoExport = serde_json::from_str(json).unwrap();
+        assert!(!import.todos[0].pinned);
+        validate_import(&import).unwrap();
     }
 }

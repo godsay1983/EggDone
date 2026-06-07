@@ -13,6 +13,7 @@ function makeTodo(
     uuid: `00000000-0000-4000-8000-${id.toString().padStart(12, "0")}`,
     title,
     completed,
+    pinned: false,
     sort_order: id * 1024,
     created_at: id,
     updated_at: id,

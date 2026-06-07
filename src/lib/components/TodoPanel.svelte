@@ -194,6 +194,14 @@
     }
   }
 
+  async function pinTodo(todo: Todo, pinned: boolean) {
+    try {
+      await todos.setPinned(todo, pinned);
+    } catch (error) {
+      todos.reportError(error);
+    }
+  }
+
   async function deleteTodo(id: number) {
     try {
       undoTodo = await todos.remove(id);
@@ -255,7 +263,10 @@
     draggedTodo = todo;
     dragPointerId = event.pointerId;
     previewOrderIds = $todos.items
-      .filter((item) => item.completed === todo.completed)
+      .filter(
+        (item) =>
+          item.completed === todo.completed && item.pinned === todo.pinned,
+      )
       .map((item) => item.id);
     window.addEventListener("pointermove", moveDrag, true);
     window.addEventListener("pointerup", endDrag, true);
@@ -281,7 +292,9 @@
           (item) => item.id === Number(element.dataset.todoId),
         );
         const rect = element.getBoundingClientRect();
-        return todo && todo.completed === source.completed
+        return todo &&
+          todo.completed === source.completed &&
+          todo.pinned === source.pinned
           ? { id: todo.id, centerY: rect.top + rect.height / 2 }
           : null;
       })
@@ -306,6 +319,7 @@
     updateDragTarget(event.clientY);
     const orderedIds = previewOrderIds;
     const sourceCompleted = draggedTodo.completed;
+    const sourcePinned = draggedTodo.pinned;
     removeDragListeners();
     if (!orderedIds) {
       resetDragState();
@@ -313,7 +327,10 @@
     }
 
     const currentIds = $todos.items
-      .filter((todo) => todo.completed === sourceCompleted)
+      .filter(
+        (todo) =>
+          todo.completed === sourceCompleted && todo.pinned === sourcePinned,
+      )
       .map((todo) => todo.id);
     if (orderedIds.every((id, index) => id === currentIds[index])) {
       resetDragState();
@@ -332,7 +349,8 @@
   async function moveTodo(todo: Todo, direction: -1 | 1) {
     if (searchActive) return;
     const group = $todos.items.filter(
-      (item) => item.completed === todo.completed,
+      (item) =>
+        item.completed === todo.completed && item.pinned === todo.pinned,
     );
     const currentIndex = group.findIndex((item) => item.id === todo.id);
     const nextIndex = currentIndex + direction;
@@ -559,7 +577,7 @@
         <div class="inline-error" role="alert">{$todos.error}</div>
       {/if}
       {#each renderedTodos as todo (todo.id)}
-        {@const group = renderedTodos.filter((item) => item.completed === todo.completed)}
+        {@const group = renderedTodos.filter((item) => item.completed === todo.completed && item.pinned === todo.pinned)}
         {@const groupIndex = group.findIndex((item) => item.id === todo.id)}
         <div
           class="todo-row"
@@ -569,6 +587,7 @@
             {todo}
             onToggle={toggleTodo}
             onEdit={editTodo}
+            onPin={pinTodo}
             onDelete={deleteTodo}
             onMove={moveTodo}
             onDragStart={startDrag}

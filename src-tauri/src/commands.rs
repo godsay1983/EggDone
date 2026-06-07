@@ -19,6 +19,7 @@ pub struct Todo {
     uuid: String,
     title: String,
     completed: bool,
+    pinned: bool,
     sort_order: i64,
     created_at: i64,
     updated_at: i64,
@@ -71,6 +72,21 @@ pub fn update_todo_title(
     let result = {
         let connection = lock_database(&database)?;
         update_todo_title_in_connection(&connection, id, &title)
+    };
+    refresh_badge_after_success(&app, &result);
+    result
+}
+
+#[tauri::command]
+pub fn set_todo_pinned(
+    id: i64,
+    pinned: bool,
+    app: AppHandle,
+    database: State<'_, Database>,
+) -> Result<Todo, String> {
+    let result = {
+        let connection = lock_database(&database)?;
+        set_todo_pinned_in_connection(&connection, id, pinned)
     };
     refresh_badge_after_success(&app, &result);
     result
@@ -261,11 +277,11 @@ fn list_todos_from_connection(connection: &Connection) -> Result<Vec<Todo>, Stri
         .prepare(
             "
             SELECT
-                id, uuid, title, completed, sort_order,
+                id, uuid, title, completed, pinned, sort_order,
                 created_at, updated_at, completed_at, deleted_at
             FROM todos
             WHERE deleted_at IS NULL
-            ORDER BY completed ASC, sort_order ASC, created_at DESC, id DESC
+            ORDER BY completed ASC, pinned DESC, sort_order ASC, created_at DESC, id DESC
             ",
         )
         .map_err(database_error)?;
@@ -375,6 +391,34 @@ fn update_todo_title_in_connection(
     find_todo(connection, id)?.ok_or_else(|| "编辑后未能读取任务".to_string())
 }
 
+fn set_todo_pinned_in_connection(
+    connection: &Connection,
+    id: i64,
+    pinned: bool,
+) -> Result<Todo, String> {
+    let changed = connection
+        .execute(
+            "
+            UPDATE todos
+            SET pinned = ?1, updated_at = ?2, updated_by = ?3
+            WHERE id = ?4 AND deleted_at IS NULL
+            ",
+            params![
+                pinned,
+                now_millis(),
+                device_id(connection).map_err(database_error)?,
+                id
+            ],
+        )
+        .map_err(database_error)?;
+
+    if changed == 0 {
+        return Err("任务不存在".to_string());
+    }
+
+    find_todo(connection, id)?.ok_or_else(|| "置顶后未能读取任务".to_string())
+}
+
 fn reorder_todos_in_connection(
     connection: &mut Connection,
     ordered_ids: &[i64],
@@ -470,7 +514,7 @@ fn find_todo(connection: &Connection, id: i64) -> Result<Option<Todo>, String> {
         .query_row(
             "
             SELECT
-                id, uuid, title, completed, sort_order,
+                id, uuid, title, completed, pinned, sort_order,
                 created_at, updated_at, completed_at, deleted_at
             FROM todos
             WHERE id = ?1
@@ -488,11 +532,12 @@ fn map_todo(row: &rusqlite::Row<'_>) -> rusqlite::Result<Todo> {
         uuid: row.get(1)?,
         title: row.get(2)?,
         completed: row.get::<_, i64>(3)? != 0,
-        sort_order: row.get(4)?,
-        created_at: row.get(5)?,
-        updated_at: row.get(6)?,
-        completed_at: row.get(7)?,
-        deleted_at: row.get(8)?,
+        pinned: row.get::<_, i64>(4)? != 0,
+        sort_order: row.get(5)?,
+        created_at: row.get(6)?,
+        updated_at: row.get(7)?,
+        completed_at: row.get(8)?,
+        deleted_at: row.get(9)?,
     })
 }
 
@@ -519,6 +564,7 @@ mod tests {
         let created = create_todo_in_connection(&connection, "  新任务  ").unwrap();
         assert_eq!(created.title, "新任务");
         assert!(!created.completed);
+        assert!(!created.pinned);
         assert!(Uuid::parse_str(&created.uuid).is_ok());
         assert_eq!(created.completed_at, None);
         assert_eq!(created.deleted_at, None);
@@ -563,6 +609,13 @@ mod tests {
         let edited = update_todo_title_in_connection(&connection, first.id, "  edited  ").unwrap();
         assert_eq!(edited.title, "edited");
         assert!(update_todo_title_in_connection(&connection, first.id, " ").is_err());
+
+        let pinned = set_todo_pinned_in_connection(&connection, first.id, true).unwrap();
+        assert!(pinned.pinned);
+        assert_eq!(
+            list_todos_from_connection(&connection).unwrap()[0].id,
+            first.id
+        );
 
         let reordered =
             reorder_todos_in_connection(&mut connection, &[first.id, second.id]).unwrap();

@@ -77,6 +77,7 @@ pub fn run() {
             commands::create_todo,
             commands::set_todo_completed,
             commands::update_todo_title,
+            commands::set_todo_pinned,
             commands::reorder_todos,
             commands::delete_todo,
             commands::restore_todo,

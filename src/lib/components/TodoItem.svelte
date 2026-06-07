@@ -7,6 +7,7 @@
   export let todo: Todo;
   export let onToggle: (todo: Todo) => Promise<void>;
   export let onEdit: (id: number, title: string) => Promise<void>;
+  export let onPin: (todo: Todo, pinned: boolean) => Promise<void>;
   export let onDelete: (id: number) => Promise<void>;
   export let onMove: (todo: Todo, direction: -1 | 1) => Promise<void>;
   export let onDragStart: (todo: Todo, event: PointerEvent) => void;
@@ -167,6 +168,19 @@
   {/if}
 
   <div class="item-actions">
+    <button
+      class:active={todo.pinned}
+      class="pin-button"
+      type="button"
+      aria-label={todo.pinned ? `取消置顶：${todo.title}` : `置顶任务：${todo.title}`}
+      title={todo.pinned ? "取消置顶" : "置顶"}
+      onclick={() => void onPin(todo, !todo.pinned)}
+      disabled={editing}
+    >
+      <svg viewBox="0 0 20 20" aria-hidden="true">
+        <path d="M7 3h6l-1 5 3 3H5l3-3-1-5Zm3 8v6" />
+      </svg>
+    </button>
     <button
       class="move-button"
       type="button"

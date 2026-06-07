@@ -9,7 +9,7 @@ use rusqlite::{params, Connection, Transaction};
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
-const CURRENT_SCHEMA_VERSION: i64 = 4;
+const CURRENT_SCHEMA_VERSION: i64 = 5;
 const DEVICE_ID_KEY: &str = "device_id";
 
 pub struct Database {
@@ -67,6 +67,7 @@ pub(crate) fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {
     apply_migration(connection, 2, migrate_todos_for_sync)?;
     apply_migration(connection, 3, add_sync_identity)?;
     apply_migration(connection, 4, add_sync_settings)?;
+    apply_migration(connection, 5, add_todo_pinning)?;
 
     debug_assert_eq!(schema_version(connection)?, CURRENT_SCHEMA_VERSION);
     Ok(())
@@ -266,6 +267,19 @@ fn add_sync_settings(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
     Ok(())
 }
 
+fn add_todo_pinning(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
+    transaction.execute_batch(
+        "
+        ALTER TABLE todos
+            ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0 CHECK(pinned IN (0, 1));
+
+        DROP INDEX idx_todos_active_order;
+        CREATE INDEX idx_todos_active_order
+            ON todos(deleted_at, completed, pinned DESC, sort_order);
+        ",
+    )
+}
+
 pub(crate) fn device_id(connection: &Connection) -> rusqlite::Result<String> {
     connection.query_row(
         "SELECT value FROM app_metadata WHERE key = ?1",
@@ -316,6 +330,7 @@ mod tests {
             "created_at",
             "updated_at",
             "updated_by",
+            "pinned",
         ] {
             assert!(columns.iter().any(|column| column == expected));
         }
@@ -488,5 +503,46 @@ mod tests {
                 0,
             )
         );
+    }
+
+    #[test]
+    fn upgrades_v4_database_with_unpinned_todos() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "
+                CREATE TABLE schema_migrations (
+                    version INTEGER PRIMARY KEY,
+                    applied_at INTEGER NOT NULL
+                );
+                ",
+            )
+            .unwrap();
+        apply_migration(&mut connection, 1, create_legacy_schema).unwrap();
+        apply_migration(&mut connection, 2, migrate_todos_for_sync).unwrap();
+        apply_migration(&mut connection, 3, add_sync_identity).unwrap();
+        apply_migration(&mut connection, 4, add_sync_settings).unwrap();
+        connection
+            .execute(
+                "
+                INSERT INTO todos (
+                    uuid, title, completed, sort_order, created_at, updated_at,
+                    completed_at, deleted_at, updated_by
+                )
+                VALUES (?1, 'v4 task', 0, 0, 1, 2, NULL, NULL, ?2)
+                ",
+                params![
+                    "00000000-0000-4000-8000-000000000001",
+                    device_id(&connection).unwrap()
+                ],
+            )
+            .unwrap();
+
+        migrate(&mut connection).unwrap();
+
+        let pinned: i64 = connection
+            .query_row("SELECT pinned FROM todos", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(pinned, 0);
     }
 }

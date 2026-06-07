@@ -3,6 +3,7 @@ export interface Todo {
   uuid: string;
   title: string;
   completed: boolean;
+  pinned: boolean;
   sort_order: number;
   created_at: number;
   updated_at: number;

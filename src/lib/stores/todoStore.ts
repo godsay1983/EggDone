@@ -82,6 +82,18 @@ export function createTodoStore(api = todoApi, onChanged = scheduleAutoSync) {
       onChanged();
     },
 
+    async setPinned(todo: Todo, pinned: boolean) {
+      const updatedTodo = await api.setPinned(todo.id, pinned);
+      update((state) => ({
+        ...state,
+        items: state.items
+          .map((item) => (item.id === updatedTodo.id ? updatedTodo : item))
+          .sort(sortTodos),
+        error: null,
+      }));
+      onChanged();
+    },
+
     async reorder(orderedIds: number[]) {
       let previousItems: Todo[] = [];
       update((state) => {
@@ -155,6 +167,9 @@ export function createTodoStore(api = todoApi, onChanged = scheduleAutoSync) {
 function sortTodos(left: Todo, right: Todo) {
   if (left.completed !== right.completed) {
     return Number(left.completed) - Number(right.completed);
+  }
+  if (left.pinned !== right.pinned) {
+    return Number(right.pinned) - Number(left.pinned);
   }
   return left.sort_order - right.sort_order;
 }
