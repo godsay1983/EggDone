@@ -75,6 +75,25 @@ pnpm tauri build
 
 构建产物位于 `src-tauri/target/release/bundle/`。不同平台会生成对应的安装包格式。
 
+Windows NSIS 安装包：
+
+```bash
+pnpm build:windows
+```
+
+输出目录为 `src-tauri/target/release/bundle/nsis/`。安装器使用当前用户模式，无需管理员权限；正式公开发布前仍需配置 Windows 代码签名。
+
+发布前完整检查：
+
+```bash
+pnpm release:check
+```
+
+手动回归和 Windows 发布流程见：
+
+- [docs/MANUAL_REGRESSION.md](docs/MANUAL_REGRESSION.md)
+- [docs/RELEASING_WINDOWS.md](docs/RELEASING_WINDOWS.md)
+
 ## 数据存储
 
 应用首次启动时会在平台应用数据目录创建 `eggdone.sqlite3`。数据库包含 `todos` 表：
@@ -131,6 +150,8 @@ EggDone/
 │  │  ├─ lib.rs                  # Tauri 应用装配
 │  │  └─ main.rs
 │  └─ tauri.conf.json
+├─ docs/                         # 手动回归和发布流程
+├─ LICENSE
 └─ AGENTS.md
 ```
 

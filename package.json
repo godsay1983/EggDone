@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
+    "build:windows": "tauri build --bundles nsis",
+    "release:check": "pnpm check && pnpm test && pnpm build && cd src-tauri && cargo fmt -- --check && cargo check && cargo test",
     "test": "vitest run",
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",

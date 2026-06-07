@@ -34,6 +34,12 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "publisher": "EggDone Contributors",
+    "copyright": "Copyright © 2026 EggDone Contributors",
+    "license": "MIT",
+    "category": "Productivity",
+    "shortDescription": "轻量级跨平台托盘 Todo",
+    "longDescription": "EggDone（蛋定 Todo）是一款轻量级、托盘常驻、离线优先的 Todo 桌面应用，支持 SQLite 本地存储以及 S3 / MinIO 跨设备同步。",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
