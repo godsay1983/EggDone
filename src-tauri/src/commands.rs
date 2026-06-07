@@ -3,7 +3,10 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, State, WebviewWindow};
 use uuid::Uuid;
 
-use crate::db::{now_millis, Database};
+use crate::{
+    db::{now_millis, Database},
+    tray::PanelState,
+};
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct Todo {
@@ -80,6 +83,11 @@ pub fn clear_completed_todos(database: State<'_, Database>) -> Result<usize, Str
 #[tauri::command]
 pub fn hide_panel(window: WebviewWindow) -> Result<(), String> {
     window.hide().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn mark_panel_interaction(panel_state: State<'_, PanelState>) {
+    panel_state.mark_internal_interaction();
 }
 
 #[tauri::command]

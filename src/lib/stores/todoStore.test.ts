@@ -41,6 +41,7 @@ function createApi(initialItems: Todo[] = []) {
     restore: vi.fn(async (id) => makeTodo(id)),
     clearCompleted: vi.fn(async () => items.filter((todo) => todo.completed).length),
     hidePanel: vi.fn(async () => undefined),
+    markPanelInteraction: vi.fn(async () => undefined),
   };
   return api;
 }

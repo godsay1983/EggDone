@@ -59,18 +59,11 @@ pub fn run() {
                     let _ = window.hide();
                 }
                 WindowEvent::Focused(false) => {
-                    if window
-                        .app_handle()
-                        .state::<tray::PanelState>()
-                        .should_keep_visible_on_blur()
-                    {
+                    let panel_state = window.app_handle().state::<tray::PanelState>();
+                    if !panel_state.handle_blur() {
                         return;
                     }
                     // Keep the process alive and treat the panel like a native tray popover.
-                    window
-                        .app_handle()
-                        .state::<tray::PanelState>()
-                        .mark_blur_hide();
                     let _ = window.hide();
                 }
                 _ => {}
@@ -86,6 +79,7 @@ pub fn run() {
             commands::restore_todo,
             commands::clear_completed_todos,
             commands::hide_panel,
+            commands::mark_panel_interaction,
             commands::toggle_panel_from_shortcut,
             data_exchange::export_todos,
             data_exchange::preview_todo_import,

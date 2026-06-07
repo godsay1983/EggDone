@@ -94,6 +94,12 @@
     applyTheme(theme);
   }
 
+  function markPanelInteraction() {
+    if (isTauri()) {
+      void todoApi.markPanelInteraction().catch(() => {});
+    }
+  }
+
   function applyTheme(nextTheme: Theme) {
     document.documentElement.dataset.theme = nextTheme;
     document
@@ -318,6 +324,8 @@
     );
   }
 </script>
+
+<svelte:window onpointerdown={markPanelInteraction} />
 
 <main class="panel-shell">
   <header class="panel-header">

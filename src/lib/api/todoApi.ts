@@ -38,4 +38,8 @@ export const todoApi = {
   hidePanel(): Promise<void> {
     return invoke<void>("hide_panel");
   },
+
+  markPanelInteraction(): Promise<void> {
+    return invoke<void>("mark_panel_interaction");
+  },
 };
