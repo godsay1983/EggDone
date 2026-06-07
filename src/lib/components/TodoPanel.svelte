@@ -11,6 +11,7 @@
     todos,
   } from "$lib/stores/todoStore";
   import type { Todo } from "$lib/types";
+  import { movePreviewByPointer } from "$lib/utils/reorderPreview";
   import DataManager from "./DataManager.svelte";
   import TodoItem from "./TodoItem.svelte";
 
@@ -24,7 +25,6 @@
   let reorderAnimationDuration = 170;
   let inputElement: HTMLInputElement;
   let draggedTodo: Todo | null = null;
-  let dragTargetId: number | null = null;
   let dragPointerId: number | null = null;
   let previewOrderIds: number[] | null = null;
   let undoTodo: Todo | null = null;
@@ -179,7 +179,6 @@
   function startDrag(todo: Todo, event: PointerEvent) {
     cancelDrag();
     draggedTodo = todo;
-    dragTargetId = todo.id;
     dragPointerId = event.pointerId;
     previewOrderIds = $todos.items
       .filter((item) => item.completed === todo.completed)
@@ -198,8 +197,9 @@
   function updateDragTarget(clientY: number) {
     if (!draggedTodo) return;
     const source = draggedTodo;
+    if (!previewOrderIds) return;
 
-    const candidates = Array.from(
+    const rowCenters = Array.from(
       document.querySelectorAll<HTMLElement>("[data-todo-id]"),
     )
       .map((element) => {
@@ -207,31 +207,22 @@
           (item) => item.id === Number(element.dataset.todoId),
         );
         const rect = element.getBoundingClientRect();
-        return todo &&
-          todo.id !== source.id &&
-          todo.completed === source.completed
-          ? { todo, distance: Math.abs(clientY - (rect.top + rect.height / 2)) }
+        return todo && todo.completed === source.completed
+          ? { id: todo.id, centerY: rect.top + rect.height / 2 }
           : null;
       })
       .filter(
-        (candidate): candidate is { todo: Todo; distance: number } =>
-          candidate !== null,
-      )
-      .sort((left, right) => left.distance - right.distance);
+        (row): row is { id: number; centerY: number } => row !== null,
+      );
 
-    const nextTargetId = candidates[0]?.todo.id;
-    if (!nextTargetId || nextTargetId === dragTargetId || !previewOrderIds) {
-      return;
-    }
+    const nextOrder = movePreviewByPointer(
+      previewOrderIds,
+      source.id,
+      clientY,
+      rowCenters,
+    );
+    if (nextOrder === previewOrderIds) return;
 
-    const sourceIndex = previewOrderIds.indexOf(source.id);
-    const targetIndex = previewOrderIds.indexOf(nextTargetId);
-    if (sourceIndex < 0 || targetIndex < 0) return;
-
-    const nextOrder = [...previewOrderIds];
-    const [movedId] = nextOrder.splice(sourceIndex, 1);
-    nextOrder.splice(targetIndex, 0, movedId);
-    dragTargetId = nextTargetId;
     previewOrderIds = nextOrder;
   }
 
@@ -297,7 +288,6 @@
 
   function resetDragState() {
     draggedTodo = null;
-    dragTargetId = null;
     dragPointerId = null;
     previewOrderIds = null;
   }
@@ -432,7 +422,7 @@
             canMoveUp={groupIndex > 0}
             canMoveDown={groupIndex < group.length - 1}
             isDragging={draggedTodo?.id === todo.id}
-            isDragTarget={draggedTodo?.id === todo.id && dragTargetId !== todo.id}
+            isDragTarget={draggedTodo?.id === todo.id}
           />
         </div>
       {/each}
