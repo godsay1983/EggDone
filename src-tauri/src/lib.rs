@@ -2,6 +2,7 @@ mod commands;
 mod data_exchange;
 mod db;
 mod panel_position;
+mod sync;
 mod tray;
 
 use serde::Serialize;
@@ -81,6 +82,8 @@ pub fn run() {
             commands::hide_panel,
             commands::mark_panel_interaction,
             commands::toggle_panel_from_shortcut,
+            commands::prepare_sync_document,
+            commands::apply_remote_sync_document,
             data_exchange::export_todos,
             data_exchange::preview_todo_import,
             data_exchange::confirm_todo_import,

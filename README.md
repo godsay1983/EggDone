@@ -84,10 +84,13 @@ pnpm tauri build
 | `sort_order` | 任务排序值 |
 | `created_at` | UTC 创建时间（毫秒时间戳） |
 | `updated_at` | UTC 更新时间（毫秒时间戳） |
+| `updated_by` | 最后修改该任务的设备 UUID |
 | `completed_at` | UTC 完成时间（毫秒时间戳，可空） |
 | `deleted_at` | UTC 软删除时间（毫秒时间戳，可空） |
 
-`schema_migrations` 表记录已执行的数据库版本。开发时可以删除数据库以重置数据，具体根目录由 Tauri 的 `app_data_dir` 按平台决定。
+`schema_migrations` 表记录已执行的数据库版本，`app_metadata` 保存本机 `device_id`。开发时可以删除数据库以重置数据，具体根目录由 Tauri 的 `app_data_dir` 按平台决定。
+
+项目已包含版本化同步文档和本地合并核心：按 Todo UUID 合并，优先采用较新的 `updated_at`；时间相同时优先保留删除记录，再通过 `updated_by` 稳定决胜。当前尚未接入 S3/MinIO 网络、凭据和 ETag。
 
 面板右上角的“数据管理”可导出版本化 JSON、预览并合并导入文件，或创建一致的 SQLite 快照。导入只更新 `updated_at` 更新的同 UUID 任务，不会直接覆盖整个本地数据库。
 
@@ -111,6 +114,7 @@ EggDone/
 │  │  ├─ commands.rs             # 前后端命令
 │  │  ├─ db.rs                   # SQLite 初始化
 │  │  ├─ panel_position.rs       # 多显示器面板定位计算
+│  │  ├─ sync.rs                 # 同步文档、冲突决胜和 UUID 合并
 │  │  ├─ tray.rs                 # 托盘菜单、事件和窗口定位
 │  │  ├─ lib.rs                  # Tauri 应用装配
 │  │  └─ main.rs

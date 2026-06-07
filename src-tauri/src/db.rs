@@ -9,7 +9,8 @@ use rusqlite::{params, Connection, Transaction};
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
-const CURRENT_SCHEMA_VERSION: i64 = 2;
+const CURRENT_SCHEMA_VERSION: i64 = 3;
+const DEVICE_ID_KEY: &str = "device_id";
 
 pub struct Database {
     pub(crate) connection: Mutex<Connection>,
@@ -64,6 +65,7 @@ pub(crate) fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {
 
     apply_migration(connection, 1, create_legacy_schema)?;
     apply_migration(connection, 2, migrate_todos_for_sync)?;
+    apply_migration(connection, 3, add_sync_identity)?;
 
     debug_assert_eq!(schema_version(connection)?, CURRENT_SCHEMA_VERSION);
     Ok(())
@@ -209,6 +211,38 @@ fn migrate_todos_for_sync(transaction: &Transaction<'_>) -> rusqlite::Result<()>
     transaction.execute_batch("DROP TABLE todos_legacy;")
 }
 
+fn add_sync_identity(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
+    transaction.execute_batch(
+        "
+        CREATE TABLE app_metadata (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+
+        ALTER TABLE todos
+            ADD COLUMN updated_by TEXT NOT NULL DEFAULT '';
+        ",
+    )?;
+    let device_id = Uuid::new_v4().to_string();
+    transaction.execute(
+        "INSERT INTO app_metadata (key, value) VALUES (?1, ?2)",
+        params![DEVICE_ID_KEY, device_id],
+    )?;
+    transaction.execute(
+        "UPDATE todos SET updated_by = ?1 WHERE updated_by = ''",
+        params![device_id],
+    )?;
+    Ok(())
+}
+
+pub(crate) fn device_id(connection: &Connection) -> rusqlite::Result<String> {
+    connection.query_row(
+        "SELECT value FROM app_metadata WHERE key = ?1",
+        params![DEVICE_ID_KEY],
+        |row| row.get(0),
+    )
+}
+
 fn database_path(app: &AppHandle) -> Result<PathBuf, Box<dyn std::error::Error>> {
     // Use the platform-specific app data directory on Windows, macOS, and Linux.
     let directory = app.path().app_data_dir()?;
@@ -250,6 +284,7 @@ mod tests {
             "sort_order",
             "created_at",
             "updated_at",
+            "updated_by",
         ] {
             assert!(columns.iter().any(|column| column == expected));
         }
@@ -301,6 +336,11 @@ mod tests {
         assert_eq!(todo.4, Some(todo.3));
         assert_eq!(todo.5, None);
         assert!(Uuid::parse_str(&todo.6).is_ok());
+        assert!(Uuid::parse_str(&device_id(&connection).unwrap()).is_ok());
+        let updated_by: String = connection
+            .query_row("SELECT updated_by FROM todos", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(updated_by, device_id(&connection).unwrap());
     }
 
     #[test]
@@ -317,5 +357,46 @@ mod tests {
             })
             .unwrap();
         assert_eq!(migration_count, CURRENT_SCHEMA_VERSION);
+        let first_device_id = device_id(&connection).unwrap();
+        migrate(&mut connection).unwrap();
+        assert_eq!(device_id(&connection).unwrap(), first_device_id);
+    }
+
+    #[test]
+    fn upgrades_v2_database_with_stable_sync_identity() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "
+                CREATE TABLE schema_migrations (
+                    version INTEGER PRIMARY KEY,
+                    applied_at INTEGER NOT NULL
+                );
+                ",
+            )
+            .unwrap();
+        apply_migration(&mut connection, 1, create_legacy_schema).unwrap();
+        apply_migration(&mut connection, 2, migrate_todos_for_sync).unwrap();
+        connection
+            .execute(
+                "
+                INSERT INTO todos (
+                    uuid, title, completed, sort_order, created_at, updated_at,
+                    completed_at, deleted_at
+                )
+                VALUES (?1, 'v2 task', 0, 0, 1, 2, NULL, NULL)
+                ",
+                params!["00000000-0000-4000-8000-000000000001"],
+            )
+            .unwrap();
+
+        migrate(&mut connection).unwrap();
+
+        let identity = device_id(&connection).unwrap();
+        let updated_by: String = connection
+            .query_row("SELECT updated_by FROM todos", [], |row| row.get(0))
+            .unwrap();
+        assert!(Uuid::parse_str(&identity).is_ok());
+        assert_eq!(updated_by, identity);
     }
 }

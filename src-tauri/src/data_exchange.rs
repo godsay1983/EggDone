@@ -11,7 +11,7 @@ use tauri_plugin_dialog::{DialogExt, FilePath};
 use uuid::Uuid;
 
 use crate::{
-    db::{now_millis, Database},
+    db::{device_id, now_millis, Database},
     tray::PanelState,
 };
 
@@ -282,6 +282,7 @@ fn merge_todos(
     imported: &[TransferTodo],
 ) -> Result<ImportResult, String> {
     let local_versions = local_versions(connection)?;
+    let local_device_id = device_id(connection).map_err(database_error)?;
     let transaction = connection.transaction().map_err(database_error)?;
     let mut result = ImportResult {
         added: 0,
@@ -292,11 +293,11 @@ fn merge_todos(
     for todo in imported {
         match local_versions.get(&todo.uuid) {
             None => {
-                insert_todo(&transaction, todo)?;
+                insert_todo(&transaction, todo, &local_device_id)?;
                 result.added += 1;
             }
             Some(local_updated_at) if todo.updated_at > *local_updated_at => {
-                update_todo(&transaction, todo)?;
+                update_todo(&transaction, todo, &local_device_id)?;
                 result.updated += 1;
             }
             Some(_) => result.unchanged += 1,
@@ -318,15 +319,19 @@ fn local_versions(connection: &Connection) -> Result<HashMap<String, i64>, Strin
         .map_err(database_error)
 }
 
-fn insert_todo(connection: &Connection, todo: &TransferTodo) -> Result<(), String> {
+fn insert_todo(
+    connection: &Connection,
+    todo: &TransferTodo,
+    updated_by: &str,
+) -> Result<(), String> {
     connection
         .execute(
             "
             INSERT INTO todos (
                 uuid, title, completed, sort_order, created_at, updated_at,
-                completed_at, deleted_at
+                completed_at, deleted_at, updated_by
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
             ",
             params![
                 todo.uuid,
@@ -337,20 +342,26 @@ fn insert_todo(connection: &Connection, todo: &TransferTodo) -> Result<(), Strin
                 todo.updated_at,
                 todo.completed_at,
                 todo.deleted_at,
+                updated_by,
             ],
         )
         .map(|_| ())
         .map_err(database_error)
 }
 
-fn update_todo(connection: &Connection, todo: &TransferTodo) -> Result<(), String> {
+fn update_todo(
+    connection: &Connection,
+    todo: &TransferTodo,
+    updated_by: &str,
+) -> Result<(), String> {
     connection
         .execute(
             "
             UPDATE todos
             SET title = ?1, completed = ?2, sort_order = ?3, created_at = ?4,
-                updated_at = ?5, completed_at = ?6, deleted_at = ?7
-            WHERE uuid = ?8
+                updated_at = ?5, completed_at = ?6, deleted_at = ?7,
+                updated_by = ?8
+            WHERE uuid = ?9
             ",
             params![
                 todo.title.trim(),
@@ -360,6 +371,7 @@ fn update_todo(connection: &Connection, todo: &TransferTodo) -> Result<(), Strin
                 todo.updated_at,
                 todo.completed_at,
                 todo.deleted_at,
+                updated_by,
                 todo.uuid,
             ],
         )

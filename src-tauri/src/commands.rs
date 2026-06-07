@@ -4,7 +4,8 @@ use tauri::{AppHandle, Emitter, State, WebviewWindow};
 use uuid::Uuid;
 
 use crate::{
-    db::{now_millis, Database},
+    db::{device_id, now_millis, Database},
+    sync::{self, SyncDocument},
     tray::PanelState,
 };
 
@@ -97,6 +98,21 @@ pub fn toggle_panel_from_shortcut(app: AppHandle) {
     }
 }
 
+#[tauri::command]
+pub fn prepare_sync_document(database: State<'_, Database>) -> Result<SyncDocument, String> {
+    let connection = lock_database(&database)?;
+    sync::build_document(&connection, now_millis())
+}
+
+#[tauri::command]
+pub fn apply_remote_sync_document(
+    remote: SyncDocument,
+    database: State<'_, Database>,
+) -> Result<SyncDocument, String> {
+    let mut connection = lock_database(&database)?;
+    sync::merge_remote_document(&mut connection, &remote, now_millis())
+}
+
 fn lock_database<'a>(
     database: &'a State<'_, Database>,
 ) -> Result<std::sync::MutexGuard<'a, Connection>, String> {
@@ -133,6 +149,7 @@ fn create_todo_in_connection(connection: &Connection, title: &str) -> Result<Tod
 
     let now = now_millis();
     let uuid = Uuid::new_v4().to_string();
+    let updated_by = device_id(connection).map_err(database_error)?;
     let sort_order: i64 = connection
         .query_row(
             "
@@ -150,11 +167,11 @@ fn create_todo_in_connection(connection: &Connection, title: &str) -> Result<Tod
             "
             INSERT INTO todos (
                 uuid, title, completed, sort_order,
-                created_at, updated_at, completed_at, deleted_at
+                created_at, updated_at, completed_at, deleted_at, updated_by
             )
-            VALUES (?1, ?2, 0, ?3, ?4, ?4, NULL, NULL)
+            VALUES (?1, ?2, 0, ?3, ?4, ?4, NULL, NULL, ?5)
             ",
-            params![uuid, title, sort_order, now],
+            params![uuid, title, sort_order, now, updated_by],
         )
         .map_err(database_error)?;
 
@@ -168,6 +185,7 @@ fn set_todo_completed_in_connection(
     completed: bool,
 ) -> Result<Todo, String> {
     let now = now_millis();
+    let updated_by = device_id(connection).map_err(database_error)?;
     let changed = connection
         .execute(
             "
@@ -175,10 +193,11 @@ fn set_todo_completed_in_connection(
             SET
                 completed = ?1,
                 completed_at = CASE WHEN ?1 = 1 THEN ?2 ELSE NULL END,
-                updated_at = ?2
-            WHERE id = ?3 AND deleted_at IS NULL
+                updated_at = ?2,
+                updated_by = ?3
+            WHERE id = ?4 AND deleted_at IS NULL
             ",
-            params![completed, now, id],
+            params![completed, now, updated_by, id],
         )
         .map_err(database_error)?;
 
@@ -203,10 +222,15 @@ fn update_todo_title_in_connection(
         .execute(
             "
             UPDATE todos
-            SET title = ?1, updated_at = ?2
-            WHERE id = ?3 AND deleted_at IS NULL
+            SET title = ?1, updated_at = ?2, updated_by = ?3
+            WHERE id = ?4 AND deleted_at IS NULL
             ",
-            params![title, now_millis(), id],
+            params![
+                title,
+                now_millis(),
+                device_id(connection).map_err(database_error)?,
+                id
+            ],
         )
         .map_err(database_error)?;
 
@@ -226,16 +250,17 @@ fn reorder_todos_in_connection(
     }
 
     let now = now_millis();
+    let updated_by = device_id(connection).map_err(database_error)?;
     let transaction = connection.transaction().map_err(database_error)?;
     for (index, id) in ordered_ids.iter().enumerate() {
         let changed = transaction
             .execute(
                 "
                 UPDATE todos
-                SET sort_order = ?1, updated_at = ?2
-                WHERE id = ?3 AND deleted_at IS NULL
+                SET sort_order = ?1, updated_at = ?2, updated_by = ?3
+                WHERE id = ?4 AND deleted_at IS NULL
                 ",
-                params![index as i64 * 1024, now, id],
+                params![index as i64 * 1024, now, updated_by, id],
             )
             .map_err(database_error)?;
         if changed == 0 {
@@ -249,14 +274,15 @@ fn reorder_todos_in_connection(
 
 fn soft_delete_todo_in_connection(connection: &Connection, id: i64) -> Result<Todo, String> {
     let now = now_millis();
+    let updated_by = device_id(connection).map_err(database_error)?;
     let changed = connection
         .execute(
             "
             UPDATE todos
-            SET deleted_at = ?1, updated_at = ?1
-            WHERE id = ?2 AND deleted_at IS NULL
+            SET deleted_at = ?1, updated_at = ?1, updated_by = ?2
+            WHERE id = ?3 AND deleted_at IS NULL
             ",
-            params![now, id],
+            params![now, updated_by, id],
         )
         .map_err(database_error)?;
 
@@ -272,10 +298,14 @@ fn restore_todo_in_connection(connection: &Connection, id: i64) -> Result<Todo, 
         .execute(
             "
             UPDATE todos
-            SET deleted_at = NULL, updated_at = ?1
-            WHERE id = ?2 AND deleted_at IS NOT NULL
+            SET deleted_at = NULL, updated_at = ?1, updated_by = ?2
+            WHERE id = ?3 AND deleted_at IS NOT NULL
             ",
-            params![now_millis(), id],
+            params![
+                now_millis(),
+                device_id(connection).map_err(database_error)?,
+                id
+            ],
         )
         .map_err(database_error)?;
 
@@ -288,14 +318,15 @@ fn restore_todo_in_connection(connection: &Connection, id: i64) -> Result<Todo, 
 
 fn clear_completed_todos_in_connection(connection: &Connection) -> Result<usize, String> {
     let now = now_millis();
+    let updated_by = device_id(connection).map_err(database_error)?;
     connection
         .execute(
             "
             UPDATE todos
-            SET deleted_at = ?1, updated_at = ?1
+            SET deleted_at = ?1, updated_at = ?1, updated_by = ?2
             WHERE completed = 1 AND deleted_at IS NULL
             ",
-            params![now],
+            params![now, updated_by],
         )
         .map_err(database_error)
 }
