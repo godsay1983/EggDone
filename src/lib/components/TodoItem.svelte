@@ -4,6 +4,11 @@
 
   import type { TodoScheduleInput } from "$lib/api/todoApi";
   import type { Todo } from "$lib/types";
+  import {
+    formatDueLabel,
+    getDueTone,
+    localDateString,
+  } from "$lib/utils/todoDates";
 
   export let todo: Todo;
   export let onToggle: (todo: Todo) => Promise<void>;
@@ -114,43 +119,6 @@
     } finally {
       scheduleSaving = false;
     }
-  }
-
-  function localDateString(offsetDays: number) {
-    const date = new Date();
-    date.setDate(date.getDate() + offsetDays);
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  }
-
-  function formatDueLabel(item: Todo) {
-    if (item.due_date) {
-      const today = localDateString(0);
-      const tomorrow = localDateString(1);
-      if (item.due_date === today) return "今天";
-      if (item.due_date === tomorrow) return "明天";
-      return item.due_date.slice(5).replace("-", "/");
-    }
-    if (item.due_at !== null) {
-      return new Intl.DateTimeFormat("zh-CN", {
-        month: "numeric",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      }).format(new Date(item.due_at));
-    }
-    return "";
-  }
-
-  function getDueTone(item: Todo) {
-    if (item.completed) return "";
-    const today = localDateString(0);
-    if (item.due_date && item.due_date < today) return "overdue";
-    if (item.due_date === today) return "today";
-    if (item.due_at !== null && item.due_at < Date.now()) return "overdue";
-    return "";
   }
 
   async function saveEdit() {

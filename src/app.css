@@ -266,6 +266,36 @@ footer {
   gap: 8px;
 }
 
+.view-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 9px;
+  background: #efe7d8;
+}
+
+.view-switch button {
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 7px;
+  color: #9b8a70;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.view-switch button:hover {
+  color: #765d2b;
+}
+
+.view-switch button.active {
+  color: #5f4c1e;
+  background: #f6c94c;
+  box-shadow: 0 1px 5px rgb(131 98 28 / 12%);
+}
+
 .summary-actions button {
   padding: 2px 5px;
   border: 0;
@@ -1691,6 +1721,24 @@ html[data-theme="dark"] .empty-state {
 
 html[data-theme="dark"] .summary-actions button {
   color: #9f917b;
+}
+
+html[data-theme="dark"] .view-switch {
+  background: #302c25;
+}
+
+html[data-theme="dark"] .view-switch button {
+  color: #a99d8b;
+}
+
+html[data-theme="dark"] .view-switch button:hover {
+  color: #e0c46f;
+}
+
+html[data-theme="dark"] .view-switch button.active {
+  color: #352c17;
+  background: #d8ae3c;
+  box-shadow: none;
 }
 
 html[data-theme="dark"] .summary-actions button:hover {

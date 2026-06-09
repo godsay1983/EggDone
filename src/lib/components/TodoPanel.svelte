@@ -18,7 +18,11 @@
   import { initializeAutoSync, syncStatus } from "$lib/sync/autoSync";
   import type { Todo } from "$lib/types";
   import { movePreviewByPointer } from "$lib/utils/reorderPreview";
-  import { filterTodos } from "$lib/utils/todoFilters";
+  import { isDueTodayOrOverdue } from "$lib/utils/todoDates";
+  import {
+    filterTodos,
+    type TodoListView,
+  } from "$lib/utils/todoFilters";
   import DataManager from "./DataManager.svelte";
   import SettingsPanel from "./SettingsPanel.svelte";
   import TodoItem from "./TodoItem.svelte";
@@ -44,9 +48,14 @@
   let showSearch = false;
   let searchQuery = "";
   let showCompleted = true;
+  let listView: TodoListView = "all";
   let searchInput: HTMLInputElement;
   $: searchActive = searchQuery.trim().length > 0;
-  $: filteredTodos = filterTodos($todos.items, searchQuery, showCompleted);
+  $: reorderDisabled = searchActive || listView === "today";
+  $: todayCount = $todos.items.filter((todo) => isDueTodayOrOverdue(todo)).length;
+  $: filteredTodos = filterTodos($todos.items, searchQuery, showCompleted, {
+    view: listView,
+  });
   $: renderedTodos = applyPreviewOrder(filteredTodos, previewOrderIds);
 
   onMount(() => {
@@ -54,6 +63,8 @@
     const savedTheme = localStorage.getItem("eggdone-theme");
     showCompleted =
       localStorage.getItem("eggdone-show-completed") !== "false";
+    listView =
+      localStorage.getItem("eggdone-list-view") === "today" ? "today" : "all";
     theme =
       savedTheme === "light" || savedTheme === "dark"
         ? savedTheme
@@ -135,6 +146,12 @@
   function toggleCompletedVisibility() {
     showCompleted = !showCompleted;
     localStorage.setItem("eggdone-show-completed", String(showCompleted));
+    cancelDrag();
+  }
+
+  function setListView(view: TodoListView) {
+    listView = view;
+    localStorage.setItem("eggdone-list-view", view);
     cancelDrag();
   }
 
@@ -268,7 +285,7 @@
   }
 
   function startDrag(todo: Todo, event: PointerEvent) {
-    if (searchActive) return;
+    if (reorderDisabled) return;
     cancelDrag();
     draggedTodo = todo;
     dragPointerId = event.pointerId;
@@ -357,7 +374,7 @@
   }
 
   async function moveTodo(todo: Todo, direction: -1 | 1) {
-    if (searchActive) return;
+    if (reorderDisabled) return;
     const group = $todos.items.filter(
       (item) =>
         item.completed === todo.completed && item.pinned === todo.pinned,
@@ -529,7 +546,24 @@
   {/if}
 
   <section class="summary">
-    <span>待办清单</span>
+    <div class="view-switch" aria-label="任务视图">
+      <button
+        class:active={listView === "all"}
+        type="button"
+        aria-pressed={listView === "all"}
+        onclick={() => setListView("all")}
+      >
+        全部
+      </button>
+      <button
+        class:active={listView === "today"}
+        type="button"
+        aria-pressed={listView === "today"}
+        onclick={() => setListView("today")}
+      >
+        今天{todayCount > 0 ? ` ${todayCount}` : ""}
+      </button>
+    </div>
     <div class="summary-actions">
       <button
         class:active={showSearch}
@@ -540,7 +574,7 @@
       >
         搜索
       </button>
-      {#if $completedCount > 0}
+      {#if $completedCount > 0 && listView === "all"}
         <button
           class:active={!showCompleted}
           type="button"
@@ -579,8 +613,20 @@
       </div>
     {:else if renderedTodos.length === 0}
       <div class="empty-state filtered-empty">
-        <strong>{searchActive ? "没有找到匹配任务" : "已完成任务已隐藏"}</strong>
-        <span>{searchActive ? "换个关键词试试" : "需要时可以重新显示"}</span>
+        <strong>
+          {searchActive
+            ? "没有找到匹配任务"
+            : listView === "today"
+              ? "今天还没有到期任务"
+              : "已完成任务已隐藏"}
+        </strong>
+        <span>
+          {searchActive
+            ? "换个关键词试试"
+            : listView === "today"
+              ? "可以给任务设置今天或更早的到期日"
+              : "需要时可以重新显示"}
+        </span>
       </div>
     {:else}
       {#if $todos.error}
@@ -606,7 +652,7 @@
             canMoveDown={groupIndex < group.length - 1}
             isDragging={draggedTodo?.id === todo.id}
             isDragTarget={draggedTodo?.id === todo.id}
-            reorderDisabled={searchActive}
+            reorderDisabled={reorderDisabled}
           />
         </div>
       {/each}

@@ -7,6 +7,7 @@ function makeTodo(
   id: number,
   title: string,
   completed = false,
+  overrides: Partial<Todo> = {},
 ): Todo {
   return {
     id,
@@ -22,6 +23,7 @@ function makeTodo(
     due_date: null,
     due_at: null,
     reminder_at: null,
+    ...overrides,
   };
 }
 
@@ -52,5 +54,39 @@ describe("filterTodos", () => {
     expect(filterTodos(items, "", false).map((todo) => todo.id)).toEqual([
       1, 2,
     ]);
+  });
+
+  it("shows only incomplete todos due today or overdue in today view", () => {
+    const scheduled = [
+      makeTodo(1, "overdue", false, { due_date: "2026-06-08" }),
+      makeTodo(2, "today", false, { due_date: "2026-06-09" }),
+      makeTodo(3, "future", false, { due_date: "2026-06-10" }),
+      makeTodo(4, "done today", true, {
+        completed_at: 1,
+        due_date: "2026-06-09",
+      }),
+      makeTodo(5, "unscheduled"),
+    ];
+
+    expect(
+      filterTodos(scheduled, "", true, {
+        view: "today",
+        now: new Date("2026-06-09T12:00:00+08:00"),
+      }).map((todo) => todo.id),
+    ).toEqual([1, 2]);
+  });
+
+  it("combines today view with title search", () => {
+    const scheduled = [
+      makeTodo(1, "Write report", false, { due_date: "2026-06-09" }),
+      makeTodo(2, "Buy eggs", false, { due_date: "2026-06-09" }),
+    ];
+
+    expect(
+      filterTodos(scheduled, "write", true, {
+        view: "today",
+        now: new Date("2026-06-09T12:00:00+08:00"),
+      }).map((todo) => todo.id),
+    ).toEqual([1]);
   });
 });
