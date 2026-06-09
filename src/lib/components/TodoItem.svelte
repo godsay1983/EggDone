@@ -27,6 +27,7 @@
   let scheduleSaving = false;
   let scheduleError = "";
   let customDate = "";
+  let actionsOpen = false;
   let editInput: HTMLInputElement;
   let itemElement: HTMLElement;
   let animationDuration = 140;
@@ -53,6 +54,13 @@
       ) {
         scheduleOpen = false;
       }
+      if (
+        actionsOpen &&
+        event.target instanceof Node &&
+        !itemElement.contains(event.target)
+      ) {
+        actionsOpen = false;
+      }
     }
 
     window.addEventListener("pointerdown", handlePointerDown, true);
@@ -61,6 +69,7 @@
 
   async function beginEdit() {
     scheduleOpen = false;
+    actionsOpen = false;
     editing = true;
     editTitle = todo.title;
     editError = "";
@@ -77,9 +86,16 @@
 
   function toggleSchedule() {
     if (editing) return;
+    actionsOpen = false;
     scheduleOpen = !scheduleOpen;
     scheduleError = "";
     customDate = todo.due_date ?? localDateString(0);
+  }
+
+  function toggleActions() {
+    if (editing) return;
+    scheduleOpen = false;
+    actionsOpen = !actionsOpen;
   }
 
   async function setDateOnly(date: string | null) {
@@ -244,17 +260,31 @@
   {:else}
     <div class="todo-content">
       <p>{todo.title}</p>
-      {#if dueLabel}
-        <button
-          class:overdue={dueTone === "overdue"}
-          class:today={dueTone === "today"}
-          class="due-badge"
-          type="button"
-          title="修改到期日期"
-          onclick={toggleSchedule}
-        >
-          {dueTone === "overdue" ? "逾期 " : ""}{dueLabel}
-        </button>
+      {#if dueLabel || todo.pinned}
+        <div class="todo-meta">
+          {#if todo.pinned}
+            <button
+              class="pin-badge"
+              type="button"
+              title="取消置顶"
+              onclick={() => void onPin(todo, false)}
+            >
+              置顶
+            </button>
+          {/if}
+          {#if dueLabel}
+            <button
+              class:overdue={dueTone === "overdue"}
+              class:today={dueTone === "today"}
+              class="due-badge"
+              type="button"
+              title="修改到期日期"
+              onclick={toggleSchedule}
+            >
+              {dueTone === "overdue" ? "逾期 " : ""}{dueLabel}
+            </button>
+          {/if}
+        </div>
       {/if}
       {#if scheduleOpen}
         <div class="schedule-popover" role="dialog" aria-label="设置到期日期">
@@ -280,67 +310,71 @@
 
   <div class="item-actions">
     <button
-      class:active={Boolean(todo.due_date || todo.due_at)}
-      class="schedule-button"
+      class:active={actionsOpen}
+      class="more-button"
       type="button"
-      aria-label={`设置到期日期：${todo.title}`}
-      title="设置到期日期"
-      onclick={toggleSchedule}
+      aria-label={`更多操作：${todo.title}`}
+      title="更多操作"
+      aria-haspopup="menu"
+      aria-expanded={actionsOpen}
+      onclick={toggleActions}
       disabled={editing}
     >
       <svg viewBox="0 0 20 20" aria-hidden="true">
-        <rect x="4" y="5" width="12" height="11" rx="2" />
-        <path d="M7 3v4M13 3v4M4 9h12" />
+        <circle cx="5" cy="10" r="1.2" />
+        <circle cx="10" cy="10" r="1.2" />
+        <circle cx="15" cy="10" r="1.2" />
       </svg>
     </button>
-    <button
-      class:active={todo.pinned}
-      class="pin-button"
-      type="button"
-      aria-label={todo.pinned ? `取消置顶：${todo.title}` : `置顶任务：${todo.title}`}
-      title={todo.pinned ? "取消置顶" : "置顶"}
-      onclick={() => void onPin(todo, !todo.pinned)}
-      disabled={editing}
-    >
-      <svg viewBox="0 0 20 20" aria-hidden="true">
-        <path d="M7 3h6l-1 5 3 3H5l3-3-1-5Zm3 8v6" />
-      </svg>
-    </button>
-    <button
-      class="move-button"
-      type="button"
-      aria-label={`上移任务：${todo.title}`}
-      title="上移"
-      onclick={() => void onMove(todo, -1)}
-      disabled={editing || reorderDisabled || !canMoveUp}
-    >
-      <svg viewBox="0 0 20 20" aria-hidden="true">
-        <path d="m6 12 4-4 4 4" />
-      </svg>
-    </button>
-    <button
-      class="move-button"
-      type="button"
-      aria-label={`下移任务：${todo.title}`}
-      title="下移"
-      onclick={() => void onMove(todo, 1)}
-      disabled={editing || reorderDisabled || !canMoveDown}
-    >
-      <svg viewBox="0 0 20 20" aria-hidden="true">
-        <path d="m6 8 4 4 4-4" />
-      </svg>
-    </button>
-    <button
-      class="delete-button"
-      type="button"
-      aria-label={`删除任务：${todo.title}`}
-      title="删除任务"
-      onclick={() => void onDelete(todo.id)}
-      disabled={editing}
-    >
-      <svg viewBox="0 0 20 20" aria-hidden="true">
-        <path d="M5 6h10M8 6V4h4v2m2 0-.6 10H6.6L6 6m3 3v4m2-4v4" />
-      </svg>
-    </button>
+    {#if actionsOpen}
+      <div class="actions-menu" role="menu">
+        <button type="button" role="menuitem" onclick={toggleSchedule}>
+          设置日期
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          onclick={() => {
+            actionsOpen = false;
+            void onPin(todo, !todo.pinned);
+          }}
+        >
+          {todo.pinned ? "取消置顶" : "置顶"}
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          disabled={reorderDisabled || !canMoveUp}
+          onclick={() => {
+            actionsOpen = false;
+            void onMove(todo, -1);
+          }}
+        >
+          上移
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          disabled={reorderDisabled || !canMoveDown}
+          onclick={() => {
+            actionsOpen = false;
+            void onMove(todo, 1);
+          }}
+        >
+          下移
+        </button>
+        <button
+          class="danger"
+          type="button"
+          role="menuitem"
+          onclick={() => {
+            actionsOpen = false;
+            void onDelete(todo.id);
+          }}
+        >
+          删除
+        </button>
+      </div>
+    {/if}
   </div>
 </article>

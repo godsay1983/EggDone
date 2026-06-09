@@ -90,6 +90,7 @@ footer {
 .data-button,
 .theme-button,
 .close-button,
+.more-button,
 .schedule-button,
 .pin-button,
 .move-button,
@@ -115,6 +116,7 @@ footer {
 .data-button:hover,
 .theme-button:hover,
 .close-button:hover,
+.more-button:hover,
 .schedule-button:hover,
 .pin-button:hover,
 .move-button:hover,
@@ -132,6 +134,7 @@ footer {
 .data-button svg,
 .theme-button svg,
 .close-button svg,
+.more-button svg,
 .schedule-button svg,
 .pin-button svg,
 .move-button svg,
@@ -304,9 +307,9 @@ footer {
 }
 
 .todo-item {
-  gap: 11px;
+  gap: 9px;
   margin-bottom: 8px;
-  padding: 11px 9px 11px 11px;
+  padding: 11px 8px 11px 10px;
   border: 1px solid #f0e9dc;
   border-radius: 14px;
   background: rgb(255 255 255 / 75%);
@@ -357,15 +360,34 @@ footer {
   line-height: 1.45;
 }
 
+.todo-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 5px;
+}
+
 .due-badge {
   display: inline-flex;
   align-items: center;
-  margin-top: 5px;
   padding: 2px 6px;
   border: 0;
   border-radius: 999px;
   color: #8f7650;
   background: #f4ecd9;
+  font-size: 10px;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
+.pin-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 999px;
+  color: #9b7832;
+  background: #fff2c4;
   font-size: 10px;
   line-height: 1.3;
   cursor: pointer;
@@ -636,9 +658,77 @@ body:has(.todo-item.dragging) * {
 
 .item-actions {
   display: flex;
+  position: relative;
   flex: 0 0 auto;
   align-items: center;
   gap: 1px;
+}
+
+.more-button {
+  width: 26px;
+  height: 28px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  color: #c5b9a7;
+  opacity: 0;
+  transition:
+    color 120ms ease,
+    opacity 120ms ease;
+}
+
+.more-button.active {
+  color: #705f47;
+  background: #eee8db;
+  opacity: 1;
+}
+
+.more-button svg {
+  width: 15px;
+  fill: currentColor;
+  stroke: none;
+}
+
+.actions-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 7;
+  display: grid;
+  min-width: 104px;
+  padding: 5px;
+  border: 1px solid #eadfcf;
+  border-radius: 12px;
+  background: #fffdf8;
+  box-shadow: 0 14px 34px rgb(78 60 31 / 18%);
+}
+
+.actions-menu button {
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 8px;
+  color: #675b48;
+  background: transparent;
+  font-size: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.actions-menu button:hover {
+  color: #5f4c1e;
+  background: #f4ecd9;
+}
+
+.actions-menu button.danger {
+  color: #a36759;
+}
+
+.actions-menu button.danger:hover {
+  background: #f8e4df;
+}
+
+.actions-menu button:disabled {
+  cursor: default;
+  opacity: 0.4;
 }
 
 .move-button {
@@ -662,6 +752,7 @@ body:has(.todo-item.dragging) * {
 .delete-button:disabled,
 .pin-button:disabled,
 .schedule-button:disabled,
+.more-button:disabled,
 .checkbox:disabled {
   cursor: default;
   opacity: 0.35;
@@ -671,6 +762,8 @@ body:has(.todo-item.dragging) * {
 .todo-item:hover .schedule-button,
 .todo-item:hover .pin-button,
 .todo-item:hover .move-button:not(:disabled),
+.todo-item:hover .more-button,
+.more-button:focus-visible,
 .schedule-button:focus-visible,
 .pin-button:focus-visible,
 .move-button:focus-visible,
@@ -1530,6 +1623,7 @@ html[data-theme="dark"] .settings-button:hover,
 html[data-theme="dark"] .data-button:hover,
 html[data-theme="dark"] .theme-button:hover,
 html[data-theme="dark"] .close-button:hover,
+html[data-theme="dark"] .more-button:hover,
 html[data-theme="dark"] .schedule-button:hover,
 html[data-theme="dark"] .pin-button:hover,
 html[data-theme="dark"] .move-button:hover,
@@ -1649,6 +1743,11 @@ html[data-theme="dark"] .due-badge {
   background: #3a3429;
 }
 
+html[data-theme="dark"] .pin-badge {
+  color: #d3ad4d;
+  background: #3f3520;
+}
+
 html[data-theme="dark"] .due-badge.today {
   color: #cbd59b;
   background: #353b2b;
@@ -1727,10 +1826,39 @@ html[data-theme="dark"] .checkbox.checked {
 }
 
 html[data-theme="dark"] .move-button,
+html[data-theme="dark"] .more-button,
 html[data-theme="dark"] .schedule-button,
 html[data-theme="dark"] .pin-button,
 html[data-theme="dark"] .delete-button {
   color: #7f7567;
+}
+
+html[data-theme="dark"] .more-button.active {
+  color: #f0e6d6;
+  background: #37322b;
+}
+
+html[data-theme="dark"] .actions-menu {
+  border-color: #494238;
+  background: #292621;
+  box-shadow: 0 16px 38px rgb(0 0 0 / 42%);
+}
+
+html[data-theme="dark"] .actions-menu button {
+  color: #cfc4b3;
+}
+
+html[data-theme="dark"] .actions-menu button:hover {
+  color: #f1e9dc;
+  background: #37322b;
+}
+
+html[data-theme="dark"] .actions-menu button.danger {
+  color: #d69787;
+}
+
+html[data-theme="dark"] .actions-menu button.danger:hover {
+  background: #422d28;
 }
 
 html[data-theme="dark"] .schedule-button.active {
