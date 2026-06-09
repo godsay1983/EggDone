@@ -28,6 +28,16 @@
   import TodoItem from "./TodoItem.svelte";
 
   type Theme = "light" | "dark";
+  type GroupColor = "yellow" | "green" | "blue" | "peach" | "lavender" | "gray";
+
+  const groupColorOptions: Array<{ value: GroupColor; label: string }> = [
+    { value: "yellow", label: "蛋黄" },
+    { value: "green", label: "薄荷" },
+    { value: "blue", label: "晴空" },
+    { value: "peach", label: "蜜桃" },
+    { value: "lavender", label: "薰衣草" },
+    { value: "gray", label: "米灰" },
+  ];
 
   let title = "";
   let adding = false;
@@ -53,11 +63,22 @@
   let creatingGroup = false;
   let groupName = "";
   let groupSaving = false;
+  let managingGroup = false;
+  let editingGroupName = "";
+  let groupDeleting = false;
+  let confirmingGroupDelete = false;
+  let groupDeleteTimer: ReturnType<typeof setTimeout> | null = null;
   let searchInput: HTMLInputElement;
   $: searchActive = searchQuery.trim().length > 0;
   $: reorderDisabled = searchActive || listView === "today";
   $: todayCount = $todos.items.filter((todo) => isDueTodayOrOverdue(todo)).length;
   $: activeGroupUuid = groupFilterValue(selectedGroup);
+  $: selectedGroupObject = $todos.groups.find(
+    (group) => group.uuid === selectedGroup,
+  );
+  $: selectedGroupIndex = $todos.groups.findIndex(
+    (group) => group.uuid === selectedGroup,
+  );
   $: filteredTodos = filterTodos($todos.items, searchQuery, showCompleted, {
     view: listView,
     groupUuid: activeGroupUuid,
@@ -126,6 +147,7 @@
       unlisteners.forEach((unlisten) => unlisten());
       if (undoTimer) clearTimeout(undoTimer);
       if (clearTimer) clearTimeout(clearTimer);
+      if (groupDeleteTimer) clearTimeout(groupDeleteTimer);
       removeDragListeners();
     };
   });
@@ -174,6 +196,8 @@
   function setSelectedGroup(group: string) {
     selectedGroup = group;
     localStorage.setItem("eggdone-selected-group", group);
+    managingGroup = false;
+    confirmingGroupDelete = false;
     cancelDrag();
   }
 
@@ -193,6 +217,12 @@
     if (group === "all") return "全部";
     if (group === "ungrouped") return "未分组";
     return groups.find((item) => item.uuid === group)?.name ?? "分组";
+  }
+
+  function groupColorValue(color: string): GroupColor {
+    return groupColorOptions.some((option) => option.value === color)
+      ? (color as GroupColor)
+      : "yellow";
   }
 
   function markPanelInteraction() {
@@ -271,6 +301,88 @@
       setSelectedGroup(group.uuid);
     } catch (error) {
       todos.reportError(error);
+    } finally {
+      groupSaving = false;
+    }
+  }
+
+  function openGroupManager() {
+    if (!selectedGroupObject) return;
+    managingGroup = true;
+    editingGroupName = selectedGroupObject.name;
+    confirmingGroupDelete = false;
+  }
+
+  async function renameSelectedGroup() {
+    if (!selectedGroupObject || groupSaving) return;
+    const nextName = editingGroupName.trim();
+    if (!nextName || nextName === selectedGroupObject.name) return;
+
+    groupSaving = true;
+    try {
+      await todos.renameGroup(selectedGroupObject.uuid, nextName);
+    } catch (error) {
+      todos.reportError(error);
+    } finally {
+      groupSaving = false;
+    }
+  }
+
+  async function updateSelectedGroupColor(color: GroupColor) {
+    if (!selectedGroupObject || groupSaving || groupDeleting) return;
+    if (groupColorValue(selectedGroupObject.color) === color) return;
+
+    groupSaving = true;
+    try {
+      await todos.updateGroupColor(selectedGroupObject.uuid, color);
+    } catch (error) {
+      todos.reportError(error);
+    } finally {
+      groupSaving = false;
+    }
+  }
+
+  async function deleteSelectedGroup() {
+    if (!selectedGroupObject || groupDeleting) return;
+    if (!confirmingGroupDelete) {
+      confirmingGroupDelete = true;
+      if (groupDeleteTimer) clearTimeout(groupDeleteTimer);
+      groupDeleteTimer = setTimeout(() => {
+        confirmingGroupDelete = false;
+        groupDeleteTimer = null;
+      }, 3000);
+      return;
+    }
+
+    groupDeleting = true;
+    try {
+      await todos.deleteGroup(selectedGroupObject.uuid);
+      setSelectedGroup("all");
+      managingGroup = false;
+    } catch (error) {
+      todos.reportError(error);
+    } finally {
+      groupDeleting = false;
+      confirmingGroupDelete = false;
+    }
+  }
+
+  async function moveSelectedGroup(direction: -1 | 1) {
+    if (!selectedGroupObject || groupSaving) return;
+    const nextIndex = selectedGroupIndex + direction;
+    if (selectedGroupIndex < 0 || nextIndex < 0 || nextIndex >= $todos.groups.length) {
+      return;
+    }
+    const groups = [...$todos.groups];
+    [groups[selectedGroupIndex], groups[nextIndex]] = [
+      groups[nextIndex],
+      groups[selectedGroupIndex],
+    ];
+    groupSaving = true;
+    try {
+      await todos.reorderGroups(groups.map((group) => group.uuid));
+    } catch {
+      // The store restores the previous group order and exposes the error.
     } finally {
       groupSaving = false;
     }
@@ -611,11 +723,14 @@
       </button>
       {#each $todos.groups as group (group.uuid)}
         <button
+          class="group-chip"
           class:active={selectedGroup === group.uuid}
+          data-group-color={groupColorValue(group.color)}
           type="button"
           title={group.name}
           onclick={() => setSelectedGroup(group.uuid)}
         >
+          <span class="group-dot" aria-hidden="true"></span>
           {group.name}
         </button>
       {/each}
@@ -650,6 +765,16 @@
         </button>
       </form>
     {:else}
+      {#if selectedGroupObject}
+        <button
+          class="group-manage-toggle"
+          type="button"
+          title="管理当前分组"
+          onclick={openGroupManager}
+        >
+          管理
+        </button>
+      {/if}
       <button
         class="group-add"
         type="button"
@@ -660,6 +785,86 @@
       </button>
     {/if}
   </section>
+
+  {#if managingGroup && selectedGroupObject}
+    <form
+      class="group-manager"
+      onsubmit={(event) => {
+        event.preventDefault();
+        void renameSelectedGroup();
+      }}
+    >
+      <input
+        bind:value={editingGroupName}
+        maxlength="30"
+        aria-label="分组名称"
+        disabled={groupSaving || groupDeleting}
+      />
+      <button
+        type="submit"
+        disabled={
+          groupSaving ||
+          groupDeleting ||
+          !editingGroupName.trim() ||
+          editingGroupName.trim() === selectedGroupObject.name
+        }
+      >
+        保存
+      </button>
+      <div class="group-color-options" aria-label="分组颜色">
+        {#each groupColorOptions as option}
+          <button
+            class="color-swatch"
+            class:active={groupColorValue(selectedGroupObject.color) === option.value}
+            data-group-color={option.value}
+            type="button"
+            title={`切换为${option.label}`}
+            disabled={groupSaving || groupDeleting}
+            onclick={() => void updateSelectedGroupColor(option.value)}
+          >
+            <span aria-hidden="true"></span>
+          </button>
+        {/each}
+      </div>
+      <button
+        type="button"
+        disabled={groupSaving || groupDeleting || selectedGroupIndex <= 0}
+        onclick={() => void moveSelectedGroup(-1)}
+      >
+        上移
+      </button>
+      <button
+        type="button"
+        disabled={
+          groupSaving ||
+          groupDeleting ||
+          selectedGroupIndex < 0 ||
+          selectedGroupIndex >= $todos.groups.length - 1
+        }
+        onclick={() => void moveSelectedGroup(1)}
+      >
+        下移
+      </button>
+      <button
+        class:confirming={confirmingGroupDelete}
+        type="button"
+        disabled={groupSaving || groupDeleting}
+        onclick={() => void deleteSelectedGroup()}
+      >
+        {confirmingGroupDelete ? "确认删除？" : "删除"}
+      </button>
+      <button
+        type="button"
+        disabled={groupSaving || groupDeleting}
+        onclick={() => {
+          managingGroup = false;
+          confirmingGroupDelete = false;
+        }}
+      >
+        关闭
+      </button>
+    </form>
+  {/if}
 
   {#if showSearch}
     <div class="todo-search">

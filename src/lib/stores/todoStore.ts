@@ -108,6 +108,78 @@ export function createTodoStore(api = todoApi, onChanged = scheduleAutoSync) {
       return group;
     },
 
+    async renameGroup(uuid: string, name: string) {
+      const group = await api.updateGroupName(uuid, name);
+      update((state) => ({
+        ...state,
+        groups: state.groups
+          .map((item) => (item.uuid === group.uuid ? group : item))
+          .sort(sortGroups),
+        error: null,
+      }));
+      onChanged();
+      return group;
+    },
+
+    async updateGroupColor(uuid: string, color: string) {
+      const group = await api.updateGroupColor(uuid, color);
+      update((state) => ({
+        ...state,
+        groups: state.groups
+          .map((item) => (item.uuid === group.uuid ? group : item))
+          .sort(sortGroups),
+        error: null,
+      }));
+      onChanged();
+      return group;
+    },
+
+    async deleteGroup(uuid: string) {
+      const group = await api.deleteGroup(uuid);
+      update((state) => ({
+        ...state,
+        groups: state.groups.filter((item) => item.uuid !== uuid),
+        items: state.items.map((item) =>
+          item.group_uuid === uuid ? { ...item, group_uuid: null } : item,
+        ),
+        error: null,
+      }));
+      onChanged();
+      return group;
+    },
+
+    async reorderGroups(orderedUuids: string[]) {
+      let previousGroups: TodoGroup[] = [];
+      update((state) => {
+        previousGroups = state.groups;
+        const order = new Map(
+          orderedUuids.map((uuid, index) => [uuid, index]),
+        );
+        return {
+          ...state,
+          groups: [...state.groups].sort(
+            (left, right) =>
+              (order.get(left.uuid) ?? Number.MAX_SAFE_INTEGER) -
+              (order.get(right.uuid) ?? Number.MAX_SAFE_INTEGER),
+          ),
+          error: null,
+        };
+      });
+
+      try {
+        const groups = await api.reorderGroups(orderedUuids);
+        update((state) => ({ ...state, groups, error: null }));
+        onChanged();
+      } catch (error) {
+        update((state) => ({
+          ...state,
+          groups: previousGroups,
+          error: getErrorMessage(error),
+        }));
+        throw error;
+      }
+    },
+
     async setSchedule(id: number, schedule: TodoScheduleInput) {
       const updatedTodo = await api.setSchedule(id, schedule);
       update((state) => ({

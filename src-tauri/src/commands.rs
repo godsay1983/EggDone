@@ -85,6 +85,64 @@ pub fn create_group(
 }
 
 #[tauri::command]
+pub fn update_group_name(
+    uuid: String,
+    name: String,
+    app: AppHandle,
+    database: State<'_, Database>,
+) -> Result<TodoGroup, String> {
+    let result = {
+        let connection = lock_database(&database)?;
+        update_group_name_in_connection(&connection, &uuid, &name)
+    };
+    refresh_badge_after_success(&app, &result);
+    result
+}
+
+#[tauri::command]
+pub fn update_group_color(
+    uuid: String,
+    color: String,
+    app: AppHandle,
+    database: State<'_, Database>,
+) -> Result<TodoGroup, String> {
+    let result = {
+        let connection = lock_database(&database)?;
+        update_group_color_in_connection(&connection, &uuid, &color)
+    };
+    refresh_badge_after_success(&app, &result);
+    result
+}
+
+#[tauri::command]
+pub fn delete_group(
+    uuid: String,
+    app: AppHandle,
+    database: State<'_, Database>,
+) -> Result<TodoGroup, String> {
+    let result = {
+        let mut connection = lock_database(&database)?;
+        delete_group_in_connection(&mut connection, &uuid)
+    };
+    refresh_badge_after_success(&app, &result);
+    result
+}
+
+#[tauri::command]
+pub fn reorder_groups(
+    ordered_uuids: Vec<String>,
+    app: AppHandle,
+    database: State<'_, Database>,
+) -> Result<Vec<TodoGroup>, String> {
+    let result = {
+        let mut connection = lock_database(&database)?;
+        reorder_groups_in_connection(&mut connection, &ordered_uuids)
+    };
+    refresh_badge_after_success(&app, &result);
+    result
+}
+
+#[tauri::command]
 pub fn set_todo_completed(
     id: i64,
     completed: bool,
@@ -460,6 +518,136 @@ fn create_group_in_connection(connection: &Connection, name: &str) -> Result<Tod
         .ok_or_else(|| "新建分组后未能读取记录".to_string())
 }
 
+fn update_group_name_in_connection(
+    connection: &Connection,
+    uuid: &str,
+    name: &str,
+) -> Result<TodoGroup, String> {
+    let uuid = normalize_existing_group_uuid(connection, uuid)?;
+    let name = normalize_group_name(name)?;
+    let changed = connection
+        .execute(
+            "
+            UPDATE groups
+            SET name = ?1, updated_at = ?2, updated_by = ?3
+            WHERE uuid = ?4 AND deleted_at IS NULL
+            ",
+            params![
+                name,
+                now_millis(),
+                device_id(connection).map_err(database_error)?,
+                uuid,
+            ],
+        )
+        .map_err(database_error)?;
+
+    if changed == 0 {
+        return Err("分组不存在".to_string());
+    }
+
+    find_group_by_uuid(connection, &uuid)?.ok_or_else(|| "重命名后未能读取分组".to_string())
+}
+
+fn update_group_color_in_connection(
+    connection: &Connection,
+    uuid: &str,
+    color: &str,
+) -> Result<TodoGroup, String> {
+    let uuid = normalize_existing_group_uuid(connection, uuid)?;
+    let color = normalize_group_color(color)?;
+    let changed = connection
+        .execute(
+            "
+            UPDATE groups
+            SET color = ?1, updated_at = ?2, updated_by = ?3
+            WHERE uuid = ?4 AND deleted_at IS NULL
+            ",
+            params![
+                color,
+                now_millis(),
+                device_id(connection).map_err(database_error)?,
+                uuid,
+            ],
+        )
+        .map_err(database_error)?;
+
+    if changed == 0 {
+        return Err("分组不存在".to_string());
+    }
+
+    find_group_by_uuid(connection, &uuid)?.ok_or_else(|| "改色后未能读取分组".to_string())
+}
+
+fn delete_group_in_connection(
+    connection: &mut Connection,
+    uuid: &str,
+) -> Result<TodoGroup, String> {
+    let uuid = normalize_existing_group_uuid(connection, uuid)?;
+    let now = now_millis();
+    let updated_by = device_id(connection).map_err(database_error)?;
+    let transaction = connection.transaction().map_err(database_error)?;
+    let deleted_group = transaction
+        .query_row(
+            "
+            UPDATE groups
+            SET deleted_at = ?1, updated_at = ?1, updated_by = ?2
+            WHERE uuid = ?3 AND deleted_at IS NULL
+            RETURNING id, uuid, name, color, sort_order, created_at, updated_at, deleted_at
+            ",
+            params![now, updated_by, uuid],
+            map_group,
+        )
+        .optional()
+        .map_err(database_error)?
+        .ok_or_else(|| "分组不存在".to_string())?;
+
+    transaction
+        .execute(
+            "
+            UPDATE todos
+            SET group_uuid = NULL, updated_at = ?1, updated_by = ?2
+            WHERE group_uuid = ?3 AND deleted_at IS NULL
+            ",
+            params![now, updated_by, uuid],
+        )
+        .map_err(database_error)?;
+    transaction.commit().map_err(database_error)?;
+
+    Ok(deleted_group)
+}
+
+fn reorder_groups_in_connection(
+    connection: &mut Connection,
+    ordered_uuids: &[String],
+) -> Result<Vec<TodoGroup>, String> {
+    if ordered_uuids.is_empty() {
+        return Ok(list_groups_from_connection(connection)?);
+    }
+
+    let now = now_millis();
+    let updated_by = device_id(connection).map_err(database_error)?;
+    let transaction = connection.transaction().map_err(database_error)?;
+    for (index, uuid) in ordered_uuids.iter().enumerate() {
+        let uuid = normalize_group_uuid_format(uuid)?;
+        let changed = transaction
+            .execute(
+                "
+                UPDATE groups
+                SET sort_order = ?1, updated_at = ?2, updated_by = ?3
+                WHERE uuid = ?4 AND deleted_at IS NULL
+                ",
+                params![index as i64 * 1024, now, updated_by, uuid],
+            )
+            .map_err(database_error)?;
+        if changed == 0 {
+            return Err("排序中包含不存在的分组".to_string());
+        }
+    }
+    transaction.commit().map_err(database_error)?;
+
+    list_groups_from_connection(connection)
+}
+
 fn set_todo_completed_in_connection(
     connection: &Connection,
     id: i64,
@@ -762,6 +950,21 @@ fn find_group(connection: &Connection, id: i64) -> Result<Option<TodoGroup>, Str
         .map_err(database_error)
 }
 
+fn find_group_by_uuid(connection: &Connection, uuid: &str) -> Result<Option<TodoGroup>, String> {
+    connection
+        .query_row(
+            "
+            SELECT id, uuid, name, color, sort_order, created_at, updated_at, deleted_at
+            FROM groups
+            WHERE uuid = ?1
+            ",
+            params![uuid],
+            map_group,
+        )
+        .optional()
+        .map_err(database_error)
+}
+
 fn map_group(row: &rusqlite::Row<'_>) -> rusqlite::Result<TodoGroup> {
     Ok(TodoGroup {
         id: row.get(0)?,
@@ -786,9 +989,7 @@ fn normalize_group_uuid(
     if trimmed.is_empty() {
         return Ok(None);
     }
-    if Uuid::parse_str(trimmed).is_err() {
-        return Err("分组 UUID 无效".to_string());
-    }
+    let trimmed = normalize_group_uuid_format(trimmed)?;
     let exists: bool = connection
         .query_row(
             "SELECT EXISTS(SELECT 1 FROM groups WHERE uuid = ?1 AND deleted_at IS NULL)",
@@ -802,6 +1003,28 @@ fn normalize_group_uuid(
     Ok(Some(trimmed.to_string()))
 }
 
+fn normalize_existing_group_uuid(connection: &Connection, uuid: &str) -> Result<String, String> {
+    let uuid = normalize_group_uuid_format(uuid.trim())?;
+    let exists: bool = connection
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM groups WHERE uuid = ?1 AND deleted_at IS NULL)",
+            params![uuid],
+            |row| row.get(0),
+        )
+        .map_err(database_error)?;
+    if !exists {
+        return Err("分组不存在".to_string());
+    }
+    Ok(uuid)
+}
+
+fn normalize_group_uuid_format(uuid: &str) -> Result<String, String> {
+    if Uuid::parse_str(uuid).is_err() {
+        return Err("分组 UUID 无效".to_string());
+    }
+    Ok(uuid.to_string())
+}
+
 fn normalize_group_name(name: &str) -> Result<String, String> {
     let name = name.trim();
     if name.is_empty() {
@@ -811,6 +1034,14 @@ fn normalize_group_name(name: &str) -> Result<String, String> {
         return Err("分组名称不能超过 30 个字符".to_string());
     }
     Ok(name.to_string())
+}
+
+fn normalize_group_color(color: &str) -> Result<&str, String> {
+    let color = color.trim();
+    match color {
+        "yellow" | "green" | "blue" | "peach" | "lavender" | "gray" => Ok(color),
+        _ => Err("分组颜色不在预设范围内".to_string()),
+    }
 }
 
 fn normalize_due_date(due_date: Option<String>) -> Result<Option<String>, String> {
@@ -1001,5 +1232,42 @@ mod tests {
             Some("00000000-0000-4000-8000-00000000ffff".to_string()),
         )
         .is_err());
+    }
+
+    #[test]
+    fn renames_reorders_and_deletes_groups_without_deleting_todos() {
+        let mut connection = connection();
+        let first = create_group_in_connection(&connection, "工作").unwrap();
+        let second = create_group_in_connection(&connection, "生活").unwrap();
+        let grouped =
+            create_todo_in_connection(&connection, "grouped", Some(first.uuid.clone())).unwrap();
+
+        let renamed =
+            update_group_name_in_connection(&connection, &first.uuid, "  深度工作  ").unwrap();
+        assert_eq!(renamed.name, "深度工作");
+
+        let recolored =
+            update_group_color_in_connection(&connection, &first.uuid, "green").unwrap();
+        assert_eq!(recolored.color, "green");
+        assert!(update_group_color_in_connection(&connection, &first.uuid, "neon").is_err());
+
+        let reordered = reorder_groups_in_connection(
+            &mut connection,
+            &[second.uuid.clone(), first.uuid.clone()],
+        )
+        .unwrap();
+        assert_eq!(reordered[0].uuid, second.uuid);
+        assert_eq!(reordered[1].uuid, first.uuid);
+
+        let deleted = delete_group_in_connection(&mut connection, &first.uuid).unwrap();
+        assert!(deleted.deleted_at.is_some());
+        assert_eq!(list_groups_from_connection(&connection).unwrap().len(), 1);
+        assert_eq!(
+            find_todo(&connection, grouped.id)
+                .unwrap()
+                .unwrap()
+                .group_uuid,
+            None
+        );
     }
 }

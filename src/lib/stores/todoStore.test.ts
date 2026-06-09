@@ -47,6 +47,29 @@ function createApi(initialItems: Todo[] = []) {
       makeTodo(3, { title, group_uuid: groupUuid }),
     ),
     createGroup: vi.fn(async (name) => makeGroup(1, name)),
+    updateGroupName: vi.fn(async (uuid, name) => ({
+      ...makeGroup(1, name),
+      uuid,
+      updated_at: 100,
+    })),
+    updateGroupColor: vi.fn(async (uuid, color) => ({
+      ...makeGroup(1),
+      uuid,
+      color,
+      updated_at: 100,
+    })),
+    deleteGroup: vi.fn(async (uuid) => ({
+      ...makeGroup(1),
+      uuid,
+      deleted_at: 100,
+    })),
+    reorderGroups: vi.fn(async (orderedUuids: string[]) =>
+      orderedUuids.map((uuid: string, index: number) => ({
+        ...makeGroup(index + 1),
+        uuid,
+        sort_order: index * 1024,
+      })),
+    ),
     setCompleted: vi.fn(async (id, completed) =>
       makeTodo(id, {
         completed,
@@ -120,6 +143,33 @@ describe("todo store", () => {
     expect(get(store).groups.map((item) => item.name)).toEqual(["工作"]);
     expect(get(store).items[0].group_uuid).toBe(group.uuid);
     expect(onChanged).toHaveBeenCalledTimes(2);
+  });
+
+  it("renames reorders and deletes groups", async () => {
+    const first = makeGroup(1, "工作");
+    const second = makeGroup(2, "生活");
+    const api = createApi([makeTodo(1, { group_uuid: first.uuid })]);
+    vi.mocked(api.listGroups).mockResolvedValue([first, second]);
+    const onChanged = vi.fn();
+    const store = createTodoStore(api, onChanged);
+    await store.load();
+
+    await store.renameGroup(first.uuid, "深度工作");
+    expect(get(store).groups[0].name).toBe("深度工作");
+
+    await store.updateGroupColor(first.uuid, "green");
+    expect(get(store).groups[0].color).toBe("green");
+
+    await store.reorderGroups([second.uuid, first.uuid]);
+    expect(get(store).groups.map((group) => group.uuid)).toEqual([
+      second.uuid,
+      first.uuid,
+    ]);
+
+    await store.deleteGroup(first.uuid);
+    expect(get(store).groups.map((group) => group.uuid)).toEqual([second.uuid]);
+    expect(get(store).items[0].group_uuid).toBeNull();
+    expect(onChanged).toHaveBeenCalledTimes(4);
   });
 
   it("clears completed todos", async () => {

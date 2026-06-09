@@ -25,6 +25,22 @@ export const todoApi = {
     return invoke<TodoGroup>("create_group", { name });
   },
 
+  updateGroupName(uuid: string, name: string): Promise<TodoGroup> {
+    return invoke<TodoGroup>("update_group_name", { uuid, name });
+  },
+
+  updateGroupColor(uuid: string, color: string): Promise<TodoGroup> {
+    return invoke<TodoGroup>("update_group_color", { uuid, color });
+  },
+
+  deleteGroup(uuid: string): Promise<TodoGroup> {
+    return invoke<TodoGroup>("delete_group", { uuid });
+  },
+
+  reorderGroups(orderedUuids: string[]): Promise<TodoGroup[]> {
+    return invoke<TodoGroup[]>("reorder_groups", { orderedUuids });
+  },
+
   setCompleted(id: number, completed: boolean): Promise<Todo> {
     return invoke<Todo>("set_todo_completed", { id, completed });
   },

@@ -274,7 +274,9 @@ footer {
 
 .group-scroll button,
 .group-add,
-.group-create button {
+.group-manage-toggle,
+.group-create button,
+.group-manager button {
   flex: 0 0 auto;
   padding: 4px 8px;
   border: 0;
@@ -286,9 +288,73 @@ footer {
   cursor: pointer;
 }
 
+.group-chip,
+.color-swatch {
+  --group-color: #f6c94c;
+  --group-color-soft: #fff3c8;
+  --group-color-text: #6f5413;
+}
+
+.group-chip[data-group-color="green"],
+.color-swatch[data-group-color="green"] {
+  --group-color: #8fbd8e;
+  --group-color-soft: #e8f3e6;
+  --group-color-text: #416941;
+}
+
+.group-chip[data-group-color="blue"],
+.color-swatch[data-group-color="blue"] {
+  --group-color: #8bb9d6;
+  --group-color-soft: #e6f1f7;
+  --group-color-text: #3d647a;
+}
+
+.group-chip[data-group-color="peach"],
+.color-swatch[data-group-color="peach"] {
+  --group-color: #f0a789;
+  --group-color-soft: #faebe4;
+  --group-color-text: #8b5644;
+}
+
+.group-chip[data-group-color="lavender"],
+.color-swatch[data-group-color="lavender"] {
+  --group-color: #b6a4d8;
+  --group-color-soft: #eee9f8;
+  --group-color-text: #62528a;
+}
+
+.group-chip[data-group-color="gray"],
+.color-swatch[data-group-color="gray"] {
+  --group-color: #b8ad9c;
+  --group-color-soft: #eee9df;
+  --group-color-text: #665c4f;
+}
+
+.group-scroll button.group-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.group-scroll button.group-chip.active {
+  color: var(--group-color-text);
+  background: var(--group-color-soft);
+}
+
+.group-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--group-color);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 68%);
+}
+
 .group-scroll button:hover,
 .group-add:hover,
+.group-manage-toggle:hover,
 .group-create button:hover,
+.group-manager button:hover,
 .group-scroll button.active {
   color: #5f4c1e;
   background: #f6c94c;
@@ -309,7 +375,8 @@ footer {
   gap: 4px;
 }
 
-.group-create input {
+.group-create input,
+.group-manager input {
   width: 82px;
   padding: 4px 7px;
   border: 1px solid #e1d5c2;
@@ -320,14 +387,72 @@ footer {
   font-size: 10px;
 }
 
-.group-create input:focus {
+.group-create input:focus,
+.group-manager input:focus {
   border-color: #d9ad31;
   box-shadow: 0 0 0 2px rgb(246 201 76 / 14%);
 }
 
-.group-create button:disabled {
+.group-create button:disabled,
+.group-manager button:disabled {
   cursor: wait;
   opacity: 0.55;
+}
+
+.group-manager {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 7px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.group-manager::-webkit-scrollbar {
+  display: none;
+}
+
+.group-manager input {
+  width: 92px;
+  flex: 0 0 auto;
+}
+
+.group-manager button.confirming {
+  color: #9b5548;
+  background: #f7e4df;
+}
+
+.group-color-options {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.group-manager button.color-swatch {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  padding: 0;
+  background: transparent;
+}
+
+.group-manager button.color-swatch:hover {
+  background: var(--group-color-soft);
+}
+
+.group-manager button.color-swatch.active {
+  background: var(--group-color-soft);
+  box-shadow: 0 0 0 1px var(--group-color);
+}
+
+.color-swatch span {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--group-color);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 72%);
 }
 
 .summary {
@@ -1828,28 +1953,85 @@ html[data-theme="dark"] .todo-search button:hover {
 
 html[data-theme="dark"] .group-scroll button,
 html[data-theme="dark"] .group-add,
-html[data-theme="dark"] .group-create button {
+html[data-theme="dark"] .group-manage-toggle,
+html[data-theme="dark"] .group-create button,
+html[data-theme="dark"] .group-manager button {
   color: #a99d8b;
   background: #302c25;
 }
 
 html[data-theme="dark"] .group-scroll button:hover,
 html[data-theme="dark"] .group-add:hover,
+html[data-theme="dark"] .group-manage-toggle:hover,
 html[data-theme="dark"] .group-create button:hover,
+html[data-theme="dark"] .group-manager button:hover,
 html[data-theme="dark"] .group-scroll button.active {
   color: #352c17;
   background: #d8ae3c;
 }
 
-html[data-theme="dark"] .group-create input {
+html[data-theme="dark"] .group-create input,
+html[data-theme="dark"] .group-manager input {
   border-color: #534b3f;
   color: #f1e9dc;
   background: #211f1b;
 }
 
-html[data-theme="dark"] .group-create input:focus {
+html[data-theme="dark"] .group-create input:focus,
+html[data-theme="dark"] .group-manager input:focus {
   border-color: #aa8735;
   box-shadow: 0 0 0 2px rgb(246 201 76 / 10%);
+}
+
+html[data-theme="dark"] .group-manager button.confirming {
+  color: #e19a88;
+  background: #49312c;
+}
+
+html[data-theme="dark"] .group-chip,
+html[data-theme="dark"] .color-swatch {
+  --group-color-soft: #44371d;
+  --group-color-text: #e0c46f;
+}
+
+html[data-theme="dark"] .group-chip[data-group-color="green"],
+html[data-theme="dark"] .color-swatch[data-group-color="green"] {
+  --group-color-soft: #273a2a;
+  --group-color-text: #a8c8ad;
+}
+
+html[data-theme="dark"] .group-chip[data-group-color="blue"],
+html[data-theme="dark"] .color-swatch[data-group-color="blue"] {
+  --group-color-soft: #263946;
+  --group-color-text: #9fc3d6;
+}
+
+html[data-theme="dark"] .group-chip[data-group-color="peach"],
+html[data-theme="dark"] .color-swatch[data-group-color="peach"] {
+  --group-color-soft: #422d28;
+  --group-color-text: #e2a090;
+}
+
+html[data-theme="dark"] .group-chip[data-group-color="lavender"],
+html[data-theme="dark"] .color-swatch[data-group-color="lavender"] {
+  --group-color-soft: #352f45;
+  --group-color-text: #c2b3e0;
+}
+
+html[data-theme="dark"] .group-chip[data-group-color="gray"],
+html[data-theme="dark"] .color-swatch[data-group-color="gray"] {
+  --group-color-soft: #3a362f;
+  --group-color-text: #c7bcab;
+}
+
+html[data-theme="dark"] .group-scroll button.group-chip.active {
+  color: var(--group-color-text);
+  background: var(--group-color-soft);
+}
+
+html[data-theme="dark"] .group-manager button.color-swatch:hover,
+html[data-theme="dark"] .group-manager button.color-swatch.active {
+  background: var(--group-color-soft);
 }
 
 html[data-theme="dark"] .summary {
