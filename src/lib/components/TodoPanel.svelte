@@ -95,6 +95,15 @@
         showSettings = false;
         showAbout = true;
       }).then((unlisten) => unlisteners.push(unlisten));
+      void listen("show-today", () => {
+        showAbout = false;
+        showDataManager = false;
+        showSettings = false;
+        showSearch = false;
+        searchQuery = "";
+        setListView("today");
+        requestAnimationFrame(() => inputElement?.focus());
+      }).then((unlisten) => unlisteners.push(unlisten));
       void listen("single-instance", () => {
         showAbout = false;
         showDataManager = false;

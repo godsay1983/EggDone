@@ -145,12 +145,20 @@ fn duration_since(later: Instant, earlier: Instant) -> Duration {
 pub fn create_tray(app: &AppHandle) -> tauri::Result<TrayIcon> {
     let toggle_item = MenuItem::with_id(app, "toggle", "打开 / 隐藏面板", true, None::<&str>)?;
     let new_item = MenuItem::with_id(app, "new", "新增任务", true, None::<&str>)?;
+    let today_item = MenuItem::with_id(app, "today", "今天任务", true, None::<&str>)?;
     let about_item = MenuItem::with_id(app, "about", "关于 EggDone", true, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
     let menu = Menu::with_items(
         app,
-        &[&toggle_item, &new_item, &separator, &about_item, &quit_item],
+        &[
+            &toggle_item,
+            &new_item,
+            &today_item,
+            &separator,
+            &about_item,
+            &quit_item,
+        ],
     )?;
 
     let tray_icon = app
@@ -170,6 +178,10 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<TrayIcon> {
             "new" => {
                 show_panel(app, None);
                 let _ = app.emit_to("main", "focus-new-todo", ());
+            }
+            "today" => {
+                show_panel(app, None);
+                let _ = app.emit_to("main", "show-today", ());
             }
             "about" => {
                 show_panel(app, None);
@@ -226,14 +238,30 @@ pub(crate) fn update_task_badge(app: &AppHandle) {
         "
         SELECT
             SUM(CASE WHEN completed = 0 THEN 1 ELSE 0 END),
-            COUNT(*)
+            COUNT(*),
+            SUM(
+                CASE
+                    WHEN completed = 0
+                        AND (
+                            due_date <= date('now', 'localtime')
+                            OR date(due_at / 1000, 'unixepoch', 'localtime') <= date('now', 'localtime')
+                        )
+                    THEN 1 ELSE 0
+                END
+            )
         FROM todos
         WHERE deleted_at IS NULL
         ",
         [],
-        |row| Ok((row.get::<_, Option<u32>>(0)?.unwrap_or(0), row.get(1)?)),
+        |row| {
+            Ok((
+                row.get::<_, Option<u32>>(0)?.unwrap_or(0),
+                row.get(1)?,
+                row.get::<_, Option<u32>>(2)?.unwrap_or(0),
+            ))
+        },
     );
-    let Ok((remaining, total)) = counts else {
+    let Ok((remaining, total, today_due)) = counts else {
         return;
     };
     drop(connection);
@@ -243,7 +271,11 @@ pub(crate) fn update_task_badge(app: &AppHandle) {
     };
     let badge = draw_task_badge(base, remaining, total);
     let _ = tray.set_icon(Some(badge));
-    let _ = tray.set_tooltip(Some(format!("蛋定 Todo · {remaining}/{total} 项未完成")));
+    let _ = tray.set_tooltip(Some(task_tooltip(remaining, total, today_due)));
+}
+
+fn task_tooltip(remaining: u32, total: u32, today_due: u32) -> String {
+    format!("蛋定 Todo · {remaining}/{total} 项未完成 · 今天 {today_due} 项")
 }
 
 fn draw_task_badge(base: &Image<'_>, remaining: u32, total: u32) -> Image<'static> {
@@ -555,5 +587,13 @@ mod tests {
         assert_eq!(badge.width(), 32);
         assert_eq!(badge.height(), 32);
         assert_ne!(badge.rgba(), base.rgba());
+    }
+
+    #[test]
+    fn tooltip_mentions_today_due_count() {
+        assert_eq!(
+            task_tooltip(3, 4, 2),
+            "蛋定 Todo · 3/4 项未完成 · 今天 2 项"
+        );
     }
 }
