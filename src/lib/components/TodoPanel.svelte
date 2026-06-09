@@ -794,75 +794,87 @@
         void renameSelectedGroup();
       }}
     >
-      <input
-        bind:value={editingGroupName}
-        maxlength="30"
-        aria-label="分组名称"
-        disabled={groupSaving || groupDeleting}
-      />
-      <button
-        type="submit"
-        disabled={
-          groupSaving ||
-          groupDeleting ||
-          !editingGroupName.trim() ||
-          editingGroupName.trim() === selectedGroupObject.name
-        }
-      >
-        保存
-      </button>
-      <div class="group-color-options" aria-label="分组颜色">
-        {#each groupColorOptions as option}
-          <button
-            class="color-swatch"
-            class:active={groupColorValue(selectedGroupObject.color) === option.value}
-            data-group-color={option.value}
-            type="button"
-            title={`切换为${option.label}`}
-            disabled={groupSaving || groupDeleting}
-            onclick={() => void updateSelectedGroupColor(option.value)}
-          >
-            <span aria-hidden="true"></span>
-          </button>
-        {/each}
+      <div class="group-manager-name">
+        <input
+          bind:value={editingGroupName}
+          maxlength="30"
+          aria-label="分组名称"
+          disabled={groupSaving || groupDeleting}
+        />
+        <button
+          type="submit"
+          disabled={
+            groupSaving ||
+            groupDeleting ||
+            !editingGroupName.trim() ||
+            editingGroupName.trim() === selectedGroupObject.name
+          }
+        >
+          保存
+        </button>
       </div>
-      <button
-        type="button"
-        disabled={groupSaving || groupDeleting || selectedGroupIndex <= 0}
-        onclick={() => void moveSelectedGroup(-1)}
-      >
-        上移
-      </button>
-      <button
-        type="button"
-        disabled={
-          groupSaving ||
-          groupDeleting ||
-          selectedGroupIndex < 0 ||
-          selectedGroupIndex >= $todos.groups.length - 1
-        }
-        onclick={() => void moveSelectedGroup(1)}
-      >
-        下移
-      </button>
-      <button
-        class:confirming={confirmingGroupDelete}
-        type="button"
-        disabled={groupSaving || groupDeleting}
-        onclick={() => void deleteSelectedGroup()}
-      >
-        {confirmingGroupDelete ? "确认删除？" : "删除"}
-      </button>
-      <button
-        type="button"
-        disabled={groupSaving || groupDeleting}
-        onclick={() => {
-          managingGroup = false;
-          confirmingGroupDelete = false;
-        }}
-      >
-        关闭
-      </button>
+
+      <div class="group-manager-tools">
+        <div class="group-color-options" aria-label="分组颜色">
+          {#each groupColorOptions as option}
+            <button
+              class="color-swatch"
+              class:active={groupColorValue(selectedGroupObject.color) === option.value}
+              data-group-color={option.value}
+              type="button"
+              title={`切换为${option.label}`}
+              disabled={groupSaving || groupDeleting}
+              onclick={() => void updateSelectedGroupColor(option.value)}
+            >
+              <span aria-hidden="true"></span>
+            </button>
+          {/each}
+        </div>
+
+        <div class="group-manager-actions">
+          <button
+            type="button"
+            aria-label="上移分组"
+            title="上移分组"
+            disabled={groupSaving || groupDeleting || selectedGroupIndex <= 0}
+            onclick={() => void moveSelectedGroup(-1)}
+          >
+            ↑
+          </button>
+          <button
+            type="button"
+            aria-label="下移分组"
+            title="下移分组"
+            disabled={
+              groupSaving ||
+              groupDeleting ||
+              selectedGroupIndex < 0 ||
+              selectedGroupIndex >= $todos.groups.length - 1
+            }
+            onclick={() => void moveSelectedGroup(1)}
+          >
+            ↓
+          </button>
+          <button
+            class:confirming={confirmingGroupDelete}
+            type="button"
+            disabled={groupSaving || groupDeleting}
+            onclick={() => void deleteSelectedGroup()}
+          >
+            {confirmingGroupDelete ? "确认删除？" : "删除"}
+          </button>
+          <button
+            type="button"
+            disabled={groupSaving || groupDeleting}
+            onclick={() => {
+              managingGroup = false;
+              confirmingGroupDelete = false;
+            }}
+          >
+            关闭
+          </button>
+        </div>
+      </div>
     </form>
   {/if}
 

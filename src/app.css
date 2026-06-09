@@ -400,21 +400,46 @@ footer {
 }
 
 .group-manager {
+  display: grid;
+  gap: 6px;
+  margin-top: 7px;
+  padding: 7px;
+  border: 1px solid #eee5d5;
+  border-radius: 12px;
+  background: rgb(255 255 255 / 56%);
+}
+
+.group-manager-name,
+.group-manager-tools,
+.group-manager-actions {
   display: flex;
   align-items: center;
   gap: 5px;
-  margin-top: 7px;
-  overflow-x: auto;
-  scrollbar-width: none;
 }
 
-.group-manager::-webkit-scrollbar {
-  display: none;
+.group-manager-name input {
+  width: auto;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
-.group-manager input {
-  width: 92px;
+.group-manager-name button {
   flex: 0 0 auto;
+}
+
+.group-manager-tools {
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.group-manager-actions {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+}
+
+.group-manager-actions button {
+  min-width: 26px;
+  padding-inline: 7px;
 }
 
 .group-manager button.confirming {
@@ -424,7 +449,9 @@ footer {
 
 .group-color-options {
   display: flex;
-  flex: 0 0 auto;
+  min-width: 0;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
   align-items: center;
   gap: 4px;
 }
@@ -1975,6 +2002,11 @@ html[data-theme="dark"] .group-manager input {
   border-color: #534b3f;
   color: #f1e9dc;
   background: #211f1b;
+}
+
+html[data-theme="dark"] .group-manager {
+  border-color: #403a31;
+  background: rgb(44 41 35 / 58%);
 }
 
 html[data-theme="dark"] .group-create input:focus,
