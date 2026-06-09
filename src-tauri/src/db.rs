@@ -9,7 +9,7 @@ use rusqlite::{params, Connection, Transaction};
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
-const CURRENT_SCHEMA_VERSION: i64 = 6;
+const CURRENT_SCHEMA_VERSION: i64 = 7;
 const DEVICE_ID_KEY: &str = "device_id";
 
 pub struct Database {
@@ -69,6 +69,7 @@ pub(crate) fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {
     apply_migration(connection, 4, add_sync_settings)?;
     apply_migration(connection, 5, add_todo_pinning)?;
     apply_migration(connection, 6, add_todo_due_fields)?;
+    apply_migration(connection, 7, add_reminder_deliveries)?;
 
     debug_assert_eq!(schema_version(connection)?, CURRENT_SCHEMA_VERSION);
     Ok(())
@@ -295,8 +296,14 @@ fn add_todo_due_fields(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
             ON todos(deleted_at, completed, due_date);
         CREATE INDEX idx_todos_reminder_at
             ON todos(deleted_at, completed, reminder_at);
+        ",
+    )
+}
 
-        CREATE TABLE reminder_deliveries (
+fn add_reminder_deliveries(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
+    transaction.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS reminder_deliveries (
             todo_uuid TEXT NOT NULL,
             device_id TEXT NOT NULL,
             reminder_at INTEGER NOT NULL,
@@ -614,6 +621,49 @@ mod tests {
         assert!(columns.iter().any(|column| column == "due_at"));
         assert!(columns.iter().any(|column| column == "reminder_at"));
 
+        let reminder_tables: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'reminder_deliveries'",
+                [],
+                |row| row.get(0),
+        )
+        .unwrap();
+        assert_eq!(reminder_tables, 1);
+    }
+
+    #[test]
+    fn upgrades_v6_database_with_missing_reminder_deliveries() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "
+                CREATE TABLE schema_migrations (
+                    version INTEGER PRIMARY KEY,
+                    applied_at INTEGER NOT NULL
+                );
+                ",
+            )
+            .unwrap();
+        apply_migration(&mut connection, 1, create_legacy_schema).unwrap();
+        apply_migration(&mut connection, 2, migrate_todos_for_sync).unwrap();
+        apply_migration(&mut connection, 3, add_sync_identity).unwrap();
+        apply_migration(&mut connection, 4, add_sync_settings).unwrap();
+        apply_migration(&mut connection, 5, add_todo_pinning).unwrap();
+        apply_migration(&mut connection, 6, add_todo_due_fields).unwrap();
+
+        assert_eq!(schema_version(&connection).unwrap(), 6);
+        let missing_table_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'reminder_deliveries'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(missing_table_count, 0);
+
+        migrate(&mut connection).unwrap();
+
+        assert_eq!(schema_version(&connection).unwrap(), CURRENT_SCHEMA_VERSION);
         let reminder_tables: i64 = connection
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'reminder_deliveries'",

@@ -24,6 +24,8 @@
   export let isDragTarget = false;
   export let reorderDisabled = false;
 
+  type ReminderChoice = "none" | "same-day-9" | "previous-day-9";
+
   let editing = false;
   let editTitle = "";
   let editError = "";
@@ -32,6 +34,7 @@
   let scheduleSaving = false;
   let scheduleError = "";
   let customDate = "";
+  let reminderChoice: ReminderChoice = "none";
   let actionsOpen = false;
   let editInput: HTMLInputElement;
   let itemElement: HTMLElement;
@@ -95,6 +98,7 @@
     scheduleOpen = !scheduleOpen;
     scheduleError = "";
     customDate = todo.due_date ?? localDateString(0);
+    reminderChoice = inferReminderChoice(todo.due_date, todo.reminder_at);
   }
 
   function toggleActions() {
@@ -111,7 +115,7 @@
       await onSchedule(todo.id, {
         due_date: date,
         due_at: null,
-        reminder_at: null,
+        reminder_at: date ? reminderAtForDate(date, reminderChoice) : null,
       });
       scheduleOpen = false;
     } catch {
@@ -119,6 +123,41 @@
     } finally {
       scheduleSaving = false;
     }
+  }
+
+  function inferReminderChoice(
+    dueDate: string | null,
+    reminderAt: number | null,
+  ): ReminderChoice {
+    if (!dueDate || reminderAt === null) return "none";
+    const sameDay = localReminderTime(dueDate, 0);
+    const previousDay = localReminderTime(dueDate, -1);
+    if (reminderAt === sameDay) return "same-day-9";
+    if (reminderAt === previousDay) return "previous-day-9";
+    return "none";
+  }
+
+  function reminderAtForDate(date: string, choice: ReminderChoice) {
+    if (choice === "same-day-9") return localReminderTime(date, 0);
+    if (choice === "previous-day-9") return localReminderTime(date, -1);
+    return null;
+  }
+
+  function localReminderTime(date: string, offsetDays: number) {
+    const [year, month, day] = date.split("-").map(Number);
+    const reminderDate = new Date(year, month - 1, day, 9, 0, 0, 0);
+    reminderDate.setDate(reminderDate.getDate() + offsetDays);
+    return reminderDate.getTime();
+  }
+
+  function formatReminderLabel(reminderAt: number | null) {
+    if (reminderAt === null) return "";
+    return new Intl.DateTimeFormat("zh-CN", {
+      month: "numeric",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(reminderAt));
   }
 
   async function saveEdit() {
@@ -228,7 +267,7 @@
   {:else}
     <div class="todo-content">
       <p>{todo.title}</p>
-      {#if dueLabel || todo.pinned}
+      {#if dueLabel || todo.pinned || todo.reminder_at !== null}
         <div class="todo-meta">
           {#if todo.pinned}
             <button
@@ -252,6 +291,16 @@
               {dueTone === "overdue" ? "逾期 " : ""}{dueLabel}
             </button>
           {/if}
+          {#if todo.reminder_at !== null}
+            <button
+              class="reminder-badge"
+              type="button"
+              title="修改提醒时间"
+              onclick={toggleSchedule}
+            >
+              提醒 {formatReminderLabel(todo.reminder_at)}
+            </button>
+          {/if}
         </div>
       {/if}
       {#if scheduleOpen}
@@ -265,6 +314,14 @@
           <label>
             <span>自定义</span>
             <input type="date" bind:value={customDate} disabled={scheduleSaving} />
+          </label>
+          <label>
+            <span>提醒</span>
+            <select bind:value={reminderChoice} disabled={scheduleSaving}>
+              <option value="none">不提醒</option>
+              <option value="same-day-9">当天 9:00</option>
+              <option value="previous-day-9">提前一天 9:00</option>
+            </select>
           </label>
           <div class="schedule-footer">
             <button type="button" disabled={scheduleSaving} onclick={() => void setDateOnly(null)}>清除</button>

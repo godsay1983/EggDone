@@ -2,6 +2,7 @@ mod commands;
 mod data_exchange;
 mod db;
 mod panel_position;
+mod reminders;
 mod s3_sync;
 mod sync;
 mod tray;
@@ -40,6 +41,7 @@ pub fn run() {
             MacosLauncher::LaunchAgent,
             Some(vec!["--autostart"]),
         ))
+        .plugin(tauri_plugin_notification::init())
         .manage(tray::PanelState::default())
         .manage(s3_sync::SyncRuntime::default())
         .setup(|app| {
@@ -49,6 +51,7 @@ pub fn run() {
             // Store the handle in application state for the whole process lifetime.
             let tray_icon = tray::create_tray(app.handle())?;
             app.manage(tray_icon);
+            reminders::start_reminder_scheduler(app.handle().clone());
             Ok(())
         })
         .on_window_event(|window, event| {
