@@ -17,6 +17,9 @@ function makeTodo(id: number, overrides: Partial<Todo> = {}): Todo {
     updated_at: id,
     completed_at: null,
     deleted_at: null,
+    due_date: null,
+    due_at: null,
+    reminder_at: null,
     ...overrides,
   };
 }
@@ -34,6 +37,7 @@ function createApi(initialItems: Todo[] = []) {
     ),
     updateTitle: vi.fn(async (id, title) => makeTodo(id, { title })),
     setPinned: vi.fn(async (id, pinned) => makeTodo(id, { pinned })),
+    setSchedule: vi.fn(async (id, schedule) => makeTodo(id, schedule)),
     reorder: vi.fn(async (orderedIds: number[]) =>
       orderedIds.map((id: number, index: number) =>
         makeTodo(id, { sort_order: index * 1024 }),
@@ -63,6 +67,15 @@ describe("todo store", () => {
     await store.setPinned(get(store).items.find((todo) => todo.id === 1)!, true);
     expect(get(store).items.find((todo) => todo.id === 1)?.pinned).toBe(true);
 
+    await store.setSchedule(1, {
+      due_date: "2026-06-10",
+      due_at: null,
+      reminder_at: null,
+    });
+    expect(get(store).items.find((todo) => todo.id === 1)?.due_date).toBe(
+      "2026-06-10",
+    );
+
     await store.toggle(get(store).items.find((todo) => todo.id === 1)!);
     expect(get(store).items.find((todo) => todo.id === 1)?.completed).toBe(true);
 
@@ -72,7 +85,7 @@ describe("todo store", () => {
 
     await store.restore(1);
     expect(get(store).items.some((todo) => todo.id === 1)).toBe(true);
-    expect(onChanged).toHaveBeenCalledTimes(6);
+    expect(onChanged).toHaveBeenCalledTimes(7);
   });
 
   it("clears completed todos", async () => {

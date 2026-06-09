@@ -11,6 +11,7 @@ EggDone 是一个轻量级、跨平台、托盘常驻的 Todo 桌面应用。应
 - 托盘右键菜单：打开/隐藏、新增任务、关于、退出
 - 快速新增、行内编辑、完成和取消完成 Todo
 - 按标题即时搜索，可隐藏已完成任务并置顶重要任务
+- 可为任务设置到期日期，支持今天、明天、下周、自定义和清除
 - 拖动排序、清除已完成、软删除及 5 秒撤销
 - JSON 导入导出、UUID 合并和 SQLite 手动备份
 - 可配置 AWS S3、MinIO 和其他 S3 兼容存储
@@ -114,8 +115,11 @@ pnpm release:check
 | `updated_by` | 最后修改该任务的设备 UUID |
 | `completed_at` | UTC 完成时间（毫秒时间戳，可空） |
 | `deleted_at` | UTC 软删除时间（毫秒时间戳，可空） |
+| `due_date` | 纯日期到期日，本地日历语义，格式 `YYYY-MM-DD`（可空） |
+| `due_at` | 具体到期时间，UTC 毫秒时间戳（可空） |
+| `reminder_at` | 提醒时间，UTC 毫秒时间戳（可空） |
 
-`schema_migrations` 表记录已执行的数据库版本，`app_metadata` 保存本机 `device_id`，`sync_settings` 只保存 Endpoint、Region、Bucket、Object Key 等非敏感配置。Access Key 和 Secret Key 保存到操作系统凭据库，不写入 SQLite。开发时可以删除数据库以重置数据，具体根目录由 Tauri 的 `app_data_dir` 按平台决定。
+`schema_migrations` 表记录已执行的数据库版本，`app_metadata` 保存本机 `device_id`，`sync_settings` 只保存 Endpoint、Region、Bucket、Object Key 等非敏感配置，`reminder_deliveries` 记录本机已触发提醒以避免重复通知。Access Key 和 Secret Key 保存到操作系统凭据库，不写入 SQLite。开发时可以删除数据库以重置数据，具体根目录由 Tauri 的 `app_data_dir` 按平台决定。
 
 项目已包含版本化同步文档和本地合并核心：按 Todo UUID 合并，优先采用较新的 `updated_at`；时间相同时优先保留删除记录，再通过 `updated_by` 稳定决胜。设置页可配置 AWS S3 或自定义 S3 Endpoint，支持 MinIO 常用的 Path Style 和 HTTP。HTTP 必须显式确认明文传输风险。
 
@@ -123,7 +127,7 @@ pnpm release:check
 
 “立即同步”先下载远端 `todos.json`，按 UUID 和更新时间与 SQLite 合并，再上传合并结果。更新已有对象使用 `If-Match`，首次创建使用 `If-None-Match: *`。若上传期间远端发生变化，应用会重新下载、合并并重试一次；再次冲突时停止上传并保留本地数据。
 
-启用同步且系统凭据可用时，应用启动后会同步一次。新增、编辑、完成、排序、删除和恢复任务后，会在最后一次修改的 4 秒后同步。网络类错误使用 1.5 秒、3 秒两次有限退避；权限、配置和持续冲突错误不会自动重试。本地 Todo 操作不等待网络结果，退出时也不会阻塞等待同步。
+启用同步且系统凭据可用时，应用启动后会同步一次。新增、编辑、设置日期、完成、排序、删除和恢复任务后，会在最后一次修改的 4 秒后同步。网络类错误使用 1.5 秒、3 秒两次有限退避；权限、配置和持续冲突错误不会自动重试。本地 Todo 操作不等待网络结果，退出时也不会阻塞等待同步。
 
 面板右上角的“数据管理”可导出版本化 JSON、预览并合并导入文件，或创建一致的 SQLite 快照。导入只更新 `updated_at` 更新的同 UUID 任务，不会直接覆盖整个本地数据库。
 
@@ -164,7 +168,7 @@ EggDone/
 
 - 托盘附近定位使用平台提供的图标坐标；不可用时回退到主屏幕右下角。
 - Windows 混合 DPI 多显示器仍需在 125%、150% 和 200% 缩放下进行实机验收。
-- 当前暂不包含分组、提醒和重复任务。
+- 当前到期日期只提供日期级设置，系统提醒、今天视图、分组和重复任务仍在后续计划中。
 - 同步状态仅保存在当前运行会话中，尚未持久化最后成功时间。
 
 后续优化和版本规划见 [OPTIMIZATION_TODO.md](OPTIMIZATION_TODO.md)。

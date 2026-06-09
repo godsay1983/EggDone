@@ -5,6 +5,7 @@
   import { onMount, tick } from "svelte";
 
   import { todoApi } from "$lib/api/todoApi";
+  import type { TodoScheduleInput } from "$lib/api/todoApi";
   import {
     initializeDesktopSettings,
     type DesktopSettings,
@@ -199,6 +200,15 @@
       await todos.setPinned(todo, pinned);
     } catch (error) {
       todos.reportError(error);
+    }
+  }
+
+  async function scheduleTodo(id: number, schedule: TodoScheduleInput) {
+    try {
+      await todos.setSchedule(id, schedule);
+    } catch (error) {
+      todos.reportError(error);
+      throw error;
     }
   }
 
@@ -588,6 +598,7 @@
             onToggle={toggleTodo}
             onEdit={editTodo}
             onPin={pinTodo}
+            onSchedule={scheduleTodo}
             onDelete={deleteTodo}
             onMove={moveTodo}
             onDragStart={startDrag}

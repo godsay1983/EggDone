@@ -90,6 +90,7 @@ footer {
 .data-button,
 .theme-button,
 .close-button,
+.schedule-button,
 .pin-button,
 .move-button,
 .delete-button {
@@ -114,6 +115,7 @@ footer {
 .data-button:hover,
 .theme-button:hover,
 .close-button:hover,
+.schedule-button:hover,
 .pin-button:hover,
 .move-button:hover,
 .delete-button:hover {
@@ -130,6 +132,7 @@ footer {
 .data-button svg,
 .theme-button svg,
 .close-button svg,
+.schedule-button svg,
 .pin-button svg,
 .move-button svg,
 .delete-button svg {
@@ -341,13 +344,131 @@ footer {
   border-color: #e8c45c;
 }
 
-.todo-item p {
+.todo-content {
   min-width: 0;
   flex: 1;
+  position: relative;
+}
+
+.todo-item p {
   margin: 0;
   overflow-wrap: anywhere;
   font-size: 13px;
   line-height: 1.45;
+}
+
+.due-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 5px;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 999px;
+  color: #8f7650;
+  background: #f4ecd9;
+  font-size: 10px;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
+.due-badge.today {
+  color: #6a6f35;
+  background: #edf1d8;
+}
+
+.due-badge.overdue {
+  color: #9a5748;
+  background: #f8e4df;
+}
+
+.schedule-popover {
+  position: absolute;
+  top: calc(100% + 7px);
+  left: 0;
+  z-index: 6;
+  width: 218px;
+  padding: 10px;
+  border: 1px solid #eadfcf;
+  border-radius: 13px;
+  background: #fffdf8;
+  box-shadow: 0 14px 34px rgb(78 60 31 / 18%);
+}
+
+.schedule-popover strong {
+  display: block;
+  margin-bottom: 7px;
+  color: #665844;
+  font-size: 11px;
+}
+
+.schedule-actions,
+.schedule-footer {
+  display: flex;
+  gap: 6px;
+}
+
+.schedule-actions button,
+.schedule-footer button {
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 8px;
+  color: #6f6048;
+  background: #f0eadf;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.schedule-actions button:hover,
+.schedule-footer button:hover {
+  color: #5f4c1e;
+  background: #f6c94c;
+}
+
+.schedule-popover label {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0;
+  color: #8f8069;
+  font-size: 9px;
+}
+
+.schedule-popover input {
+  min-width: 0;
+  padding: 5px 7px;
+  border: 1px solid #e1d5c2;
+  border-radius: 8px;
+  outline: 0;
+  color: #463e31;
+  background: #fffdf8;
+  font-size: 10px;
+}
+
+.schedule-popover input:focus {
+  border-color: #d9ad31;
+  box-shadow: 0 0 0 2px rgb(246 201 76 / 14%);
+}
+
+.schedule-footer {
+  justify-content: flex-end;
+}
+
+.schedule-footer button:last-child {
+  color: #5f4c1e;
+  background: #f6c94c;
+  font-weight: 700;
+}
+
+.schedule-popover button:disabled,
+.schedule-popover input:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.schedule-popover small {
+  display: block;
+  margin-top: 6px;
+  color: #a76455;
+  font-size: 9px;
 }
 
 .drag-handle {
@@ -471,6 +592,27 @@ body:has(.todo-item.dragging) * {
   transition: opacity 120ms ease;
 }
 
+.schedule-button {
+  width: 24px;
+  height: 28px;
+  flex: 0 0 auto;
+  border-radius: 7px;
+  color: #c5b9a7;
+  opacity: 0;
+  transition:
+    color 120ms ease,
+    opacity 120ms ease;
+}
+
+.schedule-button.active {
+  color: #9b7832;
+  opacity: 0.82;
+}
+
+.schedule-button svg {
+  width: 14px;
+}
+
 .pin-button {
   width: 24px;
   height: 28px;
@@ -519,14 +661,17 @@ body:has(.todo-item.dragging) * {
 
 .delete-button:disabled,
 .pin-button:disabled,
+.schedule-button:disabled,
 .checkbox:disabled {
   cursor: default;
   opacity: 0.35;
 }
 
 .todo-item:hover .delete-button,
+.todo-item:hover .schedule-button,
 .todo-item:hover .pin-button,
 .todo-item:hover .move-button:not(:disabled),
+.schedule-button:focus-visible,
 .pin-button:focus-visible,
 .move-button:focus-visible,
 .delete-button:focus-visible {
@@ -1385,6 +1530,7 @@ html[data-theme="dark"] .settings-button:hover,
 html[data-theme="dark"] .data-button:hover,
 html[data-theme="dark"] .theme-button:hover,
 html[data-theme="dark"] .close-button:hover,
+html[data-theme="dark"] .schedule-button:hover,
 html[data-theme="dark"] .pin-button:hover,
 html[data-theme="dark"] .move-button:hover,
 html[data-theme="dark"] .delete-button:hover {
@@ -1498,6 +1644,63 @@ html[data-theme="dark"] .todo-item.completed p {
   text-decoration-color: #817767;
 }
 
+html[data-theme="dark"] .due-badge {
+  color: #c9b487;
+  background: #3a3429;
+}
+
+html[data-theme="dark"] .due-badge.today {
+  color: #cbd59b;
+  background: #353b2b;
+}
+
+html[data-theme="dark"] .due-badge.overdue {
+  color: #e2a090;
+  background: #422d28;
+}
+
+html[data-theme="dark"] .schedule-popover {
+  border-color: #494238;
+  background: #292621;
+  box-shadow: 0 16px 38px rgb(0 0 0 / 42%);
+}
+
+html[data-theme="dark"] .schedule-popover strong {
+  color: #ded4c4;
+}
+
+html[data-theme="dark"] .schedule-actions button,
+html[data-theme="dark"] .schedule-footer button {
+  color: #cfc4b3;
+  background: #454038;
+}
+
+html[data-theme="dark"] .schedule-actions button:hover,
+html[data-theme="dark"] .schedule-footer button:hover,
+html[data-theme="dark"] .schedule-footer button:last-child {
+  color: #352c17;
+  background: #d8ae3c;
+}
+
+html[data-theme="dark"] .schedule-popover label {
+  color: #a89d8c;
+}
+
+html[data-theme="dark"] .schedule-popover input {
+  border-color: #534b3f;
+  color: #f1e9dc;
+  background: #211f1b;
+}
+
+html[data-theme="dark"] .schedule-popover input:focus {
+  border-color: #aa8735;
+  box-shadow: 0 0 0 2px rgb(246 201 76 / 10%);
+}
+
+html[data-theme="dark"] .schedule-popover small {
+  color: #d38a78;
+}
+
 html[data-theme="dark"] .edit-area input {
   border-color: #534b3f;
   color: #f1e9dc;
@@ -1524,9 +1727,14 @@ html[data-theme="dark"] .checkbox.checked {
 }
 
 html[data-theme="dark"] .move-button,
+html[data-theme="dark"] .schedule-button,
 html[data-theme="dark"] .pin-button,
 html[data-theme="dark"] .delete-button {
   color: #7f7567;
+}
+
+html[data-theme="dark"] .schedule-button.active {
+  color: #d3ad4d;
 }
 
 html[data-theme="dark"] .pin-button.active {

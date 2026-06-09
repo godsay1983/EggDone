@@ -29,6 +29,12 @@ struct TransferTodo {
     updated_at: i64,
     completed_at: Option<i64>,
     deleted_at: Option<i64>,
+    #[serde(default)]
+    due_date: Option<String>,
+    #[serde(default)]
+    due_at: Option<i64>,
+    #[serde(default)]
+    reminder_at: Option<i64>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -228,8 +234,20 @@ fn validate_import(import: &TodoExport) -> Result<(), String> {
             || todo.updated_at < 0
             || todo.completed_at.is_some_and(|value| value < 0)
             || todo.deleted_at.is_some_and(|value| value < 0)
+            || todo.due_at.is_some_and(|value| value < 0)
+            || todo.reminder_at.is_some_and(|value| value < 0)
         {
             return Err("导入文件包含无效时间戳".to_string());
+        }
+        if todo
+            .due_date
+            .as_deref()
+            .is_some_and(|value| !is_valid_date_only(value))
+        {
+            return Err("导入文件包含无效到期日期".to_string());
+        }
+        if todo.due_date.is_some() && todo.due_at.is_some() {
+            return Err("导入文件包含重复到期信息".to_string());
         }
     }
     Ok(())
@@ -240,7 +258,7 @@ fn read_all_todos(connection: &Connection) -> Result<Vec<TransferTodo>, String> 
         .prepare(
             "
             SELECT uuid, title, completed, pinned, sort_order, created_at, updated_at,
-                   completed_at, deleted_at
+                   completed_at, deleted_at, due_date, due_at, reminder_at
             FROM todos
             ORDER BY completed ASC, pinned DESC, sort_order ASC, created_at DESC, id DESC
             ",
@@ -338,9 +356,9 @@ fn insert_todo(
             "
             INSERT INTO todos (
                 uuid, title, completed, pinned, sort_order, created_at, updated_at,
-                completed_at, deleted_at, updated_by
+                completed_at, deleted_at, due_date, due_at, reminder_at, updated_by
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
             ",
             params![
                 todo.uuid,
@@ -352,6 +370,9 @@ fn insert_todo(
                 todo.updated_at,
                 todo.completed_at,
                 todo.deleted_at,
+                todo.due_date,
+                todo.due_at,
+                todo.reminder_at,
                 updated_by,
             ],
         )
@@ -370,8 +391,9 @@ fn update_todo(
             UPDATE todos
             SET title = ?1, completed = ?2, pinned = ?3, sort_order = ?4,
                 created_at = ?5, updated_at = ?6, completed_at = ?7,
-                deleted_at = ?8, updated_by = ?9
-            WHERE uuid = ?10
+                deleted_at = ?8, due_date = ?9, due_at = ?10, reminder_at = ?11,
+                updated_by = ?12
+            WHERE uuid = ?13
             ",
             params![
                 todo.title.trim(),
@@ -382,6 +404,9 @@ fn update_todo(
                 todo.updated_at,
                 todo.completed_at,
                 todo.deleted_at,
+                todo.due_date,
+                todo.due_at,
+                todo.reminder_at,
                 updated_by,
                 todo.uuid,
             ],
@@ -401,7 +426,46 @@ fn map_transfer_todo(row: &rusqlite::Row<'_>) -> rusqlite::Result<TransferTodo> 
         updated_at: row.get(6)?,
         completed_at: row.get(7)?,
         deleted_at: row.get(8)?,
+        due_date: row.get(9)?,
+        due_at: row.get(10)?,
+        reminder_at: row.get(11)?,
     })
+}
+
+fn is_valid_date_only(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    if bytes.len() != 10 || bytes[4] != b'-' || bytes[7] != b'-' {
+        return false;
+    }
+    if !bytes
+        .iter()
+        .enumerate()
+        .all(|(index, byte)| index == 4 || index == 7 || byte.is_ascii_digit())
+    {
+        return false;
+    }
+
+    let Ok(year) = value[0..4].parse::<u32>() else {
+        return false;
+    };
+    let Ok(month) = value[5..7].parse::<u32>() else {
+        return false;
+    };
+    let Ok(day) = value[8..10].parse::<u32>() else {
+        return false;
+    };
+    let max_day = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if is_leap_year(year) => 29,
+        2 => 28,
+        _ => return false,
+    };
+    (1..=max_day).contains(&day)
+}
+
+fn is_leap_year(year: u32) -> bool {
+    (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
 }
 
 fn lock_database<'a>(
@@ -440,6 +504,9 @@ mod tests {
             updated_at,
             completed_at: None,
             deleted_at: None,
+            due_date: None,
+            due_at: None,
+            reminder_at: None,
         }
     }
 
@@ -448,6 +515,7 @@ mod tests {
         let mut source = connection();
         let mut active = todo("00000000-0000-4000-8000-000000000001", "active", 2);
         active.pinned = true;
+        active.due_date = Some("2026-06-10".to_string());
         let mut deleted = todo("00000000-0000-4000-8000-000000000002", "deleted", 3);
         deleted.deleted_at = Some(3);
         merge_todos(&mut source, &[active.clone(), deleted.clone()]).unwrap();
@@ -536,6 +604,7 @@ mod tests {
 
         let import: TodoExport = serde_json::from_str(json).unwrap();
         assert!(!import.todos[0].pinned);
+        assert_eq!(import.todos[0].due_date, None);
         validate_import(&import).unwrap();
     }
 }

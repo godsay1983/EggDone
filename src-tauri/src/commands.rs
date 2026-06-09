@@ -25,6 +25,9 @@ pub struct Todo {
     updated_at: i64,
     completed_at: Option<i64>,
     deleted_at: Option<i64>,
+    due_date: Option<String>,
+    due_at: Option<i64>,
+    reminder_at: Option<i64>,
 }
 
 #[tauri::command]
@@ -87,6 +90,23 @@ pub fn set_todo_pinned(
     let result = {
         let connection = lock_database(&database)?;
         set_todo_pinned_in_connection(&connection, id, pinned)
+    };
+    refresh_badge_after_success(&app, &result);
+    result
+}
+
+#[tauri::command]
+pub fn set_todo_schedule(
+    id: i64,
+    due_date: Option<String>,
+    due_at: Option<i64>,
+    reminder_at: Option<i64>,
+    app: AppHandle,
+    database: State<'_, Database>,
+) -> Result<Todo, String> {
+    let result = {
+        let connection = lock_database(&database)?;
+        set_todo_schedule_in_connection(&connection, id, due_date, due_at, reminder_at)
     };
     refresh_badge_after_success(&app, &result);
     result
@@ -278,7 +298,8 @@ fn list_todos_from_connection(connection: &Connection) -> Result<Vec<Todo>, Stri
             "
             SELECT
                 id, uuid, title, completed, pinned, sort_order,
-                created_at, updated_at, completed_at, deleted_at
+                created_at, updated_at, completed_at, deleted_at,
+                due_date, due_at, reminder_at
             FROM todos
             WHERE deleted_at IS NULL
             ORDER BY completed ASC, pinned DESC, sort_order ASC, created_at DESC, id DESC
@@ -317,9 +338,10 @@ fn create_todo_in_connection(connection: &Connection, title: &str) -> Result<Tod
             "
             INSERT INTO todos (
                 uuid, title, completed, sort_order,
-                created_at, updated_at, completed_at, deleted_at, updated_by
+                created_at, updated_at, completed_at, deleted_at,
+                due_date, due_at, reminder_at, updated_by
             )
-            VALUES (?1, ?2, 0, ?3, ?4, ?4, NULL, NULL, ?5)
+            VALUES (?1, ?2, 0, ?3, ?4, ?4, NULL, NULL, NULL, NULL, NULL, ?5)
             ",
             params![uuid, title, sort_order, now, updated_by],
         )
@@ -419,6 +441,47 @@ fn set_todo_pinned_in_connection(
     find_todo(connection, id)?.ok_or_else(|| "置顶后未能读取任务".to_string())
 }
 
+fn set_todo_schedule_in_connection(
+    connection: &Connection,
+    id: i64,
+    due_date: Option<String>,
+    due_at: Option<i64>,
+    reminder_at: Option<i64>,
+) -> Result<Todo, String> {
+    let due_date = normalize_due_date(due_date)?;
+    if due_at.is_some_and(|value| value < 0) || reminder_at.is_some_and(|value| value < 0) {
+        return Err("到期或提醒时间无效".to_string());
+    }
+    if due_date.is_some() && due_at.is_some() {
+        return Err("纯日期任务不能同时设置具体到期时间".to_string());
+    }
+
+    let changed = connection
+        .execute(
+            "
+            UPDATE todos
+            SET due_date = ?1, due_at = ?2, reminder_at = ?3,
+                updated_at = ?4, updated_by = ?5
+            WHERE id = ?6 AND deleted_at IS NULL
+            ",
+            params![
+                due_date,
+                due_at,
+                reminder_at,
+                now_millis(),
+                device_id(connection).map_err(database_error)?,
+                id
+            ],
+        )
+        .map_err(database_error)?;
+
+    if changed == 0 {
+        return Err("任务不存在".to_string());
+    }
+
+    find_todo(connection, id)?.ok_or_else(|| "设置日期后未能读取任务".to_string())
+}
+
 fn reorder_todos_in_connection(
     connection: &mut Connection,
     ordered_ids: &[i64],
@@ -515,7 +578,8 @@ fn find_todo(connection: &Connection, id: i64) -> Result<Option<Todo>, String> {
             "
             SELECT
                 id, uuid, title, completed, pinned, sort_order,
-                created_at, updated_at, completed_at, deleted_at
+                created_at, updated_at, completed_at, deleted_at,
+                due_date, due_at, reminder_at
             FROM todos
             WHERE id = ?1
             ",
@@ -538,7 +602,60 @@ fn map_todo(row: &rusqlite::Row<'_>) -> rusqlite::Result<Todo> {
         updated_at: row.get(7)?,
         completed_at: row.get(8)?,
         deleted_at: row.get(9)?,
+        due_date: row.get(10)?,
+        due_at: row.get(11)?,
+        reminder_at: row.get(12)?,
     })
+}
+
+fn normalize_due_date(due_date: Option<String>) -> Result<Option<String>, String> {
+    let Some(value) = due_date else {
+        return Ok(None);
+    };
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    if !is_valid_date_only(trimmed) {
+        return Err("日期格式应为 YYYY-MM-DD".to_string());
+    }
+    Ok(Some(trimmed.to_string()))
+}
+
+fn is_valid_date_only(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    if bytes.len() != 10 || bytes[4] != b'-' || bytes[7] != b'-' {
+        return false;
+    }
+    if !bytes
+        .iter()
+        .enumerate()
+        .all(|(index, byte)| index == 4 || index == 7 || byte.is_ascii_digit())
+    {
+        return false;
+    }
+
+    let Ok(year) = value[0..4].parse::<u32>() else {
+        return false;
+    };
+    let Ok(month) = value[5..7].parse::<u32>() else {
+        return false;
+    };
+    let Ok(day) = value[8..10].parse::<u32>() else {
+        return false;
+    };
+    let max_day = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if is_leap_year(year) => 29,
+        2 => 28,
+        _ => return false,
+    };
+    (1..=max_day).contains(&day)
+}
+
+fn is_leap_year(year: u32) -> bool {
+    (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
 }
 
 fn database_error(error: rusqlite::Error) -> String {
@@ -568,6 +685,9 @@ mod tests {
         assert!(Uuid::parse_str(&created.uuid).is_ok());
         assert_eq!(created.completed_at, None);
         assert_eq!(created.deleted_at, None);
+        assert_eq!(created.due_date, None);
+        assert_eq!(created.due_at, None);
+        assert_eq!(created.reminder_at, None);
         assert_eq!(list_todos_from_connection(&connection).unwrap().len(), 1);
 
         let completed = set_todo_completed_in_connection(&connection, created.id, true).unwrap();
@@ -616,6 +736,32 @@ mod tests {
             list_todos_from_connection(&connection).unwrap()[0].id,
             first.id
         );
+
+        let scheduled = set_todo_schedule_in_connection(
+            &connection,
+            first.id,
+            Some("2026-06-10".to_string()),
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(scheduled.due_date.as_deref(), Some("2026-06-10"));
+        assert!(set_todo_schedule_in_connection(
+            &connection,
+            first.id,
+            Some("2026/06/10".to_string()),
+            None,
+            None
+        )
+        .is_err());
+        assert!(set_todo_schedule_in_connection(
+            &connection,
+            first.id,
+            Some("2026-02-31".to_string()),
+            None,
+            None
+        )
+        .is_err());
 
         let reordered =
             reorder_todos_in_connection(&mut connection, &[first.id, second.id]).unwrap();

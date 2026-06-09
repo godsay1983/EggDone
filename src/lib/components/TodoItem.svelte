@@ -2,12 +2,14 @@
   import { onMount, tick } from "svelte";
   import { fly } from "svelte/transition";
 
+  import type { TodoScheduleInput } from "$lib/api/todoApi";
   import type { Todo } from "$lib/types";
 
   export let todo: Todo;
   export let onToggle: (todo: Todo) => Promise<void>;
   export let onEdit: (id: number, title: string) => Promise<void>;
   export let onPin: (todo: Todo, pinned: boolean) => Promise<void>;
+  export let onSchedule: (id: number, schedule: TodoScheduleInput) => Promise<void>;
   export let onDelete: (id: number) => Promise<void>;
   export let onMove: (todo: Todo, direction: -1 | 1) => Promise<void>;
   export let onDragStart: (todo: Todo, event: PointerEvent) => void;
@@ -21,9 +23,15 @@
   let editTitle = "";
   let editError = "";
   let saving = false;
+  let scheduleOpen = false;
+  let scheduleSaving = false;
+  let scheduleError = "";
+  let customDate = "";
   let editInput: HTMLInputElement;
   let itemElement: HTMLElement;
   let animationDuration = 140;
+  $: dueLabel = formatDueLabel(todo);
+  $: dueTone = getDueTone(todo);
 
   onMount(() => {
     animationDuration = window.matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -38,6 +46,13 @@
       ) {
         void saveEdit();
       }
+      if (
+        scheduleOpen &&
+        event.target instanceof Node &&
+        !itemElement.contains(event.target)
+      ) {
+        scheduleOpen = false;
+      }
     }
 
     window.addEventListener("pointerdown", handlePointerDown, true);
@@ -45,6 +60,7 @@
   });
 
   async function beginEdit() {
+    scheduleOpen = false;
     editing = true;
     editTitle = todo.title;
     editError = "";
@@ -57,6 +73,68 @@
     editing = false;
     editTitle = todo.title;
     editError = "";
+  }
+
+  function toggleSchedule() {
+    if (editing) return;
+    scheduleOpen = !scheduleOpen;
+    scheduleError = "";
+    customDate = todo.due_date ?? localDateString(0);
+  }
+
+  async function setDateOnly(date: string | null) {
+    if (scheduleSaving) return;
+    scheduleSaving = true;
+    scheduleError = "";
+    try {
+      await onSchedule(todo.id, {
+        due_date: date,
+        due_at: null,
+        reminder_at: null,
+      });
+      scheduleOpen = false;
+    } catch {
+      scheduleError = "日期保存失败，请重试";
+    } finally {
+      scheduleSaving = false;
+    }
+  }
+
+  function localDateString(offsetDays: number) {
+    const date = new Date();
+    date.setDate(date.getDate() + offsetDays);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  function formatDueLabel(item: Todo) {
+    if (item.due_date) {
+      const today = localDateString(0);
+      const tomorrow = localDateString(1);
+      if (item.due_date === today) return "今天";
+      if (item.due_date === tomorrow) return "明天";
+      return item.due_date.slice(5).replace("-", "/");
+    }
+    if (item.due_at !== null) {
+      return new Intl.DateTimeFormat("zh-CN", {
+        month: "numeric",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(new Date(item.due_at));
+    }
+    return "";
+  }
+
+  function getDueTone(item: Todo) {
+    if (item.completed) return "";
+    const today = localDateString(0);
+    if (item.due_date && item.due_date < today) return "overdue";
+    if (item.due_date === today) return "today";
+    if (item.due_at !== null && item.due_at < Date.now()) return "overdue";
+    return "";
   }
 
   async function saveEdit() {
@@ -164,10 +242,57 @@
       {#if editError}<small>{editError}</small>{/if}
     </div>
   {:else}
-    <p>{todo.title}</p>
+    <div class="todo-content">
+      <p>{todo.title}</p>
+      {#if dueLabel}
+        <button
+          class:overdue={dueTone === "overdue"}
+          class:today={dueTone === "today"}
+          class="due-badge"
+          type="button"
+          title="修改到期日期"
+          onclick={toggleSchedule}
+        >
+          {dueTone === "overdue" ? "逾期 " : ""}{dueLabel}
+        </button>
+      {/if}
+      {#if scheduleOpen}
+        <div class="schedule-popover" role="dialog" aria-label="设置到期日期">
+          <strong>到期日期</strong>
+          <div class="schedule-actions">
+            <button type="button" disabled={scheduleSaving} onclick={() => void setDateOnly(localDateString(0))}>今天</button>
+            <button type="button" disabled={scheduleSaving} onclick={() => void setDateOnly(localDateString(1))}>明天</button>
+            <button type="button" disabled={scheduleSaving} onclick={() => void setDateOnly(localDateString(7))}>下周</button>
+          </div>
+          <label>
+            <span>自定义</span>
+            <input type="date" bind:value={customDate} disabled={scheduleSaving} />
+          </label>
+          <div class="schedule-footer">
+            <button type="button" disabled={scheduleSaving} onclick={() => void setDateOnly(null)}>清除</button>
+            <button type="button" disabled={scheduleSaving || !customDate} onclick={() => void setDateOnly(customDate)}>保存</button>
+          </div>
+          {#if scheduleError}<small>{scheduleError}</small>{/if}
+        </div>
+      {/if}
+    </div>
   {/if}
 
   <div class="item-actions">
+    <button
+      class:active={Boolean(todo.due_date || todo.due_at)}
+      class="schedule-button"
+      type="button"
+      aria-label={`设置到期日期：${todo.title}`}
+      title="设置到期日期"
+      onclick={toggleSchedule}
+      disabled={editing}
+    >
+      <svg viewBox="0 0 20 20" aria-hidden="true">
+        <rect x="4" y="5" width="12" height="11" rx="2" />
+        <path d="M7 3v4M13 3v4M4 9h12" />
+      </svg>
+    </button>
     <button
       class:active={todo.pinned}
       class="pin-button"

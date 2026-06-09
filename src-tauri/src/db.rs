@@ -9,7 +9,7 @@ use rusqlite::{params, Connection, Transaction};
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
-const CURRENT_SCHEMA_VERSION: i64 = 5;
+const CURRENT_SCHEMA_VERSION: i64 = 6;
 const DEVICE_ID_KEY: &str = "device_id";
 
 pub struct Database {
@@ -68,6 +68,7 @@ pub(crate) fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {
     apply_migration(connection, 3, add_sync_identity)?;
     apply_migration(connection, 4, add_sync_settings)?;
     apply_migration(connection, 5, add_todo_pinning)?;
+    apply_migration(connection, 6, add_todo_due_fields)?;
 
     debug_assert_eq!(schema_version(connection)?, CURRENT_SCHEMA_VERSION);
     Ok(())
@@ -280,6 +281,32 @@ fn add_todo_pinning(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
     )
 }
 
+fn add_todo_due_fields(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
+    transaction.execute_batch(
+        "
+        ALTER TABLE todos
+            ADD COLUMN due_date TEXT CHECK(due_date IS NULL OR length(due_date) = 10);
+        ALTER TABLE todos
+            ADD COLUMN due_at INTEGER;
+        ALTER TABLE todos
+            ADD COLUMN reminder_at INTEGER;
+
+        CREATE INDEX idx_todos_due_date
+            ON todos(deleted_at, completed, due_date);
+        CREATE INDEX idx_todos_reminder_at
+            ON todos(deleted_at, completed, reminder_at);
+
+        CREATE TABLE reminder_deliveries (
+            todo_uuid TEXT NOT NULL,
+            device_id TEXT NOT NULL,
+            reminder_at INTEGER NOT NULL,
+            fired_at INTEGER NOT NULL,
+            PRIMARY KEY (todo_uuid, device_id, reminder_at)
+        );
+        ",
+    )
+}
+
 pub(crate) fn device_id(connection: &Connection) -> rusqlite::Result<String> {
     connection.query_row(
         "SELECT value FROM app_metadata WHERE key = ?1",
@@ -331,6 +358,9 @@ mod tests {
             "updated_at",
             "updated_by",
             "pinned",
+            "due_date",
+            "due_at",
+            "reminder_at",
         ] {
             assert!(columns.iter().any(|column| column == expected));
         }
@@ -339,6 +369,12 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM sync_settings", [], |row| row.get(0))
             .unwrap();
         assert_eq!(sync_settings_count, 1);
+        let reminder_delivery_count: i64 = connection
+            .query_row("SELECT COUNT(*) FROM reminder_deliveries", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(reminder_delivery_count, 0);
     }
 
     #[test]
@@ -544,5 +580,47 @@ mod tests {
             .query_row("SELECT pinned FROM todos", [], |row| row.get(0))
             .unwrap();
         assert_eq!(pinned, 0);
+    }
+
+    #[test]
+    fn upgrades_v5_database_with_empty_due_fields() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "
+                CREATE TABLE schema_migrations (
+                    version INTEGER PRIMARY KEY,
+                    applied_at INTEGER NOT NULL
+                );
+                ",
+            )
+            .unwrap();
+        apply_migration(&mut connection, 1, create_legacy_schema).unwrap();
+        apply_migration(&mut connection, 2, migrate_todos_for_sync).unwrap();
+        apply_migration(&mut connection, 3, add_sync_identity).unwrap();
+        apply_migration(&mut connection, 4, add_sync_settings).unwrap();
+        apply_migration(&mut connection, 5, add_todo_pinning).unwrap();
+
+        migrate(&mut connection).unwrap();
+
+        let columns: Vec<String> = connection
+            .prepare("PRAGMA table_info(todos)")
+            .unwrap()
+            .query_map([], |row| row.get(1))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert!(columns.iter().any(|column| column == "due_date"));
+        assert!(columns.iter().any(|column| column == "due_at"));
+        assert!(columns.iter().any(|column| column == "reminder_at"));
+
+        let reminder_tables: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'reminder_deliveries'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(reminder_tables, 1);
     }
 }

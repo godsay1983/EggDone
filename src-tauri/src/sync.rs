@@ -23,6 +23,12 @@ pub(crate) struct SyncTodo {
     pub updated_at: i64,
     pub completed_at: Option<i64>,
     pub deleted_at: Option<i64>,
+    #[serde(default)]
+    pub due_date: Option<String>,
+    #[serde(default)]
+    pub due_at: Option<i64>,
+    #[serde(default)]
+    pub reminder_at: Option<i64>,
     pub updated_by: String,
 }
 
@@ -43,7 +49,7 @@ pub(crate) fn build_document(
         .prepare(
             "
             SELECT uuid, title, completed, pinned, sort_order, created_at, updated_at,
-                   completed_at, deleted_at, updated_by
+                   completed_at, deleted_at, due_date, due_at, reminder_at, updated_by
             FROM todos
             ORDER BY uuid ASC
             ",
@@ -106,9 +112,9 @@ pub(crate) fn merge_remote_document(
                 "
                 INSERT INTO todos (
                     uuid, title, completed, pinned, sort_order, created_at, updated_at,
-                    completed_at, deleted_at, updated_by
+                    completed_at, deleted_at, due_date, due_at, reminder_at, updated_by
                 )
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
                 ON CONFLICT(uuid) DO UPDATE SET
                     title = excluded.title,
                     completed = excluded.completed,
@@ -118,6 +124,9 @@ pub(crate) fn merge_remote_document(
                     updated_at = excluded.updated_at,
                     completed_at = excluded.completed_at,
                     deleted_at = excluded.deleted_at,
+                    due_date = excluded.due_date,
+                    due_at = excluded.due_at,
+                    reminder_at = excluded.reminder_at,
                     updated_by = excluded.updated_by
                 ",
                 params![
@@ -130,6 +139,9 @@ pub(crate) fn merge_remote_document(
                     todo.updated_at,
                     todo.completed_at,
                     todo.deleted_at,
+                    todo.due_date,
+                    todo.due_at,
+                    todo.reminder_at,
                     todo.updated_by,
                 ],
             )
@@ -169,8 +181,20 @@ pub(crate) fn validate_document(document: &SyncDocument) -> Result<(), String> {
             || todo.updated_at < 0
             || todo.completed_at.is_some_and(|value| value < 0)
             || todo.deleted_at.is_some_and(|value| value < 0)
+            || todo.due_at.is_some_and(|value| value < 0)
+            || todo.reminder_at.is_some_and(|value| value < 0)
         {
             return Err("同步文件包含无效时间戳".to_string());
+        }
+        if todo
+            .due_date
+            .as_deref()
+            .is_some_and(|value| !is_valid_date_only(value))
+        {
+            return Err("同步文件包含无效到期日期".to_string());
+        }
+        if todo.due_date.is_some() && todo.due_at.is_some() {
+            return Err("同步文件包含重复到期信息".to_string());
         }
     }
     Ok(())
@@ -184,11 +208,26 @@ fn compare_todos(left: &SyncTodo, right: &SyncTodo) -> Ordering {
         .then_with(|| canonical_tie_break(left).cmp(&canonical_tie_break(right)))
 }
 
-fn canonical_tie_break(todo: &SyncTodo) -> (bool, bool, Option<i64>, i64, &str, i64) {
+fn canonical_tie_break(
+    todo: &SyncTodo,
+) -> (
+    bool,
+    bool,
+    Option<i64>,
+    Option<&str>,
+    Option<i64>,
+    Option<i64>,
+    i64,
+    &str,
+    i64,
+) {
     (
         todo.completed,
         todo.pinned,
         todo.completed_at,
+        todo.due_date.as_deref(),
+        todo.due_at,
+        todo.reminder_at,
         todo.sort_order,
         todo.title.as_str(),
         todo.created_at,
@@ -206,8 +245,47 @@ fn map_sync_todo(row: &rusqlite::Row<'_>) -> rusqlite::Result<SyncTodo> {
         updated_at: row.get(6)?,
         completed_at: row.get(7)?,
         deleted_at: row.get(8)?,
-        updated_by: row.get(9)?,
+        due_date: row.get(9)?,
+        due_at: row.get(10)?,
+        reminder_at: row.get(11)?,
+        updated_by: row.get(12)?,
     })
+}
+
+fn is_valid_date_only(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    if bytes.len() != 10 || bytes[4] != b'-' || bytes[7] != b'-' {
+        return false;
+    }
+    if !bytes
+        .iter()
+        .enumerate()
+        .all(|(index, byte)| index == 4 || index == 7 || byte.is_ascii_digit())
+    {
+        return false;
+    }
+
+    let Ok(year) = value[0..4].parse::<u32>() else {
+        return false;
+    };
+    let Ok(month) = value[5..7].parse::<u32>() else {
+        return false;
+    };
+    let Ok(day) = value[8..10].parse::<u32>() else {
+        return false;
+    };
+    let max_day = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if is_leap_year(year) => 29,
+        2 => 28,
+        _ => return false,
+    };
+    (1..=max_day).contains(&day)
+}
+
+fn is_leap_year(year: u32) -> bool {
+    (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
 }
 
 fn database_error(error: rusqlite::Error) -> String {
@@ -243,6 +321,9 @@ mod tests {
             updated_at,
             completed_at: None,
             deleted_at: None,
+            due_date: None,
+            due_at: None,
+            reminder_at: None,
             updated_by: updated_by.to_string(),
         }
     }
@@ -339,6 +420,7 @@ mod tests {
 
         let mut remote_todo = todo("remote deleted", 11, DEVICE_B);
         remote_todo.pinned = true;
+        remote_todo.due_date = Some("2026-06-10".to_string());
         remote_todo.deleted_at = Some(11);
         let merged =
             merge_remote_document(&mut connection, &document(DEVICE_B, vec![remote_todo]), 30)
@@ -348,6 +430,7 @@ mod tests {
         let persisted = build_document(&connection, 31).unwrap();
         assert_eq!(persisted.todos[0].deleted_at, Some(11));
         assert!(persisted.todos[0].pinned);
+        assert_eq!(persisted.todos[0].due_date.as_deref(), Some("2026-06-10"));
         assert_eq!(persisted.todos[0].updated_by, DEVICE_B);
     }
 
@@ -374,6 +457,7 @@ mod tests {
 
         let document: SyncDocument = serde_json::from_str(&json).unwrap();
         assert!(!document.todos[0].pinned);
+        assert_eq!(document.todos[0].due_date, None);
         validate_document(&document).unwrap();
     }
 

@@ -2,6 +2,12 @@ import { invoke } from "@tauri-apps/api/core";
 
 import type { Todo } from "$lib/types";
 
+export interface TodoScheduleInput {
+  due_date: string | null;
+  due_at: number | null;
+  reminder_at: number | null;
+}
+
 export const todoApi = {
   list(): Promise<Todo[]> {
     return invoke<Todo[]>("list_todos");
@@ -21,6 +27,15 @@ export const todoApi = {
 
   setPinned(id: number, pinned: boolean): Promise<Todo> {
     return invoke<Todo>("set_todo_pinned", { id, pinned });
+  },
+
+  setSchedule(id: number, schedule: TodoScheduleInput): Promise<Todo> {
+    return invoke<Todo>("set_todo_schedule", {
+      id,
+      dueDate: schedule.due_date,
+      dueAt: schedule.due_at,
+      reminderAt: schedule.reminder_at,
+    });
   },
 
   reorder(orderedIds: number[]): Promise<Todo[]> {

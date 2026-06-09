@@ -1,6 +1,7 @@
 import { derived, writable } from "svelte/store";
 
 import { todoApi } from "$lib/api/todoApi";
+import type { TodoScheduleInput } from "$lib/api/todoApi";
 import { scheduleAutoSync } from "$lib/sync/autoSync";
 import type { Todo } from "$lib/types";
 
@@ -89,6 +90,18 @@ export function createTodoStore(api = todoApi, onChanged = scheduleAutoSync) {
         items: state.items
           .map((item) => (item.id === updatedTodo.id ? updatedTodo : item))
           .sort(sortTodos),
+        error: null,
+      }));
+      onChanged();
+    },
+
+    async setSchedule(id: number, schedule: TodoScheduleInput) {
+      const updatedTodo = await api.setSchedule(id, schedule);
+      update((state) => ({
+        ...state,
+        items: state.items.map((item) =>
+          item.id === updatedTodo.id ? updatedTodo : item,
+        ),
         error: null,
       }));
       onChanged();
