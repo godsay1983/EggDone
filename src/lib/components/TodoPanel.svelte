@@ -238,6 +238,19 @@
     }
   }
 
+  async function snoozeTodo(todo: Todo, reminderAt: number) {
+    try {
+      await todos.setSchedule(todo.id, {
+        due_date: todo.due_date,
+        due_at: todo.due_at,
+        reminder_at: reminderAt,
+      });
+    } catch (error) {
+      todos.reportError(error);
+      throw error;
+    }
+  }
+
   async function deleteTodo(id: number) {
     try {
       undoTodo = await todos.remove(id);
@@ -654,6 +667,7 @@
             onEdit={editTodo}
             onPin={pinTodo}
             onSchedule={scheduleTodo}
+            onSnooze={snoozeTodo}
             onDelete={deleteTodo}
             onMove={moveTodo}
             onDragStart={startDrag}

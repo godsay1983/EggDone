@@ -9,12 +9,22 @@
     getDueTone,
     localDateString,
   } from "$lib/utils/todoDates";
+  import {
+    defaultCustomReminderDateTime,
+    inferReminderChoice,
+    laterTodayReminderAt,
+    reminderAtForDate,
+    snoozeReminderAt,
+    timestampToDateTimeLocal,
+    type ReminderChoice,
+  } from "$lib/utils/reminderTimes";
 
   export let todo: Todo;
   export let onToggle: (todo: Todo) => Promise<void>;
   export let onEdit: (id: number, title: string) => Promise<void>;
   export let onPin: (todo: Todo, pinned: boolean) => Promise<void>;
   export let onSchedule: (id: number, schedule: TodoScheduleInput) => Promise<void>;
+  export let onSnooze: (todo: Todo, reminderAt: number) => Promise<void>;
   export let onDelete: (id: number) => Promise<void>;
   export let onMove: (todo: Todo, direction: -1 | 1) => Promise<void>;
   export let onDragStart: (todo: Todo, event: PointerEvent) => void;
@@ -23,8 +33,6 @@
   export let isDragging = false;
   export let isDragTarget = false;
   export let reorderDisabled = false;
-
-  type ReminderChoice = "none" | "same-day-9" | "previous-day-9" | "custom";
 
   let editing = false;
   let editTitle = "";
@@ -117,7 +125,9 @@
 
   async function setDateOnly(date: string | null) {
     if (scheduleSaving) return;
-    const reminderAt = date ? reminderAtForDate(date, reminderChoice) : null;
+    const reminderAt = date
+      ? reminderAtForDate(date, reminderChoice, customReminderDateTime)
+      : null;
     if (date && reminderChoice === "custom" && reminderAt === null) {
       scheduleError = "请选择提醒时间";
       return;
@@ -139,25 +149,6 @@
     }
   }
 
-  function inferReminderChoice(
-    dueDate: string | null,
-    reminderAt: number | null,
-  ): ReminderChoice {
-    if (!dueDate || reminderAt === null) return "none";
-    const sameDay = localReminderTime(dueDate, 0);
-    const previousDay = localReminderTime(dueDate, -1);
-    if (reminderAt === sameDay) return "same-day-9";
-    if (reminderAt === previousDay) return "previous-day-9";
-    return "custom";
-  }
-
-  function reminderAtForDate(date: string, choice: ReminderChoice) {
-    if (choice === "same-day-9") return localReminderTime(date, 0);
-    if (choice === "previous-day-9") return localReminderTime(date, -1);
-    if (choice === "custom") return dateTimeLocalToTimestamp(customReminderDateTime);
-    return null;
-  }
-
   function handleReminderChoiceChange() {
     if (reminderChoice === "custom" && !customReminderDateTime) {
       customReminderDateTime = defaultCustomReminderDateTime(customDate || localDateString(0));
@@ -168,47 +159,6 @@
     if (reminderChoice !== "custom" || !customDate) return;
     const time = customReminderDateTime.split("T")[1] || "09:00";
     customReminderDateTime = `${customDate}T${time}`;
-  }
-
-  function localReminderTime(date: string, offsetDays: number) {
-    const [year, month, day] = date.split("-").map(Number);
-    const reminderDate = new Date(year, month - 1, day, 9, 0, 0, 0);
-    reminderDate.setDate(reminderDate.getDate() + offsetDays);
-    return reminderDate.getTime();
-  }
-
-  function defaultCustomReminderDateTime(date: string) {
-    return `${date}T09:00`;
-  }
-
-  function timestampToDateTimeLocal(timestamp: number) {
-    const date = new Date(timestamp);
-    const year = date.getFullYear();
-    const month = padDatePart(date.getMonth() + 1);
-    const day = padDatePart(date.getDate());
-    const hour = padDatePart(date.getHours());
-    const minute = padDatePart(date.getMinutes());
-    return `${year}-${month}-${day}T${hour}:${minute}`;
-  }
-
-  function dateTimeLocalToTimestamp(value: string) {
-    const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
-    if (!match) return null;
-    const [, year, month, day, hour, minute] = match;
-    const timestamp = new Date(
-      Number(year),
-      Number(month) - 1,
-      Number(day),
-      Number(hour),
-      Number(minute),
-      0,
-      0,
-    ).getTime();
-    return Number.isFinite(timestamp) && timestamp >= 0 ? timestamp : null;
-  }
-
-  function padDatePart(value: number) {
-    return value.toString().padStart(2, "0");
   }
 
   function formatReminderLabel(reminderAt: number | null) {
@@ -437,6 +387,28 @@
         <button type="button" role="menuitem" onclick={toggleSchedule}>
           设置日期
         </button>
+        {#if todo.reminder_at !== null && !todo.completed}
+          <button
+            type="button"
+            role="menuitem"
+            onclick={() => {
+              actionsOpen = false;
+              void onSnooze(todo, snoozeReminderAt());
+            }}
+          >
+            稍后 10 分钟
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onclick={() => {
+              actionsOpen = false;
+              void onSnooze(todo, laterTodayReminderAt());
+            }}
+          >
+            今天晚些时候
+          </button>
+        {/if}
         <button
           type="button"
           role="menuitem"
