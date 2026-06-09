@@ -11,6 +11,7 @@ EggDone 是一个轻量级、跨平台、托盘常驻的 Todo 桌面应用。应
 - 托盘右键菜单：打开/隐藏、新增任务、今天任务、关于、退出
 - 快速新增、行内编辑、完成和取消完成 Todo
 - 按标题即时搜索，可隐藏已完成任务并置顶重要任务
+- 支持单层分组筛选、新建分组、新任务自动进入当前分组、任务移动分组
 - 可为任务设置到期日期，支持今天、明天、下周、自定义和清除
 - 可为到期任务设置系统提醒：不提醒、当天 9:00、提前一天 9:00、指定时间
 - 可在任务菜单中将已有提醒推迟到“稍后 10 分钟”或“今天晚些时候”
@@ -111,6 +112,7 @@ pnpm release:check
 | `id` | 自增主键 |
 | `uuid` | 跨设备唯一标识 |
 | `title` | 任务内容 |
+| `group_uuid` | 所属分组 UUID（可空，空表示未分组） |
 | `completed` | 完成状态 |
 | `pinned` | 是否置顶 |
 | `sort_order` | 任务排序值 |
@@ -123,7 +125,7 @@ pnpm release:check
 | `due_at` | 具体到期时间，UTC 毫秒时间戳（可空） |
 | `reminder_at` | 提醒时间，UTC 毫秒时间戳（可空） |
 
-`schema_migrations` 表记录已执行的数据库版本，`app_metadata` 保存本机 `device_id`，`sync_settings` 只保存 Endpoint、Region、Bucket、Object Key 等非敏感配置，`reminder_deliveries` 记录本机已触发提醒以避免重复通知。Access Key 和 Secret Key 保存到操作系统凭据库，不写入 SQLite。开发时可以删除数据库以重置数据，具体根目录由 Tauri 的 `app_data_dir` 按平台决定。
+`groups` 表保存单层分组，包含 UUID、名称、颜色、排序和软删除字段。`schema_migrations` 表记录已执行的数据库版本，`app_metadata` 保存本机 `device_id`，`sync_settings` 只保存 Endpoint、Region、Bucket、Object Key 等非敏感配置，`reminder_deliveries` 记录本机已触发提醒以避免重复通知。Access Key 和 Secret Key 保存到操作系统凭据库，不写入 SQLite。开发时可以删除数据库以重置数据，具体根目录由 Tauri 的 `app_data_dir` 按平台决定。
 
 项目已包含版本化同步文档和本地合并核心：按 Todo UUID 合并，优先采用较新的 `updated_at`；时间相同时优先保留删除记录，再通过 `updated_by` 稳定决胜。设置页可配置 AWS S3 或自定义 S3 Endpoint，支持 MinIO 常用的 Path Style 和 HTTP。HTTP 必须显式确认明文传输风险。
 
@@ -172,7 +174,7 @@ EggDone/
 
 - 托盘附近定位使用平台提供的图标坐标；不可用时回退到主屏幕右下角。
 - Windows 混合 DPI 多显示器仍需在 125%、150% 和 200% 缩放下进行实机验收。
-- 当前到期日期只提供日期级设置；系统提醒已支持基础发送、指定提醒时间和面板内稍后提醒，但通知点击定位、通知按钮、分组和重复任务仍在后续计划中。
+- 当前到期日期只提供日期级设置；系统提醒已支持基础发送、指定提醒时间和面板内稍后提醒。分组已支持基础筛选和移动，分组重命名、排序、删除、通知点击定位、通知按钮和重复任务仍在后续计划中。
 - 同步状态仅保存在当前运行会话中，尚未持久化最后成功时间。
 
 后续优化和版本规划见 [OPTIMIZATION_TODO.md](OPTIMIZATION_TODO.md)。

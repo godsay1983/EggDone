@@ -18,6 +18,7 @@ pub struct Todo {
     id: i64,
     uuid: String,
     title: String,
+    group_uuid: Option<String>,
     completed: bool,
     pinned: bool,
     sort_order: i64,
@@ -30,6 +31,18 @@ pub struct Todo {
     reminder_at: Option<i64>,
 }
 
+#[derive(Debug, Serialize, PartialEq, Eq)]
+pub struct TodoGroup {
+    id: i64,
+    uuid: String,
+    name: String,
+    color: String,
+    sort_order: i64,
+    created_at: i64,
+    updated_at: i64,
+    deleted_at: Option<i64>,
+}
+
 #[tauri::command]
 pub fn list_todos(database: State<'_, Database>) -> Result<Vec<Todo>, String> {
     let connection = lock_database(&database)?;
@@ -37,14 +50,35 @@ pub fn list_todos(database: State<'_, Database>) -> Result<Vec<Todo>, String> {
 }
 
 #[tauri::command]
+pub fn list_groups(database: State<'_, Database>) -> Result<Vec<TodoGroup>, String> {
+    let connection = lock_database(&database)?;
+    list_groups_from_connection(&connection)
+}
+
+#[tauri::command]
 pub fn create_todo(
     title: String,
+    group_uuid: Option<String>,
     app: AppHandle,
     database: State<'_, Database>,
 ) -> Result<Todo, String> {
     let result = {
         let connection = lock_database(&database)?;
-        create_todo_in_connection(&connection, &title)
+        create_todo_in_connection(&connection, &title, group_uuid)
+    };
+    refresh_badge_after_success(&app, &result);
+    result
+}
+
+#[tauri::command]
+pub fn create_group(
+    name: String,
+    app: AppHandle,
+    database: State<'_, Database>,
+) -> Result<TodoGroup, String> {
+    let result = {
+        let connection = lock_database(&database)?;
+        create_group_in_connection(&connection, &name)
     };
     refresh_badge_after_success(&app, &result);
     result
@@ -107,6 +141,21 @@ pub fn set_todo_schedule(
     let result = {
         let connection = lock_database(&database)?;
         set_todo_schedule_in_connection(&connection, id, due_date, due_at, reminder_at)
+    };
+    refresh_badge_after_success(&app, &result);
+    result
+}
+
+#[tauri::command]
+pub fn set_todo_group(
+    id: i64,
+    group_uuid: Option<String>,
+    app: AppHandle,
+    database: State<'_, Database>,
+) -> Result<Todo, String> {
+    let result = {
+        let connection = lock_database(&database)?;
+        set_todo_group_in_connection(&connection, id, group_uuid)
     };
     refresh_badge_after_success(&app, &result);
     result
@@ -297,7 +346,7 @@ fn list_todos_from_connection(connection: &Connection) -> Result<Vec<Todo>, Stri
         .prepare(
             "
             SELECT
-                id, uuid, title, completed, pinned, sort_order,
+                id, uuid, title, group_uuid, completed, pinned, sort_order,
                 created_at, updated_at, completed_at, deleted_at,
                 due_date, due_at, reminder_at
             FROM todos
@@ -312,11 +361,33 @@ fn list_todos_from_connection(connection: &Connection) -> Result<Vec<Todo>, Stri
     rows.collect::<Result<Vec<_>, _>>().map_err(database_error)
 }
 
-fn create_todo_in_connection(connection: &Connection, title: &str) -> Result<Todo, String> {
+fn list_groups_from_connection(connection: &Connection) -> Result<Vec<TodoGroup>, String> {
+    let mut statement = connection
+        .prepare(
+            "
+            SELECT id, uuid, name, color, sort_order, created_at, updated_at, deleted_at
+            FROM groups
+            WHERE deleted_at IS NULL
+            ORDER BY sort_order ASC, created_at ASC, id ASC
+            ",
+        )
+        .map_err(database_error)?;
+
+    let rows = statement.query_map([], map_group).map_err(database_error)?;
+
+    rows.collect::<Result<Vec<_>, _>>().map_err(database_error)
+}
+
+fn create_todo_in_connection(
+    connection: &Connection,
+    title: &str,
+    group_uuid: Option<String>,
+) -> Result<Todo, String> {
     let title = title.trim();
     if title.is_empty() {
         return Err("任务内容不能为空".to_string());
     }
+    let group_uuid = normalize_group_uuid(connection, group_uuid)?;
 
     let now = now_millis();
     let uuid = Uuid::new_v4().to_string();
@@ -337,18 +408,56 @@ fn create_todo_in_connection(connection: &Connection, title: &str) -> Result<Tod
         .execute(
             "
             INSERT INTO todos (
-                uuid, title, completed, sort_order,
+                uuid, title, group_uuid, completed, sort_order,
                 created_at, updated_at, completed_at, deleted_at,
                 due_date, due_at, reminder_at, updated_by
             )
-            VALUES (?1, ?2, 0, ?3, ?4, ?4, NULL, NULL, NULL, NULL, NULL, ?5)
+            VALUES (?1, ?2, ?3, 0, ?4, ?5, ?5, NULL, NULL, NULL, NULL, NULL, ?6)
             ",
-            params![uuid, title, sort_order, now, updated_by],
+            params![uuid, title, group_uuid, sort_order, now, updated_by],
         )
         .map_err(database_error)?;
 
     find_todo(connection, connection.last_insert_rowid())?
         .ok_or_else(|| "新建任务后未能读取记录".to_string())
+}
+
+fn create_group_in_connection(connection: &Connection, name: &str) -> Result<TodoGroup, String> {
+    let name = normalize_group_name(name)?;
+    let now = now_millis();
+    let uuid = Uuid::new_v4().to_string();
+    let sort_order: i64 = connection
+        .query_row(
+            "
+            SELECT COALESCE(MAX(sort_order), -1024) + 1024
+            FROM groups
+            WHERE deleted_at IS NULL
+            ",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(database_error)?;
+
+    connection
+        .execute(
+            "
+            INSERT INTO groups (
+                uuid, name, color, sort_order, created_at, updated_at, deleted_at, updated_by
+            )
+            VALUES (?1, ?2, 'yellow', ?3, ?4, ?4, NULL, ?5)
+            ",
+            params![
+                uuid,
+                name,
+                sort_order,
+                now,
+                device_id(connection).map_err(database_error)?,
+            ],
+        )
+        .map_err(database_error)?;
+
+    find_group(connection, connection.last_insert_rowid())?
+        .ok_or_else(|| "新建分组后未能读取记录".to_string())
 }
 
 fn set_todo_completed_in_connection(
@@ -482,6 +591,35 @@ fn set_todo_schedule_in_connection(
     find_todo(connection, id)?.ok_or_else(|| "设置日期后未能读取任务".to_string())
 }
 
+fn set_todo_group_in_connection(
+    connection: &Connection,
+    id: i64,
+    group_uuid: Option<String>,
+) -> Result<Todo, String> {
+    let group_uuid = normalize_group_uuid(connection, group_uuid)?;
+    let changed = connection
+        .execute(
+            "
+            UPDATE todos
+            SET group_uuid = ?1, updated_at = ?2, updated_by = ?3
+            WHERE id = ?4 AND deleted_at IS NULL
+            ",
+            params![
+                group_uuid,
+                now_millis(),
+                device_id(connection).map_err(database_error)?,
+                id
+            ],
+        )
+        .map_err(database_error)?;
+
+    if changed == 0 {
+        return Err("任务不存在".to_string());
+    }
+
+    find_todo(connection, id)?.ok_or_else(|| "移动分组后未能读取任务".to_string())
+}
+
 fn reorder_todos_in_connection(
     connection: &mut Connection,
     ordered_ids: &[i64],
@@ -577,7 +715,7 @@ fn find_todo(connection: &Connection, id: i64) -> Result<Option<Todo>, String> {
         .query_row(
             "
             SELECT
-                id, uuid, title, completed, pinned, sort_order,
+                id, uuid, title, group_uuid, completed, pinned, sort_order,
                 created_at, updated_at, completed_at, deleted_at,
                 due_date, due_at, reminder_at
             FROM todos
@@ -595,17 +733,84 @@ fn map_todo(row: &rusqlite::Row<'_>) -> rusqlite::Result<Todo> {
         id: row.get(0)?,
         uuid: row.get(1)?,
         title: row.get(2)?,
-        completed: row.get::<_, i64>(3)? != 0,
-        pinned: row.get::<_, i64>(4)? != 0,
-        sort_order: row.get(5)?,
-        created_at: row.get(6)?,
-        updated_at: row.get(7)?,
-        completed_at: row.get(8)?,
-        deleted_at: row.get(9)?,
-        due_date: row.get(10)?,
-        due_at: row.get(11)?,
-        reminder_at: row.get(12)?,
+        group_uuid: row.get(3)?,
+        completed: row.get::<_, i64>(4)? != 0,
+        pinned: row.get::<_, i64>(5)? != 0,
+        sort_order: row.get(6)?,
+        created_at: row.get(7)?,
+        updated_at: row.get(8)?,
+        completed_at: row.get(9)?,
+        deleted_at: row.get(10)?,
+        due_date: row.get(11)?,
+        due_at: row.get(12)?,
+        reminder_at: row.get(13)?,
     })
+}
+
+fn find_group(connection: &Connection, id: i64) -> Result<Option<TodoGroup>, String> {
+    connection
+        .query_row(
+            "
+            SELECT id, uuid, name, color, sort_order, created_at, updated_at, deleted_at
+            FROM groups
+            WHERE id = ?1
+            ",
+            params![id],
+            map_group,
+        )
+        .optional()
+        .map_err(database_error)
+}
+
+fn map_group(row: &rusqlite::Row<'_>) -> rusqlite::Result<TodoGroup> {
+    Ok(TodoGroup {
+        id: row.get(0)?,
+        uuid: row.get(1)?,
+        name: row.get(2)?,
+        color: row.get(3)?,
+        sort_order: row.get(4)?,
+        created_at: row.get(5)?,
+        updated_at: row.get(6)?,
+        deleted_at: row.get(7)?,
+    })
+}
+
+fn normalize_group_uuid(
+    connection: &Connection,
+    group_uuid: Option<String>,
+) -> Result<Option<String>, String> {
+    let Some(value) = group_uuid else {
+        return Ok(None);
+    };
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    if Uuid::parse_str(trimmed).is_err() {
+        return Err("分组 UUID 无效".to_string());
+    }
+    let exists: bool = connection
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM groups WHERE uuid = ?1 AND deleted_at IS NULL)",
+            params![trimmed],
+            |row| row.get(0),
+        )
+        .map_err(database_error)?;
+    if !exists {
+        return Err("分组不存在".to_string());
+    }
+    Ok(Some(trimmed.to_string()))
+}
+
+fn normalize_group_name(name: &str) -> Result<String, String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("分组名称不能为空".to_string());
+    }
+    if name.chars().count() > 30 {
+        return Err("分组名称不能超过 30 个字符".to_string());
+    }
+    Ok(name.to_string())
 }
 
 fn normalize_due_date(due_date: Option<String>) -> Result<Option<String>, String> {
@@ -678,8 +883,9 @@ mod tests {
     fn todo_lifecycle_uses_sync_ready_fields() {
         let connection = connection();
 
-        let created = create_todo_in_connection(&connection, "  新任务  ").unwrap();
+        let created = create_todo_in_connection(&connection, "  新任务  ", None).unwrap();
         assert_eq!(created.title, "新任务");
+        assert_eq!(created.group_uuid, None);
         assert!(!created.completed);
         assert!(!created.pinned);
         assert!(Uuid::parse_str(&created.uuid).is_ok());
@@ -711,8 +917,8 @@ mod tests {
     #[test]
     fn newer_todos_are_inserted_before_existing_todos() {
         let connection = connection();
-        let first = create_todo_in_connection(&connection, "first").unwrap();
-        let second = create_todo_in_connection(&connection, "second").unwrap();
+        let first = create_todo_in_connection(&connection, "first", None).unwrap();
+        let second = create_todo_in_connection(&connection, "second", None).unwrap();
 
         let todos = list_todos_from_connection(&connection).unwrap();
         assert_eq!(todos[0].id, second.id);
@@ -723,8 +929,8 @@ mod tests {
     #[test]
     fn edits_reorders_and_clears_completed_todos() {
         let mut connection = connection();
-        let first = create_todo_in_connection(&connection, "first").unwrap();
-        let second = create_todo_in_connection(&connection, "second").unwrap();
+        let first = create_todo_in_connection(&connection, "first", None).unwrap();
+        let second = create_todo_in_connection(&connection, "second", None).unwrap();
 
         let edited = update_todo_title_in_connection(&connection, first.id, "  edited  ").unwrap();
         assert_eq!(edited.title, "edited");
@@ -773,5 +979,27 @@ mod tests {
         let remaining = list_todos_from_connection(&connection).unwrap();
         assert_eq!(remaining.len(), 1);
         assert_eq!(remaining[0].id, second.id);
+    }
+
+    #[test]
+    fn creates_groups_and_moves_todos_between_them() {
+        let connection = connection();
+        let group = create_group_in_connection(&connection, "  工作  ").unwrap();
+        assert_eq!(group.name, "工作");
+        assert!(Uuid::parse_str(&group.uuid).is_ok());
+
+        let created =
+            create_todo_in_connection(&connection, "grouped", Some(group.uuid.clone())).unwrap();
+        assert_eq!(created.group_uuid.as_deref(), Some(group.uuid.as_str()));
+
+        let ungrouped = set_todo_group_in_connection(&connection, created.id, None).unwrap();
+        assert_eq!(ungrouped.group_uuid, None);
+
+        assert!(create_todo_in_connection(
+            &connection,
+            "bad group",
+            Some("00000000-0000-4000-8000-00000000ffff".to_string()),
+        )
+        .is_err());
     }
 }

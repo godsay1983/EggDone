@@ -2,7 +2,7 @@ import { get } from "svelte/store";
 import { describe, expect, it, vi } from "vitest";
 
 import type { todoApi } from "$lib/api/todoApi";
-import type { Todo } from "$lib/types";
+import type { Todo, TodoGroup } from "$lib/types";
 import { createTodoStore } from "./todoStore";
 
 function makeTodo(id: number, overrides: Partial<Todo> = {}): Todo {
@@ -10,6 +10,7 @@ function makeTodo(id: number, overrides: Partial<Todo> = {}): Todo {
     id,
     uuid: `00000000-0000-4000-8000-${id.toString().padStart(12, "0")}`,
     title: `todo-${id}`,
+    group_uuid: null,
     completed: false,
     pinned: false,
     sort_order: id * 1024,
@@ -24,11 +25,28 @@ function makeTodo(id: number, overrides: Partial<Todo> = {}): Todo {
   };
 }
 
+function makeGroup(id: number, name = `group-${id}`): TodoGroup {
+  return {
+    id,
+    uuid: `00000000-0000-4000-8000-${(id + 100).toString().padStart(12, "0")}`,
+    name,
+    color: "yellow",
+    sort_order: id * 1024,
+    created_at: id,
+    updated_at: id,
+    deleted_at: null,
+  };
+}
+
 function createApi(initialItems: Todo[] = []) {
   const items = [...initialItems];
   const api: typeof todoApi = {
     list: vi.fn(async () => [...items]),
-    create: vi.fn(async (title) => makeTodo(3, { title })),
+    listGroups: vi.fn(async () => []),
+    create: vi.fn(async (title, groupUuid = null) =>
+      makeTodo(3, { title, group_uuid: groupUuid }),
+    ),
+    createGroup: vi.fn(async (name) => makeGroup(1, name)),
     setCompleted: vi.fn(async (id, completed) =>
       makeTodo(id, {
         completed,
@@ -38,6 +56,7 @@ function createApi(initialItems: Todo[] = []) {
     updateTitle: vi.fn(async (id, title) => makeTodo(id, { title })),
     setPinned: vi.fn(async (id, pinned) => makeTodo(id, { pinned })),
     setSchedule: vi.fn(async (id, schedule) => makeTodo(id, schedule)),
+    setGroup: vi.fn(async (id, groupUuid) => makeTodo(id, { group_uuid: groupUuid })),
     reorder: vi.fn(async (orderedIds: number[]) =>
       orderedIds.map((id: number, index: number) =>
         makeTodo(id, { sort_order: index * 1024 }),
@@ -61,6 +80,7 @@ describe("todo store", () => {
 
     await store.load();
     await store.add("new");
+    expect(get(store).items[0].group_uuid).toBeNull();
     await store.edit(1, "edited");
     expect(get(store).items.find((todo) => todo.id === 1)?.title).toBe("edited");
 
@@ -86,6 +106,20 @@ describe("todo store", () => {
     await store.restore(1);
     expect(get(store).items.some((todo) => todo.id === 1)).toBe(true);
     expect(onChanged).toHaveBeenCalledTimes(7);
+  });
+
+  it("creates groups and adds todos into the selected group", async () => {
+    const api = createApi();
+    const onChanged = vi.fn();
+    const store = createTodoStore(api, onChanged);
+    await store.load();
+
+    const group = await store.addGroup("工作");
+    await store.add("grouped", group.uuid);
+
+    expect(get(store).groups.map((item) => item.name)).toEqual(["工作"]);
+    expect(get(store).items[0].group_uuid).toBe(group.uuid);
+    expect(onChanged).toHaveBeenCalledTimes(2);
   });
 
   it("clears completed todos", async () => {

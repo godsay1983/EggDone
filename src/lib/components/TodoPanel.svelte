@@ -16,7 +16,7 @@
     todos,
   } from "$lib/stores/todoStore";
   import { initializeAutoSync, syncStatus } from "$lib/sync/autoSync";
-  import type { Todo } from "$lib/types";
+  import type { Todo, TodoGroup } from "$lib/types";
   import { movePreviewByPointer } from "$lib/utils/reorderPreview";
   import { isDueTodayOrOverdue } from "$lib/utils/todoDates";
   import {
@@ -49,12 +49,18 @@
   let searchQuery = "";
   let showCompleted = true;
   let listView: TodoListView = "all";
+  let selectedGroup = "all";
+  let creatingGroup = false;
+  let groupName = "";
+  let groupSaving = false;
   let searchInput: HTMLInputElement;
   $: searchActive = searchQuery.trim().length > 0;
   $: reorderDisabled = searchActive || listView === "today";
   $: todayCount = $todos.items.filter((todo) => isDueTodayOrOverdue(todo)).length;
+  $: activeGroupUuid = groupFilterValue(selectedGroup);
   $: filteredTodos = filterTodos($todos.items, searchQuery, showCompleted, {
     view: listView,
+    groupUuid: activeGroupUuid,
   });
   $: renderedTodos = applyPreviewOrder(filteredTodos, previewOrderIds);
 
@@ -65,6 +71,7 @@
       localStorage.getItem("eggdone-show-completed") !== "false";
     listView =
       localStorage.getItem("eggdone-list-view") === "today" ? "today" : "all";
+    selectedGroup = localStorage.getItem("eggdone-selected-group") ?? "all";
     theme =
       savedTheme === "light" || savedTheme === "dark"
         ? savedTheme
@@ -164,6 +171,30 @@
     cancelDrag();
   }
 
+  function setSelectedGroup(group: string) {
+    selectedGroup = group;
+    localStorage.setItem("eggdone-selected-group", group);
+    cancelDrag();
+  }
+
+  function groupFilterValue(group: string) {
+    if (group === "all") return undefined;
+    if (group === "ungrouped") return null;
+    return group;
+  }
+
+  function newTodoGroupUuid() {
+    return selectedGroup === "all" || selectedGroup === "ungrouped"
+      ? null
+      : selectedGroup;
+  }
+
+  function groupLabel(group: string, groups: TodoGroup[]) {
+    if (group === "all") return "全部";
+    if (group === "ungrouped") return "未分组";
+    return groups.find((item) => item.uuid === group)?.name ?? "分组";
+  }
+
   function markPanelInteraction() {
     if (isTauri()) {
       void todoApi.markPanelInteraction().catch(() => {});
@@ -194,7 +225,7 @@
 
     adding = true;
     try {
-      await todos.add(nextTitle);
+      await todos.add(nextTitle, newTodoGroupUuid());
       title = "";
     } catch (error) {
       todos.reportError(error);
@@ -226,6 +257,31 @@
       await todos.setPinned(todo, pinned);
     } catch (error) {
       todos.reportError(error);
+    }
+  }
+
+  async function createGroup() {
+    const nextName = groupName.trim();
+    if (!nextName || groupSaving) return;
+    groupSaving = true;
+    try {
+      const group = await todos.addGroup(nextName);
+      groupName = "";
+      creatingGroup = false;
+      setSelectedGroup(group.uuid);
+    } catch (error) {
+      todos.reportError(error);
+    } finally {
+      groupSaving = false;
+    }
+  }
+
+  async function moveTodoToGroup(todo: Todo, groupUuid: string | null) {
+    try {
+      await todos.setGroup(todo, groupUuid);
+    } catch (error) {
+      todos.reportError(error);
+      throw error;
     }
   }
 
@@ -528,7 +584,7 @@
       bind:this={inputElement}
       bind:value={title}
       maxlength="200"
-      placeholder="准备完成什么？按回车添加"
+      placeholder={`准备完成什么？${groupLabel(selectedGroup, $todos.groups)} · 回车添加`}
       aria-label="新任务内容"
       autocomplete="off"
     />
@@ -536,6 +592,74 @@
       {adding ? "…" : "+"}
     </button>
   </form>
+
+  <section class="group-filter" aria-label="任务分组">
+    <div class="group-scroll">
+      <button
+        class:active={selectedGroup === "all"}
+        type="button"
+        onclick={() => setSelectedGroup("all")}
+      >
+        全部
+      </button>
+      <button
+        class:active={selectedGroup === "ungrouped"}
+        type="button"
+        onclick={() => setSelectedGroup("ungrouped")}
+      >
+        未分组
+      </button>
+      {#each $todos.groups as group (group.uuid)}
+        <button
+          class:active={selectedGroup === group.uuid}
+          type="button"
+          title={group.name}
+          onclick={() => setSelectedGroup(group.uuid)}
+        >
+          {group.name}
+        </button>
+      {/each}
+    </div>
+    {#if creatingGroup}
+      <form
+        class="group-create"
+        onsubmit={(event) => {
+          event.preventDefault();
+          void createGroup();
+        }}
+      >
+        <input
+          bind:value={groupName}
+          maxlength="30"
+          placeholder="新分组"
+          aria-label="新分组名称"
+          disabled={groupSaving}
+        />
+        <button type="submit" disabled={!groupName.trim() || groupSaving}>
+          {groupSaving ? "…" : "保存"}
+        </button>
+        <button
+          type="button"
+          disabled={groupSaving}
+          onclick={() => {
+            creatingGroup = false;
+            groupName = "";
+          }}
+        >
+          取消
+        </button>
+      </form>
+    {:else}
+      <button
+        class="group-add"
+        type="button"
+        title="新建分组"
+        onclick={() => (creatingGroup = true)}
+      >
+        +
+      </button>
+    {/if}
+  </section>
 
   {#if showSearch}
     <div class="todo-search">
@@ -668,6 +792,8 @@
             onPin={pinTodo}
             onSchedule={scheduleTodo}
             onSnooze={snoozeTodo}
+            groups={$todos.groups}
+            onGroupChange={moveTodoToGroup}
             onDelete={deleteTodo}
             onMove={moveTodo}
             onDragStart={startDrag}

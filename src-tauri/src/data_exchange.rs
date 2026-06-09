@@ -21,6 +21,8 @@ const FORMAT_VERSION: u32 = 1;
 struct TransferTodo {
     uuid: String,
     title: String,
+    #[serde(default)]
+    group_uuid: Option<String>,
     completed: bool,
     #[serde(default)]
     pinned: bool,
@@ -37,10 +39,23 @@ struct TransferTodo {
     reminder_at: Option<i64>,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+struct TransferGroup {
+    uuid: String,
+    name: String,
+    color: String,
+    sort_order: i64,
+    created_at: i64,
+    updated_at: i64,
+    deleted_at: Option<i64>,
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 struct TodoExport {
     format_version: u32,
     exported_at: i64,
+    #[serde(default)]
+    groups: Vec<TransferGroup>,
     todos: Vec<TransferTodo>,
 }
 
@@ -82,6 +97,7 @@ pub fn export_todos(
     let export = TodoExport {
         format_version: FORMAT_VERSION,
         exported_at: now_millis(),
+        groups: read_all_groups(&connection)?,
         todos: read_all_todos(&connection)?,
     };
     let json = serde_json::to_string_pretty(&export)
@@ -115,7 +131,7 @@ pub fn confirm_todo_import(
     let import = read_import_file(Path::new(&path))?;
     let result = {
         let mut connection = lock_database(&database)?;
-        merge_todos(&mut connection, &import.todos)
+        merge_transfer(&mut connection, &import.groups, &import.todos)
     };
     if result.is_ok() {
         crate::tray::update_task_badge(&app);
@@ -219,10 +235,39 @@ fn validate_import(import: &TodoExport) -> Result<(), String> {
         return Err("导入文件缺少有效的 format_version".to_string());
     }
 
+    let mut group_uuids = HashSet::new();
+    for group in &import.groups {
+        if Uuid::parse_str(&group.uuid).is_err() {
+            return Err(format!("分组 UUID 无效：{}", group.uuid));
+        }
+        if !group_uuids.insert(&group.uuid) {
+            return Err(format!("导入文件包含重复分组 UUID：{}", group.uuid));
+        }
+        if group.name.trim().is_empty() {
+            return Err("导入文件包含空分组名称".to_string());
+        }
+        if group.created_at < 0
+            || group.updated_at < 0
+            || group.deleted_at.is_some_and(|value| value < 0)
+        {
+            return Err("导入文件包含无效分组时间戳".to_string());
+        }
+    }
+
     let mut uuids = HashSet::new();
     for todo in &import.todos {
         if Uuid::parse_str(&todo.uuid).is_err() {
             return Err(format!("任务 UUID 无效：{}", todo.uuid));
+        }
+        if todo
+            .group_uuid
+            .as_deref()
+            .is_some_and(|value| Uuid::parse_str(value).is_err())
+        {
+            return Err(format!(
+                "任务分组 UUID 无效：{}",
+                todo.group_uuid.as_deref().unwrap_or_default()
+            ));
         }
         if !uuids.insert(&todo.uuid) {
             return Err(format!("导入文件包含重复 UUID：{}", todo.uuid));
@@ -253,11 +298,29 @@ fn validate_import(import: &TodoExport) -> Result<(), String> {
     Ok(())
 }
 
+fn read_all_groups(connection: &Connection) -> Result<Vec<TransferGroup>, String> {
+    let mut statement = connection
+        .prepare(
+            "
+            SELECT uuid, name, color, sort_order, created_at, updated_at, deleted_at
+            FROM groups
+            ORDER BY sort_order ASC, created_at ASC, id ASC
+            ",
+        )
+        .map_err(database_error)?;
+    let groups = statement
+        .query_map([], map_transfer_group)
+        .map_err(database_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(database_error)?;
+    Ok(groups)
+}
+
 fn read_all_todos(connection: &Connection) -> Result<Vec<TransferTodo>, String> {
     let mut statement = connection
         .prepare(
             "
-            SELECT uuid, title, completed, pinned, sort_order, created_at, updated_at,
+            SELECT uuid, title, group_uuid, completed, pinned, sort_order, created_at, updated_at,
                    completed_at, deleted_at, due_date, due_at, reminder_at
             FROM todos
             ORDER BY completed ASC, pinned DESC, sort_order ASC, created_at DESC, id DESC
@@ -304,11 +367,13 @@ fn build_preview(
     })
 }
 
-fn merge_todos(
+fn merge_transfer(
     connection: &mut Connection,
+    imported_groups: &[TransferGroup],
     imported: &[TransferTodo],
 ) -> Result<ImportResult, String> {
     let local_versions = local_versions(connection)?;
+    let local_group_versions = local_group_versions(connection)?;
     let local_device_id = device_id(connection).map_err(database_error)?;
     let transaction = connection.transaction().map_err(database_error)?;
     let mut result = ImportResult {
@@ -316,6 +381,16 @@ fn merge_todos(
         updated: 0,
         unchanged: 0,
     };
+
+    for group in imported_groups {
+        match local_group_versions.get(&group.uuid) {
+            None => insert_group(&transaction, group, &local_device_id)?,
+            Some(local_updated_at) if group.updated_at > *local_updated_at => {
+                update_group(&transaction, group, &local_device_id)?;
+            }
+            Some(_) => {}
+        }
+    }
 
     for todo in imported {
         match local_versions.get(&todo.uuid) {
@@ -346,6 +421,73 @@ fn local_versions(connection: &Connection) -> Result<HashMap<String, i64>, Strin
         .map_err(database_error)
 }
 
+fn local_group_versions(connection: &Connection) -> Result<HashMap<String, i64>, String> {
+    let mut statement = connection
+        .prepare("SELECT uuid, updated_at FROM groups")
+        .map_err(database_error)?;
+    let rows = statement
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .map_err(database_error)?;
+    rows.collect::<Result<HashMap<_, _>, _>>()
+        .map_err(database_error)
+}
+
+fn insert_group(
+    connection: &Connection,
+    group: &TransferGroup,
+    updated_by: &str,
+) -> Result<(), String> {
+    connection
+        .execute(
+            "
+            INSERT INTO groups (
+                uuid, name, color, sort_order, created_at, updated_at, deleted_at, updated_by
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            ",
+            params![
+                group.uuid,
+                group.name.trim(),
+                group.color,
+                group.sort_order,
+                group.created_at,
+                group.updated_at,
+                group.deleted_at,
+                updated_by,
+            ],
+        )
+        .map(|_| ())
+        .map_err(database_error)
+}
+
+fn update_group(
+    connection: &Connection,
+    group: &TransferGroup,
+    updated_by: &str,
+) -> Result<(), String> {
+    connection
+        .execute(
+            "
+            UPDATE groups
+            SET name = ?1, color = ?2, sort_order = ?3, created_at = ?4,
+                updated_at = ?5, deleted_at = ?6, updated_by = ?7
+            WHERE uuid = ?8
+            ",
+            params![
+                group.name.trim(),
+                group.color,
+                group.sort_order,
+                group.created_at,
+                group.updated_at,
+                group.deleted_at,
+                updated_by,
+                group.uuid,
+            ],
+        )
+        .map(|_| ())
+        .map_err(database_error)
+}
+
 fn insert_todo(
     connection: &Connection,
     todo: &TransferTodo,
@@ -355,14 +497,15 @@ fn insert_todo(
         .execute(
             "
             INSERT INTO todos (
-                uuid, title, completed, pinned, sort_order, created_at, updated_at,
+                uuid, title, group_uuid, completed, pinned, sort_order, created_at, updated_at,
                 completed_at, deleted_at, due_date, due_at, reminder_at, updated_by
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
             ",
             params![
                 todo.uuid,
                 todo.title.trim(),
+                todo.group_uuid,
                 todo.completed,
                 todo.pinned,
                 todo.sort_order,
@@ -392,8 +535,8 @@ fn update_todo(
             SET title = ?1, completed = ?2, pinned = ?3, sort_order = ?4,
                 created_at = ?5, updated_at = ?6, completed_at = ?7,
                 deleted_at = ?8, due_date = ?9, due_at = ?10, reminder_at = ?11,
-                updated_by = ?12
-            WHERE uuid = ?13
+                group_uuid = ?12, updated_by = ?13
+            WHERE uuid = ?14
             ",
             params![
                 todo.title.trim(),
@@ -407,6 +550,7 @@ fn update_todo(
                 todo.due_date,
                 todo.due_at,
                 todo.reminder_at,
+                todo.group_uuid,
                 updated_by,
                 todo.uuid,
             ],
@@ -419,16 +563,29 @@ fn map_transfer_todo(row: &rusqlite::Row<'_>) -> rusqlite::Result<TransferTodo> 
     Ok(TransferTodo {
         uuid: row.get(0)?,
         title: row.get(1)?,
-        completed: row.get::<_, i64>(2)? != 0,
-        pinned: row.get::<_, i64>(3)? != 0,
-        sort_order: row.get(4)?,
-        created_at: row.get(5)?,
-        updated_at: row.get(6)?,
-        completed_at: row.get(7)?,
-        deleted_at: row.get(8)?,
-        due_date: row.get(9)?,
-        due_at: row.get(10)?,
-        reminder_at: row.get(11)?,
+        group_uuid: row.get(2)?,
+        completed: row.get::<_, i64>(3)? != 0,
+        pinned: row.get::<_, i64>(4)? != 0,
+        sort_order: row.get(5)?,
+        created_at: row.get(6)?,
+        updated_at: row.get(7)?,
+        completed_at: row.get(8)?,
+        deleted_at: row.get(9)?,
+        due_date: row.get(10)?,
+        due_at: row.get(11)?,
+        reminder_at: row.get(12)?,
+    })
+}
+
+fn map_transfer_group(row: &rusqlite::Row<'_>) -> rusqlite::Result<TransferGroup> {
+    Ok(TransferGroup {
+        uuid: row.get(0)?,
+        name: row.get(1)?,
+        color: row.get(2)?,
+        sort_order: row.get(3)?,
+        created_at: row.get(4)?,
+        updated_at: row.get(5)?,
+        deleted_at: row.get(6)?,
     })
 }
 
@@ -497,6 +654,7 @@ mod tests {
         TransferTodo {
             uuid: uuid.to_string(),
             title: title.to_string(),
+            group_uuid: None,
             completed: false,
             pinned: false,
             sort_order: 0,
@@ -510,28 +668,49 @@ mod tests {
         }
     }
 
+    fn group(uuid: &str, name: &str, updated_at: i64) -> TransferGroup {
+        TransferGroup {
+            uuid: uuid.to_string(),
+            name: name.to_string(),
+            color: "yellow".to_string(),
+            sort_order: 0,
+            created_at: 1,
+            updated_at,
+            deleted_at: None,
+        }
+    }
+
     #[test]
     fn export_and_import_round_trip_including_deleted_todos() {
         let mut source = connection();
         let mut active = todo("00000000-0000-4000-8000-000000000001", "active", 2);
         active.pinned = true;
         active.due_date = Some("2026-06-10".to_string());
+        let work = group("00000000-0000-4000-8000-0000000000aa", "工作", 2);
+        active.group_uuid = Some(work.uuid.clone());
         let mut deleted = todo("00000000-0000-4000-8000-000000000002", "deleted", 3);
         deleted.deleted_at = Some(3);
-        merge_todos(&mut source, &[active.clone(), deleted.clone()]).unwrap();
+        merge_transfer(
+            &mut source,
+            std::slice::from_ref(&work),
+            &[active.clone(), deleted.clone()],
+        )
+        .unwrap();
 
         let export = TodoExport {
             format_version: FORMAT_VERSION,
             exported_at: 10,
+            groups: read_all_groups(&source).unwrap(),
             todos: read_all_todos(&source).unwrap(),
         };
         let json = serde_json::to_string(&export).unwrap();
         let exported: TodoExport = serde_json::from_str(&json).unwrap();
         validate_import(&exported).unwrap();
         let mut destination = connection();
-        let result = merge_todos(&mut destination, &exported.todos).unwrap();
+        let result = merge_transfer(&mut destination, &exported.groups, &exported.todos).unwrap();
 
         assert_eq!(result.added, 2);
+        assert_eq!(read_all_groups(&destination).unwrap(), vec![work]);
         assert_eq!(read_all_todos(&destination).unwrap(), vec![active, deleted]);
     }
 
@@ -539,7 +718,7 @@ mod tests {
     fn creates_a_readable_sqlite_backup() {
         let mut source = connection();
         let active = todo("00000000-0000-4000-8000-000000000005", "backup", 2);
-        merge_todos(&mut source, &[active]).unwrap();
+        merge_transfer(&mut source, &[], &[active]).unwrap();
         let path = std::env::temp_dir().join(format!("eggdone-{}.sqlite3", Uuid::new_v4()));
 
         backup_connection(&source, &path).unwrap();
@@ -557,12 +736,12 @@ mod tests {
     fn merge_updates_only_when_import_is_newer() {
         let mut connection = connection();
         let uuid = "00000000-0000-4000-8000-000000000003";
-        merge_todos(&mut connection, &[todo(uuid, "local", 10)]).unwrap();
+        merge_transfer(&mut connection, &[], &[todo(uuid, "local", 10)]).unwrap();
 
-        let old_result = merge_todos(&mut connection, &[todo(uuid, "old", 9)]).unwrap();
+        let old_result = merge_transfer(&mut connection, &[], &[todo(uuid, "old", 9)]).unwrap();
         assert_eq!(old_result.unchanged, 1);
 
-        let new_result = merge_todos(&mut connection, &[todo(uuid, "new", 11)]).unwrap();
+        let new_result = merge_transfer(&mut connection, &[], &[todo(uuid, "new", 11)]).unwrap();
         assert_eq!(new_result.updated, 1);
         assert_eq!(read_all_todos(&connection).unwrap()[0].title, "new");
     }
@@ -573,6 +752,7 @@ mod tests {
         let future = TodoExport {
             format_version: FORMAT_VERSION + 1,
             exported_at: 1,
+            groups: vec![],
             todos: vec![],
         };
         assert!(validate_import(&future).is_err());
@@ -580,6 +760,7 @@ mod tests {
         let duplicated = TodoExport {
             format_version: FORMAT_VERSION,
             exported_at: 1,
+            groups: vec![],
             todos: vec![shared.clone(), shared],
         };
         assert!(validate_import(&duplicated).is_err());
@@ -603,6 +784,7 @@ mod tests {
         }"#;
 
         let import: TodoExport = serde_json::from_str(json).unwrap();
+        assert!(import.groups.is_empty());
         assert!(!import.todos[0].pinned);
         assert_eq!(import.todos[0].due_date, None);
         validate_import(&import).unwrap();

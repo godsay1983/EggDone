@@ -77,11 +77,14 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::list_todos,
+            commands::list_groups,
             commands::create_todo,
+            commands::create_group,
             commands::set_todo_completed,
             commands::update_todo_title,
             commands::set_todo_pinned,
             commands::set_todo_schedule,
+            commands::set_todo_group,
             commands::reorder_todos,
             commands::delete_todo,
             commands::restore_todo,

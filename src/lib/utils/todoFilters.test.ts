@@ -13,6 +13,7 @@ function makeTodo(
     id,
     uuid: `00000000-0000-4000-8000-${id.toString().padStart(12, "0")}`,
     title,
+    group_uuid: null,
     completed,
     pinned: false,
     sort_order: id * 1024,
@@ -88,5 +89,26 @@ describe("filterTodos", () => {
         now: new Date("2026-06-09T12:00:00+08:00"),
       }).map((todo) => todo.id),
     ).toEqual([1]);
+  });
+
+  it("filters by group and ungrouped tasks", () => {
+    const grouped = [
+      makeTodo(1, "work", false, {
+        group_uuid: "00000000-0000-4000-8000-0000000000aa",
+      }),
+      makeTodo(2, "plain"),
+      makeTodo(3, "home", false, {
+        group_uuid: "00000000-0000-4000-8000-0000000000bb",
+      }),
+    ];
+
+    expect(
+      filterTodos(grouped, "", true, {
+        groupUuid: "00000000-0000-4000-8000-0000000000aa",
+      }).map((todo) => todo.id),
+    ).toEqual([1]);
+    expect(
+      filterTodos(grouped, "", true, { groupUuid: null }).map((todo) => todo.id),
+    ).toEqual([2]);
   });
 });

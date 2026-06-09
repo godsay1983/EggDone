@@ -3,16 +3,18 @@ import { derived, writable } from "svelte/store";
 import { todoApi } from "$lib/api/todoApi";
 import type { TodoScheduleInput } from "$lib/api/todoApi";
 import { scheduleAutoSync } from "$lib/sync/autoSync";
-import type { Todo } from "$lib/types";
+import type { Todo, TodoGroup } from "$lib/types";
 
 export interface TodoState {
   items: Todo[];
+  groups: TodoGroup[];
   loading: boolean;
   error: string | null;
 }
 
 const initialState: TodoState = {
   items: [],
+  groups: [],
   loading: true,
   error: null,
 };
@@ -26,8 +28,8 @@ export function createTodoStore(api = todoApi, onChanged = scheduleAutoSync) {
     async load() {
       update((state) => ({ ...state, loading: true, error: null }));
       try {
-        const items = await api.list();
-        update(() => ({ items, loading: false, error: null }));
+        const [items, groups] = await Promise.all([api.list(), api.listGroups()]);
+        update(() => ({ items, groups, loading: false, error: null }));
       } catch (error) {
         update((state) => ({
           ...state,
@@ -39,8 +41,8 @@ export function createTodoStore(api = todoApi, onChanged = scheduleAutoSync) {
 
     async refresh() {
       try {
-        const items = await api.list();
-        update((state) => ({ ...state, items, error: null }));
+        const [items, groups] = await Promise.all([api.list(), api.listGroups()]);
+        update((state) => ({ ...state, items, groups, error: null }));
       } catch (error) {
         update((state) => ({
           ...state,
@@ -49,8 +51,8 @@ export function createTodoStore(api = todoApi, onChanged = scheduleAutoSync) {
       }
     },
 
-    async add(title: string) {
-      const todo = await api.create(title);
+    async add(title: string, groupUuid: string | null = null) {
+      const todo = await api.create(title, groupUuid);
       update((state) => ({
         ...state,
         items: [todo, ...state.items],
@@ -95,8 +97,31 @@ export function createTodoStore(api = todoApi, onChanged = scheduleAutoSync) {
       onChanged();
     },
 
+    async addGroup(name: string) {
+      const group = await api.createGroup(name);
+      update((state) => ({
+        ...state,
+        groups: [...state.groups, group].sort(sortGroups),
+        error: null,
+      }));
+      onChanged();
+      return group;
+    },
+
     async setSchedule(id: number, schedule: TodoScheduleInput) {
       const updatedTodo = await api.setSchedule(id, schedule);
+      update((state) => ({
+        ...state,
+        items: state.items.map((item) =>
+          item.id === updatedTodo.id ? updatedTodo : item,
+        ),
+        error: null,
+      }));
+      onChanged();
+    },
+
+    async setGroup(todo: Todo, groupUuid: string | null) {
+      const updatedTodo = await api.setGroup(todo.id, groupUuid);
       update((state) => ({
         ...state,
         items: state.items.map((item) =>
@@ -185,6 +210,10 @@ function sortTodos(left: Todo, right: Todo) {
     return Number(right.pinned) - Number(left.pinned);
   }
   return left.sort_order - right.sort_order;
+}
+
+function sortGroups(left: TodoGroup, right: TodoGroup) {
+  return left.sort_order - right.sort_order || left.created_at - right.created_at;
 }
 
 function getErrorMessage(error: unknown) {

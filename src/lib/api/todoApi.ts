@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import type { Todo } from "$lib/types";
+import type { Todo, TodoGroup } from "$lib/types";
 
 export interface TodoScheduleInput {
   due_date: string | null;
@@ -13,8 +13,16 @@ export const todoApi = {
     return invoke<Todo[]>("list_todos");
   },
 
-  create(title: string): Promise<Todo> {
-    return invoke<Todo>("create_todo", { title });
+  listGroups(): Promise<TodoGroup[]> {
+    return invoke<TodoGroup[]>("list_groups");
+  },
+
+  create(title: string, groupUuid: string | null = null): Promise<Todo> {
+    return invoke<Todo>("create_todo", { title, groupUuid });
+  },
+
+  createGroup(name: string): Promise<TodoGroup> {
+    return invoke<TodoGroup>("create_group", { name });
   },
 
   setCompleted(id: number, completed: boolean): Promise<Todo> {
@@ -36,6 +44,10 @@ export const todoApi = {
       dueAt: schedule.due_at,
       reminderAt: schedule.reminder_at,
     });
+  },
+
+  setGroup(id: number, groupUuid: string | null): Promise<Todo> {
+    return invoke<Todo>("set_todo_group", { id, groupUuid });
   },
 
   reorder(orderedIds: number[]): Promise<Todo[]> {

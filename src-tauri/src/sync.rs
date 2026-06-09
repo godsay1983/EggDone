@@ -15,6 +15,8 @@ pub(crate) const SYNC_FORMAT_VERSION: u32 = 1;
 pub(crate) struct SyncTodo {
     pub uuid: String,
     pub title: String,
+    #[serde(default)]
+    pub group_uuid: Option<String>,
     pub completed: bool,
     #[serde(default)]
     pub pinned: bool,
@@ -33,10 +35,24 @@ pub(crate) struct SyncTodo {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct SyncGroup {
+    pub uuid: String,
+    pub name: String,
+    pub color: String,
+    pub sort_order: i64,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub deleted_at: Option<i64>,
+    pub updated_by: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub(crate) struct SyncDocument {
     pub format_version: u32,
     pub device_id: String,
     pub generated_at: i64,
+    #[serde(default)]
+    pub groups: Vec<SyncGroup>,
     pub todos: Vec<SyncTodo>,
 }
 
@@ -45,10 +61,25 @@ pub(crate) fn build_document(
     generated_at: i64,
 ) -> Result<SyncDocument, String> {
     let device_id = device_id(connection).map_err(database_error)?;
+    let mut group_statement = connection
+        .prepare(
+            "
+            SELECT uuid, name, color, sort_order, created_at, updated_at, deleted_at, updated_by
+            FROM groups
+            ORDER BY uuid ASC
+            ",
+        )
+        .map_err(database_error)?;
+    let groups = group_statement
+        .query_map([], map_sync_group)
+        .map_err(database_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(database_error)?;
+
     let mut statement = connection
         .prepare(
             "
-            SELECT uuid, title, completed, pinned, sort_order, created_at, updated_at,
+            SELECT uuid, title, group_uuid, completed, pinned, sort_order, created_at, updated_at,
                    completed_at, deleted_at, due_date, due_at, reminder_at, updated_by
             FROM todos
             ORDER BY uuid ASC
@@ -65,6 +96,7 @@ pub(crate) fn build_document(
         format_version: SYNC_FORMAT_VERSION,
         device_id,
         generated_at,
+        groups,
         todos,
     })
 }
@@ -76,6 +108,18 @@ pub(crate) fn merge_documents(
 ) -> Result<SyncDocument, String> {
     validate_document(local)?;
     validate_document(remote)?;
+
+    let mut merged_groups = BTreeMap::<String, SyncGroup>::new();
+    for group in local.groups.iter().chain(&remote.groups) {
+        merged_groups
+            .entry(group.uuid.clone())
+            .and_modify(|current| {
+                if compare_groups(group, current).is_gt() {
+                    *current = group.clone();
+                }
+            })
+            .or_insert_with(|| group.clone());
+    }
 
     let mut merged = BTreeMap::<String, SyncTodo>::new();
     for todo in local.todos.iter().chain(&remote.todos) {
@@ -93,6 +137,7 @@ pub(crate) fn merge_documents(
         format_version: SYNC_FORMAT_VERSION,
         device_id: local.device_id.clone(),
         generated_at,
+        groups: merged_groups.into_values().collect(),
         todos: merged.into_values().collect(),
     })
 }
@@ -106,17 +151,49 @@ pub(crate) fn merge_remote_document(
     let merged = merge_documents(&local, remote, generated_at)?;
     let transaction = connection.transaction().map_err(database_error)?;
 
+    for group in &merged.groups {
+        transaction
+            .execute(
+                "
+                INSERT INTO groups (
+                    uuid, name, color, sort_order, created_at, updated_at, deleted_at, updated_by
+                )
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                ON CONFLICT(uuid) DO UPDATE SET
+                    name = excluded.name,
+                    color = excluded.color,
+                    sort_order = excluded.sort_order,
+                    created_at = excluded.created_at,
+                    updated_at = excluded.updated_at,
+                    deleted_at = excluded.deleted_at,
+                    updated_by = excluded.updated_by
+                ",
+                params![
+                    group.uuid,
+                    group.name.trim(),
+                    group.color,
+                    group.sort_order,
+                    group.created_at,
+                    group.updated_at,
+                    group.deleted_at,
+                    group.updated_by,
+                ],
+            )
+            .map_err(database_error)?;
+    }
+
     for todo in &merged.todos {
         transaction
             .execute(
                 "
                 INSERT INTO todos (
-                    uuid, title, completed, pinned, sort_order, created_at, updated_at,
+                    uuid, title, group_uuid, completed, pinned, sort_order, created_at, updated_at,
                     completed_at, deleted_at, due_date, due_at, reminder_at, updated_by
                 )
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
                 ON CONFLICT(uuid) DO UPDATE SET
                     title = excluded.title,
+                    group_uuid = excluded.group_uuid,
                     completed = excluded.completed,
                     pinned = excluded.pinned,
                     sort_order = excluded.sort_order,
@@ -132,6 +209,7 @@ pub(crate) fn merge_remote_document(
                 params![
                     todo.uuid,
                     todo.title.trim(),
+                    todo.group_uuid,
                     todo.completed,
                     todo.pinned,
                     todo.sort_order,
@@ -163,6 +241,28 @@ pub(crate) fn validate_document(document: &SyncDocument) -> Result<(), String> {
         return Err("同步文件 generated_at 无效".to_string());
     }
 
+    let mut group_uuids = HashSet::new();
+    for group in &document.groups {
+        if Uuid::parse_str(&group.uuid).is_err() {
+            return Err(format!("同步分组 UUID 无效：{}", group.uuid));
+        }
+        if Uuid::parse_str(&group.updated_by).is_err() {
+            return Err(format!("同步分组 updated_by 无效：{}", group.updated_by));
+        }
+        if !group_uuids.insert(&group.uuid) {
+            return Err(format!("同步文件包含重复分组 UUID：{}", group.uuid));
+        }
+        if group.name.trim().is_empty() {
+            return Err("同步文件包含空分组名称".to_string());
+        }
+        if group.created_at < 0
+            || group.updated_at < 0
+            || group.deleted_at.is_some_and(|value| value < 0)
+        {
+            return Err("同步文件包含无效分组时间戳".to_string());
+        }
+    }
+
     let mut uuids = HashSet::new();
     for todo in &document.todos {
         if Uuid::parse_str(&todo.uuid).is_err() {
@@ -170,6 +270,16 @@ pub(crate) fn validate_document(document: &SyncDocument) -> Result<(), String> {
         }
         if Uuid::parse_str(&todo.updated_by).is_err() {
             return Err(format!("同步任务 updated_by 无效：{}", todo.updated_by));
+        }
+        if todo
+            .group_uuid
+            .as_deref()
+            .is_some_and(|value| Uuid::parse_str(value).is_err())
+        {
+            return Err(format!(
+                "同步任务分组 UUID 无效：{}",
+                todo.group_uuid.as_deref().unwrap_or_default()
+            ));
         }
         if !uuids.insert(&todo.uuid) {
             return Err(format!("同步文件包含重复 UUID：{}", todo.uuid));
@@ -208,12 +318,34 @@ fn compare_todos(left: &SyncTodo, right: &SyncTodo) -> Ordering {
         .then_with(|| canonical_tie_break(left).cmp(&canonical_tie_break(right)))
 }
 
+fn compare_groups(left: &SyncGroup, right: &SyncGroup) -> Ordering {
+    left.updated_at
+        .cmp(&right.updated_at)
+        .then_with(|| left.deleted_at.is_some().cmp(&right.deleted_at.is_some()))
+        .then_with(|| left.updated_by.cmp(&right.updated_by))
+        .then_with(|| {
+            (
+                left.sort_order,
+                left.name.as_str(),
+                left.color.as_str(),
+                left.created_at,
+            )
+                .cmp(&(
+                    right.sort_order,
+                    right.name.as_str(),
+                    right.color.as_str(),
+                    right.created_at,
+                ))
+        })
+}
+
 fn canonical_tie_break(
     todo: &SyncTodo,
 ) -> (
     bool,
     bool,
     Option<i64>,
+    Option<&str>,
     Option<&str>,
     Option<i64>,
     Option<i64>,
@@ -225,6 +357,7 @@ fn canonical_tie_break(
         todo.completed,
         todo.pinned,
         todo.completed_at,
+        todo.group_uuid.as_deref(),
         todo.due_date.as_deref(),
         todo.due_at,
         todo.reminder_at,
@@ -238,17 +371,31 @@ fn map_sync_todo(row: &rusqlite::Row<'_>) -> rusqlite::Result<SyncTodo> {
     Ok(SyncTodo {
         uuid: row.get(0)?,
         title: row.get(1)?,
-        completed: row.get::<_, i64>(2)? != 0,
-        pinned: row.get::<_, i64>(3)? != 0,
-        sort_order: row.get(4)?,
-        created_at: row.get(5)?,
-        updated_at: row.get(6)?,
-        completed_at: row.get(7)?,
-        deleted_at: row.get(8)?,
-        due_date: row.get(9)?,
-        due_at: row.get(10)?,
-        reminder_at: row.get(11)?,
-        updated_by: row.get(12)?,
+        group_uuid: row.get(2)?,
+        completed: row.get::<_, i64>(3)? != 0,
+        pinned: row.get::<_, i64>(4)? != 0,
+        sort_order: row.get(5)?,
+        created_at: row.get(6)?,
+        updated_at: row.get(7)?,
+        completed_at: row.get(8)?,
+        deleted_at: row.get(9)?,
+        due_date: row.get(10)?,
+        due_at: row.get(11)?,
+        reminder_at: row.get(12)?,
+        updated_by: row.get(13)?,
+    })
+}
+
+fn map_sync_group(row: &rusqlite::Row<'_>) -> rusqlite::Result<SyncGroup> {
+    Ok(SyncGroup {
+        uuid: row.get(0)?,
+        name: row.get(1)?,
+        color: row.get(2)?,
+        sort_order: row.get(3)?,
+        created_at: row.get(4)?,
+        updated_at: row.get(5)?,
+        deleted_at: row.get(6)?,
+        updated_by: row.get(7)?,
     })
 }
 
@@ -306,6 +453,7 @@ mod tests {
             format_version: SYNC_FORMAT_VERSION,
             device_id: device_id.to_string(),
             generated_at: 20,
+            groups: vec![],
             todos,
         }
     }
@@ -314,6 +462,7 @@ mod tests {
         SyncTodo {
             uuid: TODO_ID.to_string(),
             title: title.to_string(),
+            group_uuid: None,
             completed: false,
             pinned: false,
             sort_order: 0,
@@ -338,6 +487,7 @@ mod tests {
         let second = build_document(&connection, 11).unwrap();
 
         assert_eq!(first.format_version, SYNC_FORMAT_VERSION);
+        assert!(first.groups.is_empty());
         assert_eq!(first.device_id, second.device_id);
         assert!(Uuid::parse_str(&first.device_id).is_ok());
     }
@@ -435,6 +585,46 @@ mod tests {
     }
 
     #[test]
+    fn persists_remote_groups_and_todo_membership() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        configure_connection(&connection).unwrap();
+        migrate(&mut connection).unwrap();
+
+        let group = SyncGroup {
+            uuid: "00000000-0000-4000-8000-0000000000aa".to_string(),
+            name: "工作".to_string(),
+            color: "yellow".to_string(),
+            sort_order: 0,
+            created_at: 1,
+            updated_at: 2,
+            deleted_at: None,
+            updated_by: DEVICE_B.to_string(),
+        };
+        let mut grouped_todo = todo("remote grouped", 3, DEVICE_B);
+        grouped_todo.group_uuid = Some(group.uuid.clone());
+
+        merge_remote_document(
+            &mut connection,
+            &SyncDocument {
+                format_version: SYNC_FORMAT_VERSION,
+                device_id: DEVICE_B.to_string(),
+                generated_at: 4,
+                groups: vec![group.clone()],
+                todos: vec![grouped_todo],
+            },
+            5,
+        )
+        .unwrap();
+
+        let persisted = build_document(&connection, 6).unwrap();
+        assert_eq!(persisted.groups, vec![group]);
+        assert_eq!(
+            persisted.todos[0].group_uuid.as_deref(),
+            Some(persisted.groups[0].uuid.as_str())
+        );
+    }
+
+    #[test]
     fn reads_legacy_sync_document_without_pinned_field() {
         let json = format!(
             r#"{{
@@ -457,6 +647,7 @@ mod tests {
 
         let document: SyncDocument = serde_json::from_str(&json).unwrap();
         assert!(!document.todos[0].pinned);
+        assert!(document.groups.is_empty());
         assert_eq!(document.todos[0].due_date, None);
         validate_document(&document).unwrap();
     }

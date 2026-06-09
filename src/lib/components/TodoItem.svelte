@@ -3,7 +3,7 @@
   import { fly } from "svelte/transition";
 
   import type { TodoScheduleInput } from "$lib/api/todoApi";
-  import type { Todo } from "$lib/types";
+  import type { Todo, TodoGroup } from "$lib/types";
   import {
     formatDueLabel,
     getDueTone,
@@ -25,6 +25,8 @@
   export let onPin: (todo: Todo, pinned: boolean) => Promise<void>;
   export let onSchedule: (id: number, schedule: TodoScheduleInput) => Promise<void>;
   export let onSnooze: (todo: Todo, reminderAt: number) => Promise<void>;
+  export let groups: TodoGroup[] = [];
+  export let onGroupChange: (todo: Todo, groupUuid: string | null) => Promise<void>;
   export let onDelete: (id: number) => Promise<void>;
   export let onMove: (todo: Todo, direction: -1 | 1) => Promise<void>;
   export let onDragStart: (todo: Todo, event: PointerEvent) => void;
@@ -44,6 +46,7 @@
   let customDate = "";
   let customReminderDateTime = "";
   let reminderChoice: ReminderChoice = "none";
+  let groupSaving = false;
   let actionsOpen = false;
   let editInput: HTMLInputElement;
   let itemElement: HTMLElement;
@@ -169,6 +172,17 @@
       hour: "2-digit",
       minute: "2-digit",
     }).format(new Date(reminderAt));
+  }
+
+  async function moveToGroup(value: string) {
+    if (groupSaving) return;
+    groupSaving = true;
+    try {
+      await onGroupChange(todo, value === "ungrouped" ? null : value);
+      actionsOpen = false;
+    } finally {
+      groupSaving = false;
+    }
   }
 
   async function saveEdit() {
@@ -387,6 +401,24 @@
         <button type="button" role="menuitem" onclick={toggleSchedule}>
           设置日期
         </button>
+        {#if groups.length > 0}
+          <label class="group-move">
+            <span>移动到</span>
+            <select
+              value={todo.group_uuid ?? "ungrouped"}
+              disabled={groupSaving}
+              onchange={(event) => {
+                const value = event.currentTarget.value;
+                void moveToGroup(value);
+              }}
+            >
+              <option value="ungrouped">未分组</option>
+              {#each groups as group (group.uuid)}
+                <option value={group.uuid}>{group.name}</option>
+              {/each}
+            </select>
+          </label>
+        {/if}
         {#if todo.reminder_at !== null && !todo.completed}
           <button
             type="button"
