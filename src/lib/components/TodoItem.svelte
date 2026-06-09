@@ -24,7 +24,7 @@
   export let isDragTarget = false;
   export let reorderDisabled = false;
 
-  type ReminderChoice = "none" | "same-day-9" | "previous-day-9";
+  type ReminderChoice = "none" | "same-day-9" | "previous-day-9" | "custom";
 
   let editing = false;
   let editTitle = "";
@@ -34,6 +34,7 @@
   let scheduleSaving = false;
   let scheduleError = "";
   let customDate = "";
+  let customReminderDateTime = "";
   let reminderChoice: ReminderChoice = "none";
   let actionsOpen = false;
   let editInput: HTMLInputElement;
@@ -41,6 +42,9 @@
   let animationDuration = 140;
   $: dueLabel = formatDueLabel(todo);
   $: dueTone = getDueTone(todo);
+  $: canSaveSchedule =
+    Boolean(customDate) &&
+    (reminderChoice !== "custom" || Boolean(customReminderDateTime));
 
   onMount(() => {
     animationDuration = window.matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -99,6 +103,10 @@
     scheduleError = "";
     customDate = todo.due_date ?? localDateString(0);
     reminderChoice = inferReminderChoice(todo.due_date, todo.reminder_at);
+    customReminderDateTime =
+      todo.reminder_at !== null
+        ? timestampToDateTimeLocal(todo.reminder_at)
+        : defaultCustomReminderDateTime(customDate);
   }
 
   function toggleActions() {
@@ -109,13 +117,19 @@
 
   async function setDateOnly(date: string | null) {
     if (scheduleSaving) return;
+    const reminderAt = date ? reminderAtForDate(date, reminderChoice) : null;
+    if (date && reminderChoice === "custom" && reminderAt === null) {
+      scheduleError = "请选择提醒时间";
+      return;
+    }
+
     scheduleSaving = true;
     scheduleError = "";
     try {
       await onSchedule(todo.id, {
         due_date: date,
         due_at: null,
-        reminder_at: date ? reminderAtForDate(date, reminderChoice) : null,
+        reminder_at: reminderAt,
       });
       scheduleOpen = false;
     } catch {
@@ -134,13 +148,26 @@
     const previousDay = localReminderTime(dueDate, -1);
     if (reminderAt === sameDay) return "same-day-9";
     if (reminderAt === previousDay) return "previous-day-9";
-    return "none";
+    return "custom";
   }
 
   function reminderAtForDate(date: string, choice: ReminderChoice) {
     if (choice === "same-day-9") return localReminderTime(date, 0);
     if (choice === "previous-day-9") return localReminderTime(date, -1);
+    if (choice === "custom") return dateTimeLocalToTimestamp(customReminderDateTime);
     return null;
+  }
+
+  function handleReminderChoiceChange() {
+    if (reminderChoice === "custom" && !customReminderDateTime) {
+      customReminderDateTime = defaultCustomReminderDateTime(customDate || localDateString(0));
+    }
+  }
+
+  function handleCustomDateChange() {
+    if (reminderChoice !== "custom" || !customDate) return;
+    const time = customReminderDateTime.split("T")[1] || "09:00";
+    customReminderDateTime = `${customDate}T${time}`;
   }
 
   function localReminderTime(date: string, offsetDays: number) {
@@ -148,6 +175,40 @@
     const reminderDate = new Date(year, month - 1, day, 9, 0, 0, 0);
     reminderDate.setDate(reminderDate.getDate() + offsetDays);
     return reminderDate.getTime();
+  }
+
+  function defaultCustomReminderDateTime(date: string) {
+    return `${date}T09:00`;
+  }
+
+  function timestampToDateTimeLocal(timestamp: number) {
+    const date = new Date(timestamp);
+    const year = date.getFullYear();
+    const month = padDatePart(date.getMonth() + 1);
+    const day = padDatePart(date.getDate());
+    const hour = padDatePart(date.getHours());
+    const minute = padDatePart(date.getMinutes());
+    return `${year}-${month}-${day}T${hour}:${minute}`;
+  }
+
+  function dateTimeLocalToTimestamp(value: string) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
+    if (!match) return null;
+    const [, year, month, day, hour, minute] = match;
+    const timestamp = new Date(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      Number(hour),
+      Number(minute),
+      0,
+      0,
+    ).getTime();
+    return Number.isFinite(timestamp) && timestamp >= 0 ? timestamp : null;
+  }
+
+  function padDatePart(value: number) {
+    return value.toString().padStart(2, "0");
   }
 
   function formatReminderLabel(reminderAt: number | null) {
@@ -313,19 +374,39 @@
           </div>
           <label>
             <span>自定义</span>
-            <input type="date" bind:value={customDate} disabled={scheduleSaving} />
+            <input
+              type="date"
+              bind:value={customDate}
+              disabled={scheduleSaving}
+              onchange={handleCustomDateChange}
+            />
           </label>
           <label>
             <span>提醒</span>
-            <select bind:value={reminderChoice} disabled={scheduleSaving}>
+            <select
+              bind:value={reminderChoice}
+              disabled={scheduleSaving}
+              onchange={handleReminderChoiceChange}
+            >
               <option value="none">不提醒</option>
               <option value="same-day-9">当天 9:00</option>
               <option value="previous-day-9">提前一天 9:00</option>
+              <option value="custom">指定时间</option>
             </select>
           </label>
+          {#if reminderChoice === "custom"}
+            <label>
+              <span>提醒时间</span>
+              <input
+                type="datetime-local"
+                bind:value={customReminderDateTime}
+                disabled={scheduleSaving}
+              />
+            </label>
+          {/if}
           <div class="schedule-footer">
             <button type="button" disabled={scheduleSaving} onclick={() => void setDateOnly(null)}>清除</button>
-            <button type="button" disabled={scheduleSaving || !customDate} onclick={() => void setDateOnly(customDate)}>保存</button>
+            <button type="button" disabled={scheduleSaving || !canSaveSchedule} onclick={() => void setDateOnly(customDate)}>保存</button>
           </div>
           {#if scheduleError}<small>{scheduleError}</small>{/if}
         </div>
