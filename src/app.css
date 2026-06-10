@@ -192,6 +192,38 @@ footer {
   opacity: 0.45;
 }
 
+.quick-add-preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: -2px;
+  padding: 0 4px 2px 10px;
+  color: #8a7656;
+  font-size: 11px;
+}
+
+.quick-add-preview span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quick-add-preview button {
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 999px;
+  color: #8a6b22;
+  background: rgb(246 201 76 / 22%);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.quick-add-preview button:hover {
+  background: rgb(246 201 76 / 34%);
+}
+
 .todo-search {
   display: flex;
   align-items: center;
@@ -1974,6 +2006,19 @@ html[data-theme="dark"] .quick-add input {
 
 html[data-theme="dark"] .quick-add input::placeholder {
   color: #887e70;
+}
+
+html[data-theme="dark"] .quick-add-preview {
+  color: #b9aa91;
+}
+
+html[data-theme="dark"] .quick-add-preview button {
+  color: #f0cd70;
+  background: rgb(246 201 76 / 12%);
+}
+
+html[data-theme="dark"] .quick-add-preview button:hover {
+  background: rgb(246 201 76 / 18%);
 }
 
 html[data-theme="dark"] .todo-search {

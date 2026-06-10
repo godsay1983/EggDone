@@ -23,6 +23,7 @@
     filterTodos,
     type TodoListView,
   } from "$lib/utils/todoFilters";
+  import { parseQuickAdd } from "$lib/utils/quickAdd";
   import DataManager from "./DataManager.svelte";
   import SettingsPanel from "./SettingsPanel.svelte";
   import TodoItem from "./TodoItem.svelte";
@@ -41,6 +42,7 @@
   ];
 
   let title = "";
+  let quickAddParsingDisabledFor = "";
   let adding = false;
   let showAbout = false;
   let showDataManager = false;
@@ -86,6 +88,13 @@
     groupUuid: activeGroupUuid,
   });
   $: renderedTodos = applyPreviewOrder(filteredTodos, previewOrderIds);
+  $: quickAddResult = parseQuickAdd(title);
+  $: quickAddPreview =
+    title.trim().length > 0 &&
+    quickAddParsingDisabledFor !== title &&
+    quickAddResult.schedule !== null
+      ? quickAddResult
+      : null;
 
   onMount(() => {
     const unlisteners: UnlistenFn[] = [];
@@ -254,11 +263,20 @@
   async function addTodo() {
     const nextTitle = title.trim();
     if (!nextTitle || adding) return;
+    const parsed = quickAddPreview ?? {
+      title: nextTitle,
+      schedule: null,
+      label: "",
+    };
 
     adding = true;
     try {
-      await todos.add(nextTitle, newTodoGroupUuid());
+      const created = await todos.add(parsed.title, newTodoGroupUuid());
+      if (parsed.schedule) {
+        await todos.setSchedule(created.id, parsed.schedule);
+      }
       title = "";
+      quickAddParsingDisabledFor = "";
     } catch (error) {
       todos.reportError(error);
     } finally {
@@ -306,6 +324,11 @@
     } finally {
       groupSaving = false;
     }
+  }
+
+  function disableQuickAddParsing() {
+    quickAddParsingDisabledFor = title;
+    inputElement?.focus();
   }
 
   function openGroupManager() {
@@ -759,6 +782,14 @@
       {adding ? "…" : "+"}
     </button>
   </form>
+  {#if quickAddPreview}
+    <div class="quick-add-preview" role="status">
+      <span>
+        将创建“{quickAddPreview.title}”，到期 {quickAddPreview.label}
+      </span>
+      <button type="button" onclick={disableQuickAddParsing}>不解析</button>
+    </div>
+  {/if}
 
   <section class="group-filter" aria-label="任务分组">
     <div class="group-scroll">

@@ -59,6 +59,7 @@ export function createTodoStore(api = todoApi, onChanged = scheduleAutoSync) {
         error: null,
       }));
       onChanged();
+      return todo;
     },
 
     async toggle(todo: Todo) {
