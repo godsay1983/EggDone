@@ -360,6 +360,19 @@ footer {
   background: #f6c94c;
 }
 
+.group-scroll button.drag-over {
+  color: #5f4c1e;
+  background: #f6c94c;
+  box-shadow: 0 0 0 2px rgb(246 201 76 / 22%);
+  transform: translateY(-1px);
+}
+
+.group-scroll button.group-chip.drag-over {
+  color: var(--group-color-text);
+  background: var(--group-color-soft);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--group-color) 34%, transparent);
+}
+
 .group-add {
   width: 25px;
   height: 25px;
@@ -1995,6 +2008,18 @@ html[data-theme="dark"] .group-manager button:hover,
 html[data-theme="dark"] .group-scroll button.active {
   color: #352c17;
   background: #d8ae3c;
+}
+
+html[data-theme="dark"] .group-scroll button.drag-over {
+  color: #352c17;
+  background: #d8ae3c;
+  box-shadow: 0 0 0 2px rgb(216 174 60 / 20%);
+}
+
+html[data-theme="dark"] .group-scroll button.group-chip.drag-over {
+  color: var(--group-color-text);
+  background: var(--group-color-soft);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--group-color) 28%, transparent);
 }
 
 html[data-theme="dark"] .group-create input,

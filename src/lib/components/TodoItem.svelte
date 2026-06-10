@@ -34,6 +34,7 @@
   export let canMoveDown = false;
   export let isDragging = false;
   export let isDragTarget = false;
+  export let dragDisabled = false;
   export let reorderDisabled = false;
 
   let editing = false;
@@ -243,10 +244,16 @@
     class="drag-handle"
     type="button"
     aria-label={`拖动排序：${todo.title}`}
-    title={reorderDisabled ? "搜索时不可排序" : "拖动排序"}
-    disabled={reorderDisabled}
+    title={
+      dragDisabled
+        ? "当前不可拖动"
+        : reorderDisabled
+          ? "拖动到分组"
+          : "拖动排序，也可拖到分组"
+    }
+    disabled={dragDisabled}
     onpointerdown={(event) => {
-      if (event.button !== 0 || reorderDisabled) return;
+      if (event.button !== 0 || dragDisabled) return;
       event.preventDefault();
       event.stopPropagation();
       onDragStart(todo, event);

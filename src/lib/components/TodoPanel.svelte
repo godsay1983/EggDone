@@ -29,6 +29,7 @@
 
   type Theme = "light" | "dark";
   type GroupColor = "yellow" | "green" | "blue" | "peach" | "lavender" | "gray";
+  type GroupDropTarget = string | null;
 
   const groupColorOptions: Array<{ value: GroupColor; label: string }> = [
     { value: "yellow", label: "蛋黄" },
@@ -51,6 +52,7 @@
   let draggedTodo: Todo | null = null;
   let dragPointerId: number | null = null;
   let previewOrderIds: number[] | null = null;
+  let dragGroupTarget: GroupDropTarget | undefined = undefined;
   let undoTodo: Todo | null = null;
   let undoTimer: ReturnType<typeof setTimeout> | null = null;
   let confirmingClear = false;
@@ -475,16 +477,19 @@
   }
 
   function startDrag(todo: Todo, event: PointerEvent) {
-    if (reorderDisabled) return;
+    if (reorderDisabled && !canDragTodoToGroup(todo)) return;
     cancelDrag();
     draggedTodo = todo;
     dragPointerId = event.pointerId;
-    previewOrderIds = $todos.items
-      .filter(
-        (item) =>
-          item.completed === todo.completed && item.pinned === todo.pinned,
-      )
-      .map((item) => item.id);
+    dragGroupTarget = undefined;
+    previewOrderIds = reorderDisabled
+      ? null
+      : $todos.items
+          .filter(
+            (item) =>
+              item.completed === todo.completed && item.pinned === todo.pinned,
+          )
+          .map((item) => item.id);
     window.addEventListener("pointermove", moveDrag, true);
     window.addEventListener("pointerup", endDrag, true);
     window.addEventListener("pointercancel", cancelDrag, true);
@@ -493,6 +498,9 @@
   function moveDrag(event: PointerEvent) {
     if (!draggedTodo || event.pointerId !== dragPointerId) return;
     event.preventDefault();
+    dragGroupTarget = findGroupDropTarget(event.clientX, event.clientY);
+    if (dragGroupTarget !== undefined) return;
+    if (reorderDisabled) return;
     updateDragTarget(event.clientY);
   }
 
@@ -533,7 +541,22 @@
   async function endDrag(event: PointerEvent) {
     if (!draggedTodo || event.pointerId !== dragPointerId) return;
     event.preventDefault();
-    updateDragTarget(event.clientY);
+    const groupTarget = findGroupDropTarget(event.clientX, event.clientY);
+    if (groupTarget !== undefined) {
+      const todo = draggedTodo;
+      removeDragListeners();
+      resetDragState();
+      try {
+        await todos.setGroup(todo, groupTarget);
+      } catch (error) {
+        todos.reportError(error);
+      }
+      return;
+    }
+
+    if (!reorderDisabled) {
+      updateDragTarget(event.clientY);
+    }
     const orderedIds = previewOrderIds;
     const sourceCompleted = draggedTodo.completed;
     const sourcePinned = draggedTodo.pinned;
@@ -600,6 +623,32 @@
     draggedTodo = null;
     dragPointerId = null;
     previewOrderIds = null;
+    dragGroupTarget = undefined;
+  }
+
+  function canDragTodoToGroup(todo: Todo) {
+    return $todos.groups.length > 0 || todo.group_uuid !== null;
+  }
+
+  function findGroupDropTarget(clientX: number, clientY: number): GroupDropTarget | undefined {
+    if (!draggedTodo) return undefined;
+    const target = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-group-drop-target]"),
+    ).find((element) => {
+      const rect = element.getBoundingClientRect();
+      return (
+        clientX >= rect.left &&
+        clientX <= rect.right &&
+        clientY >= rect.top &&
+        clientY <= rect.bottom
+      );
+    });
+    if (!target) return undefined;
+
+    const value = target.dataset.groupDropTarget;
+    if (!value) return undefined;
+    const groupUuid = value === "ungrouped" ? null : value;
+    return groupUuid === draggedTodo.group_uuid ? undefined : groupUuid;
   }
 
   function applyPreviewOrder(items: Todo[], orderedIds: number[] | null) {
@@ -716,7 +765,10 @@
       </button>
       <button
         class:active={selectedGroup === "ungrouped"}
+        class:drag-over={dragGroupTarget === null}
+        data-group-drop-target="ungrouped"
         type="button"
+        title="拖到这里移动到未分组"
         onclick={() => setSelectedGroup("ungrouped")}
       >
         未分组
@@ -725,9 +777,11 @@
         <button
           class="group-chip"
           class:active={selectedGroup === group.uuid}
+          class:drag-over={dragGroupTarget === group.uuid}
           data-group-color={groupColorValue(group.color)}
+          data-group-drop-target={group.uuid}
           type="button"
-          title={group.name}
+          title={`拖到这里移动到${group.name}`}
           onclick={() => setSelectedGroup(group.uuid)}
         >
           <span class="group-dot" aria-hidden="true"></span>
@@ -1018,6 +1072,7 @@
             canMoveDown={groupIndex < group.length - 1}
             isDragging={draggedTodo?.id === todo.id}
             isDragTarget={draggedTodo?.id === todo.id}
+            dragDisabled={reorderDisabled && !canDragTodoToGroup(todo)}
             reorderDisabled={reorderDisabled}
           />
         </div>
