@@ -81,6 +81,9 @@
   let confirmingGroupDelete = false;
   let groupDeleteTimer: ReturnType<typeof setTimeout> | null = null;
   let searchInput: HTMLInputElement;
+  let selectedTodoId: number | null = null;
+  let editRequestTodoId: number | null = null;
+  let editRequestSeq = 0;
   $: searchActive = searchQuery.trim().length > 0;
   $: reorderDisabled = searchActive || listView === "today";
   $: todayCount = $todos.items.filter((todo) => isDueTodayOrOverdue(todo)).length;
@@ -96,6 +99,12 @@
     groupUuid: activeGroupUuid,
   });
   $: renderedTodos = applyPreviewOrder(filteredTodos, previewOrderIds);
+  $: if (
+    selectedTodoId !== null &&
+    !renderedTodos.some((todo) => todo.id === selectedTodoId)
+  ) {
+    selectedTodoId = renderedTodos[0]?.id ?? null;
+  }
   $: quickAddResult = parseQuickAdd(
     title,
     new Date(),
@@ -218,6 +227,7 @@
   function setListView(view: TodoListView) {
     listView = view;
     localStorage.setItem(LAST_LIST_VIEW_KEY, view);
+    selectedTodoId = null;
     cancelDrag();
   }
 
@@ -234,6 +244,7 @@
     localStorage.setItem("eggdone-selected-group", group);
     managingGroup = false;
     confirmingGroupDelete = false;
+    selectedTodoId = null;
     cancelDrag();
   }
 
@@ -266,7 +277,8 @@
       : "yellow";
   }
 
-  function markPanelInteraction() {
+  function markPanelInteraction(event: PointerEvent) {
+    selectTodoFromPointer(event);
     if (isTauri()) {
       void todoApi.markPanelInteraction().catch(() => {});
     }
@@ -340,6 +352,100 @@
     } catch (error) {
       todos.reportError(error);
     }
+  }
+
+  function selectTodo(id: number) {
+    selectedTodoId = id;
+  }
+
+  function selectTodoFromPointer(event: PointerEvent) {
+    if (event.button !== 0) return;
+    if (!(event.target instanceof HTMLElement)) return;
+    const item = event.target.closest<HTMLElement>("[data-todo-id]");
+    const id = Number(item?.dataset.todoId);
+    if (Number.isFinite(id)) selectedTodoId = id;
+  }
+
+  function moveKeyboardSelection(direction: -1 | 1) {
+    if (renderedTodos.length === 0) return;
+    const currentIndex = renderedTodos.findIndex(
+      (todo) => todo.id === selectedTodoId,
+    );
+    const nextIndex =
+      currentIndex === -1
+        ? direction > 0
+          ? 0
+          : renderedTodos.length - 1
+        : Math.min(
+            Math.max(currentIndex + direction, 0),
+            renderedTodos.length - 1,
+          );
+    selectedTodoId = renderedTodos[nextIndex].id;
+    requestAnimationFrame(() => {
+      document
+        .querySelector<HTMLElement>(`[data-todo-id="${selectedTodoId}"]`)
+        ?.scrollIntoView({ block: "nearest" });
+    });
+  }
+
+  function requestEditSelectedTodo() {
+    if (selectedTodoId === null) return;
+    editRequestTodoId = selectedTodoId;
+    editRequestSeq += 1;
+  }
+
+  function handlePanelKeydown(event: KeyboardEvent) {
+    if (shouldIgnoreKeyboardNavigation(event)) return;
+    if (event.key === "ArrowDown" || event.key === "j") {
+      event.preventDefault();
+      moveKeyboardSelection(1);
+      return;
+    }
+    if (event.key === "ArrowUp" || event.key === "k") {
+      event.preventDefault();
+      moveKeyboardSelection(-1);
+      return;
+    }
+    if (event.key === " ") {
+      if (selectedTodoId === null) return;
+      const todo = renderedTodos.find((item) => item.id === selectedTodoId);
+      if (!todo) return;
+      event.preventDefault();
+      void toggleTodo(todo);
+      return;
+    }
+    if (event.key === "Enter") {
+      if (selectedTodoId === null) return;
+      event.preventDefault();
+      requestEditSelectedTodo();
+      return;
+    }
+    if (event.key === "Escape" && selectedTodoId !== null) {
+      selectedTodoId = null;
+    }
+  }
+
+  function shouldIgnoreKeyboardNavigation(event: KeyboardEvent) {
+    if (event.altKey || event.ctrlKey || event.metaKey) return true;
+    if (
+      showAbout ||
+      showDataManager ||
+      showSettings ||
+      managingGroup ||
+      creatingGroup ||
+      draggedTodo
+    ) {
+      return true;
+    }
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return false;
+    const tag = target.tagName.toLowerCase();
+    return (
+      tag === "input" ||
+      tag === "textarea" ||
+      tag === "select" ||
+      target.isContentEditable
+    );
   }
 
   async function createGroup() {
@@ -726,7 +832,10 @@
   }
 </script>
 
-<svelte:window onpointerdown={markPanelInteraction} />
+<svelte:window
+  onpointerdown={markPanelInteraction}
+  onkeydown={handlePanelKeydown}
+/>
 
 <main class="panel-shell">
   <header class="panel-header">
@@ -1124,6 +1233,7 @@
         {@const group = renderedTodos.filter((item) => item.completed === todo.completed && item.pinned === todo.pinned)}
         {@const groupIndex = group.findIndex((item) => item.id === todo.id)}
         <div
+          class:selected={selectedTodoId === todo.id}
           class="todo-row"
           animate:flip={{ duration: reorderAnimationDuration }}
         >
@@ -1145,6 +1255,9 @@
             isDragTarget={draggedTodo?.id === todo.id}
             dragDisabled={reorderDisabled && !canDragTodoToGroup(todo)}
             reorderDisabled={reorderDisabled}
+            editRequest={
+              editRequestTodoId === todo.id ? editRequestSeq : 0
+            }
           />
         </div>
       {/each}

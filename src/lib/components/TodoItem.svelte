@@ -44,6 +44,7 @@
   export let isDragTarget = false;
   export let dragDisabled = false;
   export let reorderDisabled = false;
+  export let editRequest = 0;
 
   let editing = false;
   let editTitle = "";
@@ -66,6 +67,9 @@
   $: canSaveSchedule =
     Boolean(customDate) &&
     (reminderChoice !== "custom" || Boolean(customReminderDateTime));
+  $: if (editRequest > 0 && !editing) {
+    void beginEdit();
+  }
 
   onMount(() => {
     animationDuration = window.matchMedia("(prefers-reduced-motion: reduce)").matches

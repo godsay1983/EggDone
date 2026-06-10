@@ -629,6 +629,13 @@ footer {
   position: relative;
 }
 
+.todo-row.selected .todo-item {
+  border-color: #d9ad31;
+  box-shadow:
+    0 0 0 2px rgb(246 201 76 / 18%),
+    0 8px 20px rgb(106 82 37 / 8%);
+}
+
 .todo-item:hover {
   border-color: #e6dac5;
 }
@@ -2077,6 +2084,13 @@ html[data-theme="dark"] .group-scroll button.drag-over {
   color: #352c17;
   background: #d8ae3c;
   box-shadow: 0 0 0 2px rgb(216 174 60 / 20%);
+}
+
+html[data-theme="dark"] .todo-row.selected .todo-item {
+  border-color: #d8ae3c;
+  box-shadow:
+    0 0 0 2px rgb(216 174 60 / 18%),
+    0 8px 22px rgb(0 0 0 / 20%);
 }
 
 html[data-theme="dark"] .group-scroll button.group-chip.drag-over {
