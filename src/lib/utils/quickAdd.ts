@@ -9,6 +9,7 @@ export interface QuickAddResult {
   title: string;
   schedule: QuickAddSchedule | null;
   label: string;
+  groupName: string | null;
 }
 
 interface MatchedToken {
@@ -34,22 +35,40 @@ const WEEKDAY_MAP = new Map([
   ["天", 0],
 ]);
 
-export function parseQuickAdd(input: string, now = new Date()): QuickAddResult {
+export function parseQuickAdd(
+  input: string,
+  now = new Date(),
+  groupNames: string[] = [],
+): QuickAddResult {
   const originalTitle = input.trim();
   if (!originalTitle) {
     return emptyResult(originalTitle);
   }
 
   const dateMatch = findDateToken(originalTitle, now);
-  if (!dateMatch) {
+  const groupMatch = findGroupToken(originalTitle, groupNames);
+  if (!dateMatch && !groupMatch) {
     return emptyResult(originalTitle);
   }
 
   const timeMatch = findTimeToken(originalTitle);
-  const tokens = [dateMatch.token, ...(timeMatch ? [timeMatch.token] : [])];
+  const tokens = [
+    ...(dateMatch ? [dateMatch.token] : []),
+    ...(timeMatch ? [timeMatch.token] : []),
+    ...(groupMatch ? [groupMatch.token] : []),
+  ];
   const title = removeTokens(originalTitle, tokens);
   if (!title) {
     return emptyResult(originalTitle);
+  }
+
+  if (!dateMatch) {
+    return {
+      title,
+      schedule: null,
+      label: "",
+      groupName: groupMatch?.name ?? null,
+    };
   }
 
   if (timeMatch) {
@@ -68,6 +87,7 @@ export function parseQuickAdd(input: string, now = new Date()): QuickAddResult {
         repeat_rule: null,
       },
       label: `${dateMatch.label} ${timeMatch.text}`,
+      groupName: groupMatch?.name ?? null,
     };
   }
 
@@ -80,6 +100,7 @@ export function parseQuickAdd(input: string, now = new Date()): QuickAddResult {
       repeat_rule: null,
     },
     label: dateMatch.label,
+    groupName: groupMatch?.name ?? null,
   };
 }
 
@@ -88,6 +109,7 @@ function emptyResult(title: string): QuickAddResult {
     title,
     schedule: null,
     label: "",
+    groupName: null,
   };
 }
 
@@ -133,6 +155,27 @@ function findTimeToken(input: string) {
       end: start + match[1].length + 1 + match[2].length,
     },
   };
+}
+
+function findGroupToken(input: string, groupNames: string[]) {
+  if (groupNames.length === 0) return null;
+  const knownGroups = new Set(groupNames.map((name) => name.trim()));
+  const matches = input.matchAll(/(?:^|[\s，,])#([^\s#，,]+)/g);
+  for (const match of matches) {
+    if (match.index === undefined) continue;
+    const name = match[1].trim();
+    if (!knownGroups.has(name)) continue;
+    const markerIndex = match[0].indexOf("#");
+    const start = match.index + markerIndex;
+    return {
+      name,
+      token: {
+        start,
+        end: start + name.length + 1,
+      },
+    };
+  }
+  return null;
 }
 
 function daysUntilWeekday(

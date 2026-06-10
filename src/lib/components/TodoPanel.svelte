@@ -88,11 +88,15 @@
     groupUuid: activeGroupUuid,
   });
   $: renderedTodos = applyPreviewOrder(filteredTodos, previewOrderIds);
-  $: quickAddResult = parseQuickAdd(title);
+  $: quickAddResult = parseQuickAdd(
+    title,
+    new Date(),
+    $todos.groups.map((group) => group.name),
+  );
   $: quickAddPreview =
     title.trim().length > 0 &&
     quickAddParsingDisabledFor !== title &&
-    quickAddResult.schedule !== null
+    (quickAddResult.schedule !== null || quickAddResult.groupName !== null)
       ? quickAddResult
       : null;
 
@@ -224,6 +228,11 @@
       : selectedGroup;
   }
 
+  function groupUuidByName(name: string | null) {
+    if (name === null) return null;
+    return $todos.groups.find((group) => group.name === name)?.uuid ?? null;
+  }
+
   function groupLabel(group: string, groups: TodoGroup[]) {
     if (group === "all") return "全部";
     if (group === "ungrouped") return "未分组";
@@ -267,11 +276,13 @@
       title: nextTitle,
       schedule: null,
       label: "",
+      groupName: null,
     };
+    const groupUuid = groupUuidByName(parsed.groupName) ?? newTodoGroupUuid();
 
     adding = true;
     try {
-      const created = await todos.add(parsed.title, newTodoGroupUuid());
+      const created = await todos.add(parsed.title, groupUuid);
       if (parsed.schedule) {
         await todos.setSchedule(created.id, parsed.schedule);
       }
@@ -785,7 +796,9 @@
   {#if quickAddPreview}
     <div class="quick-add-preview" role="status">
       <span>
-        将创建“{quickAddPreview.title}”，到期 {quickAddPreview.label}
+        将创建“{quickAddPreview.title}”
+        {#if quickAddPreview.label}，到期 {quickAddPreview.label}{/if}
+        {#if quickAddPreview.groupName}，分组 {quickAddPreview.groupName}{/if}
       </span>
       <button type="button" onclick={disableQuickAddParsing}>不解析</button>
     </div>

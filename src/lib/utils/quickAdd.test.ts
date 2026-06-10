@@ -15,6 +15,7 @@ describe("parseQuickAdd", () => {
         repeat_rule: null,
       },
       label: "今天",
+      groupName: null,
     });
 
     expect(parseQuickAdd("买鸡蛋 明天", now).schedule?.due_date).toBe(
@@ -52,6 +53,7 @@ describe("parseQuickAdd", () => {
       title: "明天 10:30",
       schedule: null,
       label: "",
+      groupName: null,
     });
   });
 
@@ -60,6 +62,29 @@ describe("parseQuickAdd", () => {
       title: "月底整理票据",
       schedule: null,
       label: "",
+      groupName: null,
+    });
+  });
+
+  it("extracts known group tags without creating unknown groups", () => {
+    expect(parseQuickAdd("#工作 写方案", now, ["工作", "生活"])).toEqual({
+      title: "写方案",
+      schedule: null,
+      label: "",
+      groupName: "工作",
+    });
+
+    expect(parseQuickAdd("#工作 明天 10:00 写方案", now, ["工作"])).toMatchObject({
+      title: "写方案",
+      label: "明天 10:00",
+      groupName: "工作",
+    });
+
+    expect(parseQuickAdd("#不存在 写方案", now, ["工作"])).toEqual({
+      title: "#不存在 写方案",
+      schedule: null,
+      label: "",
+      groupName: null,
     });
   });
 });
