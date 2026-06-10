@@ -35,6 +35,8 @@ pub(crate) struct SyncTodo {
     pub repeat_rule: Option<String>,
     #[serde(default)]
     pub repeat_next_due_date: Option<String>,
+    #[serde(default)]
+    pub repeat_series_uuid: Option<String>,
     pub updated_by: String,
 }
 
@@ -85,7 +87,7 @@ pub(crate) fn build_document(
             "
             SELECT uuid, title, group_uuid, completed, pinned, sort_order, created_at, updated_at,
                    completed_at, deleted_at, due_date, due_at, reminder_at,
-                   repeat_rule, repeat_next_due_date, updated_by
+                   repeat_rule, repeat_next_due_date, repeat_series_uuid, updated_by
             FROM todos
             ORDER BY uuid ASC
             ",
@@ -194,9 +196,9 @@ pub(crate) fn merge_remote_document(
                 INSERT INTO todos (
                     uuid, title, group_uuid, completed, pinned, sort_order, created_at, updated_at,
                     completed_at, deleted_at, due_date, due_at, reminder_at,
-                    repeat_rule, repeat_next_due_date, updated_by
+                    repeat_rule, repeat_next_due_date, repeat_series_uuid, updated_by
                 )
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
                 ON CONFLICT(uuid) DO UPDATE SET
                     title = excluded.title,
                     group_uuid = excluded.group_uuid,
@@ -212,6 +214,7 @@ pub(crate) fn merge_remote_document(
                     reminder_at = excluded.reminder_at,
                     repeat_rule = excluded.repeat_rule,
                     repeat_next_due_date = excluded.repeat_next_due_date,
+                    repeat_series_uuid = excluded.repeat_series_uuid,
                     updated_by = excluded.updated_by
                 ",
                 params![
@@ -230,6 +233,7 @@ pub(crate) fn merge_remote_document(
                     todo.reminder_at,
                     todo.repeat_rule,
                     todo.repeat_next_due_date,
+                    todo.repeat_series_uuid,
                     todo.updated_by,
                 ],
             )
@@ -294,6 +298,16 @@ pub(crate) fn validate_document(document: &SyncDocument) -> Result<(), String> {
         if !uuids.insert(&todo.uuid) {
             return Err(format!("同步文件包含重复 UUID：{}", todo.uuid));
         }
+        if todo
+            .repeat_series_uuid
+            .as_deref()
+            .is_some_and(|value| Uuid::parse_str(value).is_err())
+        {
+            return Err(format!(
+                "同步任务重复系列 UUID 无效：{}",
+                todo.repeat_series_uuid.as_deref().unwrap_or_default()
+            ));
+        }
         if todo.title.trim().is_empty() {
             return Err("同步文件包含空标题任务".to_string());
         }
@@ -333,6 +347,7 @@ fn compare_todos(left: &SyncTodo, right: &SyncTodo) -> Ordering {
         .cmp(&right.updated_at)
         .then_with(|| left.deleted_at.is_some().cmp(&right.deleted_at.is_some()))
         .then_with(|| left.updated_by.cmp(&right.updated_by))
+        .then_with(|| left.repeat_series_uuid.cmp(&right.repeat_series_uuid))
         .then_with(|| canonical_tie_break(left).cmp(&canonical_tie_break(right)))
 }
 
@@ -406,7 +421,8 @@ fn map_sync_todo(row: &rusqlite::Row<'_>) -> rusqlite::Result<SyncTodo> {
         reminder_at: row.get(12)?,
         repeat_rule: row.get(13)?,
         repeat_next_due_date: row.get(14)?,
-        updated_by: row.get(15)?,
+        repeat_series_uuid: row.get(15)?,
+        updated_by: row.get(16)?,
     })
 }
 
@@ -521,6 +537,7 @@ mod tests {
             reminder_at: None,
             repeat_rule: None,
             repeat_next_due_date: None,
+            repeat_series_uuid: None,
             updated_by: updated_by.to_string(),
         }
     }

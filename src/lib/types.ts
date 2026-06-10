@@ -15,9 +15,11 @@ export interface Todo {
   reminder_at: number | null;
   repeat_rule: RepeatRule | null;
   repeat_next_due_date: string | null;
+  repeat_series_uuid: string | null;
 }
 
 export type RepeatRule = "daily" | "weekly" | "monthly" | "weekdays";
+export type RepeatDeleteScope = "single" | "series";
 
 export interface TodoGroup {
   id: number;

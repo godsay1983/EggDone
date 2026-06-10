@@ -31,12 +31,18 @@ pub struct Todo {
     reminder_at: Option<i64>,
     repeat_rule: Option<String>,
     repeat_next_due_date: Option<String>,
+    repeat_series_uuid: Option<String>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct TodoCompletion {
     updated_todo: Todo,
     created_todo: Option<Todo>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+pub struct TodoDeletion {
+    deleted_todos: Vec<Todo>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -243,10 +249,15 @@ pub fn reorder_todos(
 }
 
 #[tauri::command]
-pub fn delete_todo(id: i64, app: AppHandle, database: State<'_, Database>) -> Result<Todo, String> {
+pub fn delete_todo(
+    id: i64,
+    repeat_scope: Option<String>,
+    app: AppHandle,
+    database: State<'_, Database>,
+) -> Result<TodoDeletion, String> {
     let result = {
         let connection = lock_database(&database)?;
-        soft_delete_todo_in_connection(&connection, id)
+        soft_delete_todo_in_connection(&connection, id, repeat_scope.as_deref())
     };
     refresh_badge_after_success(&app, &result);
     result
@@ -415,7 +426,8 @@ fn list_todos_from_connection(connection: &Connection) -> Result<Vec<Todo>, Stri
             SELECT
                 id, uuid, title, group_uuid, completed, pinned, sort_order,
                 created_at, updated_at, completed_at, deleted_at,
-                due_date, due_at, reminder_at, repeat_rule, repeat_next_due_date
+                due_date, due_at, reminder_at,
+                repeat_rule, repeat_next_due_date, repeat_series_uuid
             FROM todos
             WHERE deleted_at IS NULL
             ORDER BY completed ASC, pinned DESC, sort_order ASC, created_at DESC, id DESC
@@ -477,9 +489,10 @@ fn create_todo_in_connection(
             INSERT INTO todos (
                 uuid, title, group_uuid, completed, sort_order,
                 created_at, updated_at, completed_at, deleted_at,
-                due_date, due_at, reminder_at, repeat_rule, repeat_next_due_date, updated_by
+                due_date, due_at, reminder_at,
+                repeat_rule, repeat_next_due_date, repeat_series_uuid, updated_by
             )
-            VALUES (?1, ?2, ?3, 0, ?4, ?5, ?5, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?6)
+            VALUES (?1, ?2, ?3, 0, ?4, ?5, ?5, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?6)
             ",
             params![uuid, title, group_uuid, sort_order, now, updated_by],
         )
@@ -787,10 +800,14 @@ fn set_todo_schedule_in_connection(
     if repeat_rule.is_some() && due_at.is_some() {
         return Err("重复任务暂只支持日期级到期".to_string());
     }
+    let current = find_todo(connection, id)?.ok_or_else(|| "任务不存在".to_string())?;
     let repeat_next_due_date = match (&due_date, &repeat_rule) {
         (Some(date), Some(rule)) => Some(next_repeat_due_date(date, rule)?),
         _ => None,
     };
+    let repeat_series_uuid = repeat_rule
+        .as_ref()
+        .map(|_| current.repeat_series_uuid.unwrap_or(current.uuid));
 
     let changed = connection
         .execute(
@@ -798,8 +815,9 @@ fn set_todo_schedule_in_connection(
             UPDATE todos
             SET due_date = ?1, due_at = ?2, reminder_at = ?3,
                 repeat_rule = ?4, repeat_next_due_date = ?5,
-                updated_at = ?6, updated_by = ?7
-            WHERE id = ?8 AND deleted_at IS NULL
+                repeat_series_uuid = ?6,
+                updated_at = ?7, updated_by = ?8
+            WHERE id = ?9 AND deleted_at IS NULL
             ",
             params![
                 due_date,
@@ -807,6 +825,7 @@ fn set_todo_schedule_in_connection(
                 reminder_at,
                 repeat_rule,
                 repeat_next_due_date,
+                repeat_series_uuid,
                 now_millis(),
                 device_id(connection).map_err(database_error)?,
                 id
@@ -881,25 +900,77 @@ fn reorder_todos_in_connection(
     list_todos_from_connection(connection)
 }
 
-fn soft_delete_todo_in_connection(connection: &Connection, id: i64) -> Result<Todo, String> {
+fn soft_delete_todo_in_connection(
+    connection: &Connection,
+    id: i64,
+    repeat_scope: Option<&str>,
+) -> Result<TodoDeletion, String> {
+    let target = find_todo(connection, id)?
+        .filter(|todo| todo.deleted_at.is_none())
+        .ok_or_else(|| "任务不存在".to_string())?;
+    let scope = match repeat_scope.unwrap_or("single") {
+        "single" => "single",
+        "series" => "series",
+        _ => return Err("删除范围无效".to_string()),
+    };
     let now = now_millis();
     let updated_by = device_id(connection).map_err(database_error)?;
-    let changed = connection
-        .execute(
-            "
-            UPDATE todos
-            SET deleted_at = ?1, updated_at = ?1, updated_by = ?2
-            WHERE id = ?3 AND deleted_at IS NULL
-            ",
-            params![now, updated_by, id],
-        )
-        .map_err(database_error)?;
+
+    let ids = if scope == "series" {
+        let series_uuid = target
+            .repeat_series_uuid
+            .as_deref()
+            .unwrap_or(target.uuid.as_str());
+        let mut statement = connection
+            .prepare(
+                "
+                SELECT id
+                FROM todos
+                WHERE deleted_at IS NULL
+                    AND (repeat_series_uuid = ?1 OR uuid = ?1)
+                ORDER BY created_at ASC, id ASC
+                ",
+            )
+            .map_err(database_error)?;
+        let ids = statement
+            .query_map(params![series_uuid], |row| row.get::<_, i64>(0))
+            .map_err(database_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(database_error)?;
+        ids
+    } else {
+        vec![id]
+    };
+
+    if ids.is_empty() {
+        return Err("任务不存在".to_string());
+    }
+
+    let mut changed = 0;
+    for todo_id in &ids {
+        changed += connection
+            .execute(
+                "
+                UPDATE todos
+                SET deleted_at = ?1, updated_at = ?1, updated_by = ?2
+                WHERE id = ?3 AND deleted_at IS NULL
+                ",
+                params![now, updated_by, todo_id],
+            )
+            .map_err(database_error)?;
+    }
 
     if changed == 0 {
         return Err("任务不存在".to_string());
     }
 
-    find_todo(connection, id)?.ok_or_else(|| "删除后未能读取任务".to_string())
+    let deleted_todos = ids
+        .into_iter()
+        .map(|todo_id| {
+            find_todo(connection, todo_id)?.ok_or_else(|| "删除后未能读取任务".to_string())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(TodoDeletion { deleted_todos })
 }
 
 fn restore_todo_in_connection(connection: &Connection, id: i64) -> Result<Todo, String> {
@@ -947,7 +1018,8 @@ fn find_todo(connection: &Connection, id: i64) -> Result<Option<Todo>, String> {
             SELECT
                 id, uuid, title, group_uuid, completed, pinned, sort_order,
                 created_at, updated_at, completed_at, deleted_at,
-                due_date, due_at, reminder_at, repeat_rule, repeat_next_due_date
+                due_date, due_at, reminder_at,
+                repeat_rule, repeat_next_due_date, repeat_series_uuid
             FROM todos
             WHERE id = ?1
             ",
@@ -976,6 +1048,7 @@ fn map_todo(row: &rusqlite::Row<'_>) -> rusqlite::Result<Todo> {
         reminder_at: row.get(13)?,
         repeat_rule: row.get(14)?,
         repeat_next_due_date: row.get(15)?,
+        repeat_series_uuid: row.get(16)?,
     })
 }
 
@@ -1129,6 +1202,10 @@ fn create_next_repeat_instance(
         return Ok(None);
     };
     let next_repeat_next_due_date = next_repeat_due_date(next_due_date, rule)?;
+    let repeat_series_uuid = source
+        .repeat_series_uuid
+        .as_deref()
+        .unwrap_or(source.uuid.as_str());
     let uuid = Uuid::new_v4().to_string();
     let sort_order: i64 = connection
         .query_row(
@@ -1148,9 +1225,10 @@ fn create_next_repeat_instance(
             INSERT INTO todos (
                 uuid, title, group_uuid, completed, pinned, sort_order,
                 created_at, updated_at, completed_at, deleted_at,
-                due_date, due_at, reminder_at, repeat_rule, repeat_next_due_date, updated_by
+                due_date, due_at, reminder_at,
+                repeat_rule, repeat_next_due_date, repeat_series_uuid, updated_by
             )
-            VALUES (?1, ?2, ?3, 0, ?4, ?5, ?6, ?6, NULL, NULL, ?7, NULL, NULL, ?8, ?9, ?10)
+            VALUES (?1, ?2, ?3, 0, ?4, ?5, ?6, ?6, NULL, NULL, ?7, NULL, NULL, ?8, ?9, ?10, ?11)
             ",
             params![
                 uuid,
@@ -1162,6 +1240,7 @@ fn create_next_repeat_instance(
                 next_due_date,
                 rule,
                 next_repeat_next_due_date,
+                repeat_series_uuid,
                 updated_by,
             ],
         )
@@ -1323,6 +1402,7 @@ mod tests {
         assert_eq!(created.reminder_at, None);
         assert_eq!(created.repeat_rule, None);
         assert_eq!(created.repeat_next_due_date, None);
+        assert_eq!(created.repeat_series_uuid, None);
         assert_eq!(list_todos_from_connection(&connection).unwrap().len(), 1);
 
         let completed = set_todo_completed_in_connection(&mut connection, created.id, true)
@@ -1338,7 +1418,10 @@ mod tests {
         assert!(!reopened.completed);
         assert_eq!(reopened.completed_at, None);
 
-        let deleted = soft_delete_todo_in_connection(&connection, created.id).unwrap();
+        let deleted = soft_delete_todo_in_connection(&connection, created.id, None)
+            .unwrap()
+            .deleted_todos
+            .remove(0);
         assert!(deleted.deleted_at.is_some());
         assert!(list_todos_from_connection(&connection).unwrap().is_empty());
 
@@ -1418,6 +1501,10 @@ mod tests {
             repeating.repeat_next_due_date.as_deref(),
             Some("2026-06-11")
         );
+        assert_eq!(
+            repeating.repeat_series_uuid.as_deref(),
+            Some(repeating.uuid.as_str())
+        );
 
         let reordered =
             reorder_todos_in_connection(&mut connection, &[first.id, second.id]).unwrap();
@@ -1458,7 +1545,38 @@ mod tests {
         assert_eq!(next.due_date.as_deref(), Some("2026-06-15"));
         assert_eq!(next.repeat_rule.as_deref(), Some("weekdays"));
         assert_eq!(next.repeat_next_due_date.as_deref(), Some("2026-06-16"));
+        assert_eq!(
+            next.repeat_series_uuid.as_deref(),
+            Some(repeating.uuid.as_str())
+        );
         assert_eq!(list_todos_from_connection(&connection).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn deleting_repeating_series_soft_deletes_all_instances() {
+        let mut connection = connection();
+        let created = create_todo_in_connection(&connection, "repeat", None).unwrap();
+        let repeating = set_todo_schedule_in_connection(
+            &connection,
+            created.id,
+            Some("2026-06-10".to_string()),
+            None,
+            None,
+            Some("daily".to_string()),
+        )
+        .unwrap();
+        let next = set_todo_completed_in_connection(&mut connection, repeating.id, true)
+            .unwrap()
+            .created_todo
+            .expect("next repeat instance");
+
+        let deleted = soft_delete_todo_in_connection(&connection, next.id, Some("series"))
+            .unwrap()
+            .deleted_todos;
+
+        assert_eq!(deleted.len(), 2);
+        assert!(deleted.iter().all(|todo| todo.deleted_at.is_some()));
+        assert!(list_todos_from_connection(&connection).unwrap().is_empty());
     }
 
     #[test]

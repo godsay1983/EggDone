@@ -23,6 +23,7 @@ function makeTodo(id: number, overrides: Partial<Todo> = {}): Todo {
     reminder_at: null,
     repeat_rule: null,
     repeat_next_due_date: null,
+    repeat_series_uuid: null,
     ...overrides,
   };
 }
@@ -88,7 +89,9 @@ function createApi(initialItems: Todo[] = []) {
         makeTodo(id, { sort_order: index * 1024 }),
       ),
     ),
-    delete: vi.fn(async (id) => makeTodo(id, { deleted_at: 100 })),
+    delete: vi.fn(async (id) => ({
+      deleted_todos: [makeTodo(id, { deleted_at: 100 })],
+    })),
     restore: vi.fn(async (id) => makeTodo(id)),
     clearCompleted: vi.fn(async () => items.filter((todo) => todo.completed).length),
     hidePanel: vi.fn(async () => undefined),
@@ -127,7 +130,7 @@ describe("todo store", () => {
     expect(get(store).items.find((todo) => todo.id === 1)?.completed).toBe(true);
 
     const deleted = await store.remove(1);
-    expect(deleted.deleted_at).toBe(100);
+    expect(deleted[0].deleted_at).toBe(100);
     expect(get(store).items.some((todo) => todo.id === 1)).toBe(false);
 
     await store.restore(1);
@@ -217,6 +220,34 @@ describe("todo store", () => {
     await store.toggle(current);
 
     expect(get(store).items.map((todo) => todo.id)).toEqual([2, 1]);
+  });
+
+  it("removes all todos returned by a repeat series deletion", async () => {
+    const current = makeTodo(1, {
+      repeat_rule: "daily",
+      repeat_next_due_date: "2026-06-11",
+      repeat_series_uuid: "00000000-0000-4000-8000-000000000001",
+    });
+    const next = makeTodo(2, {
+      repeat_rule: "daily",
+      repeat_next_due_date: "2026-06-12",
+      repeat_series_uuid: "00000000-0000-4000-8000-000000000001",
+    });
+    const api = createApi([current, next, makeTodo(3)]);
+    vi.mocked(api.delete).mockResolvedValueOnce({
+      deleted_todos: [
+        { ...current, deleted_at: 100 },
+        { ...next, deleted_at: 100 },
+      ],
+    });
+    const store = createTodoStore(api, vi.fn());
+
+    await store.load();
+    const deleted = await store.remove(2, "series");
+
+    expect(deleted.map((todo) => todo.id)).toEqual([1, 2]);
+    expect(get(store).items.map((todo) => todo.id)).toEqual([3]);
+    expect(api.delete).toHaveBeenCalledWith(2, "series");
   });
 
   it("orders pinned todos before normal todos within each completion group", async () => {

@@ -3,7 +3,12 @@
   import { fly } from "svelte/transition";
 
   import type { TodoScheduleInput } from "$lib/api/todoApi";
-  import type { RepeatRule, Todo, TodoGroup } from "$lib/types";
+  import type {
+    RepeatDeleteScope,
+    RepeatRule,
+    Todo,
+    TodoGroup,
+  } from "$lib/types";
   import {
     formatDueLabel,
     getDueTone,
@@ -27,7 +32,10 @@
   export let onSnooze: (todo: Todo, reminderAt: number) => Promise<void>;
   export let groups: TodoGroup[] = [];
   export let onGroupChange: (todo: Todo, groupUuid: string | null) => Promise<void>;
-  export let onDelete: (id: number) => Promise<void>;
+  export let onDelete: (
+    id: number,
+    repeatScope?: RepeatDeleteScope,
+  ) => Promise<void>;
   export let onMove: (todo: Todo, direction: -1 | 1) => Promise<void>;
   export let onDragStart: (todo: Todo, event: PointerEvent) => void;
   export let canMoveUp = false;
@@ -512,17 +520,42 @@
         >
           下移
         </button>
-        <button
-          class="danger"
-          type="button"
-          role="menuitem"
-          onclick={() => {
-            actionsOpen = false;
-            void onDelete(todo.id);
-          }}
-        >
-          删除
-        </button>
+        {#if todo.repeat_rule !== null}
+          <button
+            class="danger"
+            type="button"
+            role="menuitem"
+            onclick={() => {
+              actionsOpen = false;
+              void onDelete(todo.id, "single");
+            }}
+          >
+            删除本次
+          </button>
+          <button
+            class="danger"
+            type="button"
+            role="menuitem"
+            onclick={() => {
+              actionsOpen = false;
+              void onDelete(todo.id, "series");
+            }}
+          >
+            删除整个重复
+          </button>
+        {:else}
+          <button
+            class="danger"
+            type="button"
+            role="menuitem"
+            onclick={() => {
+              actionsOpen = false;
+              void onDelete(todo.id);
+            }}
+          >
+            删除
+          </button>
+        {/if}
       </div>
     {/if}
   </div>

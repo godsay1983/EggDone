@@ -16,7 +16,7 @@
     todos,
   } from "$lib/stores/todoStore";
   import { initializeAutoSync, syncStatus } from "$lib/sync/autoSync";
-  import type { Todo, TodoGroup } from "$lib/types";
+  import type { RepeatDeleteScope, Todo, TodoGroup } from "$lib/types";
   import { movePreviewByPointer } from "$lib/utils/reorderPreview";
   import { isDueTodayOrOverdue } from "$lib/utils/todoDates";
   import {
@@ -53,7 +53,7 @@
   let dragPointerId: number | null = null;
   let previewOrderIds: number[] | null = null;
   let dragGroupTarget: GroupDropTarget | undefined = undefined;
-  let undoTodo: Todo | null = null;
+  let undoTodos: Todo[] = [];
   let undoTimer: ReturnType<typeof setTimeout> | null = null;
   let confirmingClear = false;
   let clearTimer: ReturnType<typeof setTimeout> | null = null;
@@ -422,12 +422,15 @@
     }
   }
 
-  async function deleteTodo(id: number) {
+  async function deleteTodo(
+    id: number,
+    repeatScope: RepeatDeleteScope = "single",
+  ) {
     try {
-      undoTodo = await todos.remove(id);
+      undoTodos = await todos.remove(id, repeatScope);
       if (undoTimer) clearTimeout(undoTimer);
       undoTimer = setTimeout(() => {
-        undoTodo = null;
+        undoTodos = [];
         undoTimer = null;
       }, 5000);
     } catch (error) {
@@ -436,17 +439,19 @@
   }
 
   async function undoDelete() {
-    if (!undoTodo) return;
-    const todoToRestore = undoTodo;
-    undoTodo = null;
+    if (undoTodos.length === 0) return;
+    const todosToRestore = undoTodos;
+    undoTodos = [];
     if (undoTimer) {
       clearTimeout(undoTimer);
       undoTimer = null;
     }
     try {
-      await todos.restore(todoToRestore.id);
+      for (const todo of todosToRestore) {
+        await todos.restore(todo.id);
+      }
     } catch (error) {
-      undoTodo = todoToRestore;
+      undoTodos = todosToRestore;
       todos.reportError(error);
     }
   }
@@ -1127,9 +1132,13 @@
   />
 {/if}
 
-{#if undoTodo}
+{#if undoTodos.length > 0}
   <div class="undo-toast" role="status">
-    <span>已删除“{undoTodo.title}”</span>
+    <span>
+      {undoTodos.length === 1
+        ? `已删除“${undoTodos[0].title}”`
+        : `已删除 ${undoTodos.length} 个重复任务`}
+    </span>
     <button type="button" onclick={() => void undoDelete()}>撤销</button>
   </div>
 {/if}

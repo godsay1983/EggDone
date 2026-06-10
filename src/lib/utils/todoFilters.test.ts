@@ -26,6 +26,7 @@ function makeTodo(
     reminder_at: null,
     repeat_rule: null,
     repeat_next_due_date: null,
+    repeat_series_uuid: null,
     ...overrides,
   };
 }

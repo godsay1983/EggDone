@@ -1,6 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import type { RepeatRule, Todo, TodoGroup } from "$lib/types";
+import type {
+  RepeatDeleteScope,
+  RepeatRule,
+  Todo,
+  TodoGroup,
+} from "$lib/types";
 
 export interface TodoScheduleInput {
   due_date: string | null;
@@ -12,6 +17,10 @@ export interface TodoScheduleInput {
 export interface TodoCompletionResult {
   updated_todo: Todo;
   created_todo: Todo | null;
+}
+
+export interface TodoDeletionResult {
+  deleted_todos: Todo[];
 }
 
 export const todoApi = {
@@ -77,8 +86,11 @@ export const todoApi = {
     return invoke<Todo[]>("reorder_todos", { orderedIds });
   },
 
-  delete(id: number): Promise<Todo> {
-    return invoke<Todo>("delete_todo", { id });
+  delete(
+    id: number,
+    repeatScope: RepeatDeleteScope = "single",
+  ): Promise<TodoDeletionResult> {
+    return invoke<TodoDeletionResult>("delete_todo", { id, repeatScope });
   },
 
   restore(id: number): Promise<Todo> {

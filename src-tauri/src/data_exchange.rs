@@ -41,6 +41,8 @@ struct TransferTodo {
     repeat_rule: Option<String>,
     #[serde(default)]
     repeat_next_due_date: Option<String>,
+    #[serde(default)]
+    repeat_series_uuid: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -276,6 +278,16 @@ fn validate_import(import: &TodoExport) -> Result<(), String> {
         if !uuids.insert(&todo.uuid) {
             return Err(format!("导入文件包含重复 UUID：{}", todo.uuid));
         }
+        if todo
+            .repeat_series_uuid
+            .as_deref()
+            .is_some_and(|value| Uuid::parse_str(value).is_err())
+        {
+            return Err(format!(
+                "任务重复系列 UUID 无效：{}",
+                todo.repeat_series_uuid.as_deref().unwrap_or_default()
+            ));
+        }
         if todo.title.trim().is_empty() {
             return Err("导入文件包含空标题任务".to_string());
         }
@@ -334,7 +346,7 @@ fn read_all_todos(connection: &Connection) -> Result<Vec<TransferTodo>, String> 
             "
             SELECT uuid, title, group_uuid, completed, pinned, sort_order, created_at, updated_at,
                    completed_at, deleted_at, due_date, due_at, reminder_at,
-                   repeat_rule, repeat_next_due_date
+                   repeat_rule, repeat_next_due_date, repeat_series_uuid
             FROM todos
             ORDER BY completed ASC, pinned DESC, sort_order ASC, created_at DESC, id DESC
             ",
@@ -512,9 +524,9 @@ fn insert_todo(
             INSERT INTO todos (
                 uuid, title, group_uuid, completed, pinned, sort_order, created_at, updated_at,
                 completed_at, deleted_at, due_date, due_at, reminder_at,
-                repeat_rule, repeat_next_due_date, updated_by
+                repeat_rule, repeat_next_due_date, repeat_series_uuid, updated_by
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
             ",
             params![
                 todo.uuid,
@@ -532,6 +544,7 @@ fn insert_todo(
                 todo.reminder_at,
                 todo.repeat_rule,
                 todo.repeat_next_due_date,
+                todo.repeat_series_uuid,
                 updated_by,
             ],
         )
@@ -552,8 +565,8 @@ fn update_todo(
                 created_at = ?5, updated_at = ?6, completed_at = ?7,
                 deleted_at = ?8, due_date = ?9, due_at = ?10, reminder_at = ?11,
                 repeat_rule = ?12, repeat_next_due_date = ?13,
-                group_uuid = ?14, updated_by = ?15
-            WHERE uuid = ?16
+                repeat_series_uuid = ?14, group_uuid = ?15, updated_by = ?16
+            WHERE uuid = ?17
             ",
             params![
                 todo.title.trim(),
@@ -569,6 +582,7 @@ fn update_todo(
                 todo.reminder_at,
                 todo.repeat_rule,
                 todo.repeat_next_due_date,
+                todo.repeat_series_uuid,
                 todo.group_uuid,
                 updated_by,
                 todo.uuid,
@@ -595,6 +609,7 @@ fn map_transfer_todo(row: &rusqlite::Row<'_>) -> rusqlite::Result<TransferTodo> 
         reminder_at: row.get(12)?,
         repeat_rule: row.get(13)?,
         repeat_next_due_date: row.get(14)?,
+        repeat_series_uuid: row.get(15)?,
     })
 }
 
@@ -710,6 +725,7 @@ mod tests {
             reminder_at: None,
             repeat_rule: None,
             repeat_next_due_date: None,
+            repeat_series_uuid: None,
         }
     }
 

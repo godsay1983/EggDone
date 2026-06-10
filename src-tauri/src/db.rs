@@ -9,7 +9,7 @@ use rusqlite::{params, Connection, Transaction};
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
-const CURRENT_SCHEMA_VERSION: i64 = 9;
+const CURRENT_SCHEMA_VERSION: i64 = 10;
 const DEVICE_ID_KEY: &str = "device_id";
 
 pub struct Database {
@@ -72,6 +72,7 @@ pub(crate) fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {
     apply_migration(connection, 7, add_reminder_deliveries)?;
     apply_migration(connection, 8, add_todo_groups)?;
     apply_migration(connection, 9, add_todo_repeats)?;
+    apply_migration(connection, 10, add_repeat_series_uuid)?;
 
     debug_assert_eq!(schema_version(connection)?, CURRENT_SCHEMA_VERSION);
     Ok(())
@@ -359,6 +360,22 @@ fn add_todo_repeats(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
     )
 }
 
+fn add_repeat_series_uuid(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
+    transaction.execute_batch(
+        "
+        ALTER TABLE todos
+            ADD COLUMN repeat_series_uuid TEXT;
+
+        UPDATE todos
+        SET repeat_series_uuid = uuid
+        WHERE repeat_rule IS NOT NULL AND repeat_series_uuid IS NULL;
+
+        CREATE INDEX idx_todos_repeat_series_uuid
+            ON todos(repeat_series_uuid, deleted_at);
+        ",
+    )
+}
+
 pub(crate) fn device_id(connection: &Connection) -> rusqlite::Result<String> {
     connection.query_row(
         "SELECT value FROM app_metadata WHERE key = ?1",
@@ -416,6 +433,7 @@ mod tests {
             "group_uuid",
             "repeat_rule",
             "repeat_next_due_date",
+            "repeat_series_uuid",
         ] {
             assert!(columns.iter().any(|column| column == expected));
         }
@@ -762,6 +780,7 @@ mod tests {
         assert!(columns
             .iter()
             .any(|column| column == "repeat_next_due_date"));
+        assert!(columns.iter().any(|column| column == "repeat_series_uuid"));
         let group_tables: i64 = connection
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'groups'",
@@ -808,5 +827,53 @@ mod tests {
         assert!(columns
             .iter()
             .any(|column| column == "repeat_next_due_date"));
+        assert!(columns.iter().any(|column| column == "repeat_series_uuid"));
+    }
+
+    #[test]
+    fn upgrades_v9_database_with_repeat_series_uuid() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "
+                CREATE TABLE schema_migrations (
+                    version INTEGER PRIMARY KEY,
+                    applied_at INTEGER NOT NULL
+                );
+                ",
+            )
+            .unwrap();
+        apply_migration(&mut connection, 1, create_legacy_schema).unwrap();
+        apply_migration(&mut connection, 2, migrate_todos_for_sync).unwrap();
+        apply_migration(&mut connection, 3, add_sync_identity).unwrap();
+        apply_migration(&mut connection, 4, add_sync_settings).unwrap();
+        apply_migration(&mut connection, 5, add_todo_pinning).unwrap();
+        apply_migration(&mut connection, 6, add_todo_due_fields).unwrap();
+        apply_migration(&mut connection, 7, add_reminder_deliveries).unwrap();
+        apply_migration(&mut connection, 8, add_todo_groups).unwrap();
+        apply_migration(&mut connection, 9, add_todo_repeats).unwrap();
+        let uuid = "00000000-0000-4000-8000-000000000001";
+        connection
+            .execute(
+                "
+                INSERT INTO todos (
+                    uuid, title, completed, pinned, sort_order, created_at, updated_at,
+                    completed_at, deleted_at, due_date, due_at, reminder_at,
+                    repeat_rule, repeat_next_due_date, updated_by
+                )
+                VALUES (?1, 'repeat', 0, 0, 0, 1, 2, NULL, NULL, '2026-06-10',
+                    NULL, NULL, 'daily', '2026-06-11', ?2)
+                ",
+                params![uuid, device_id(&connection).unwrap()],
+            )
+            .unwrap();
+
+        migrate(&mut connection).unwrap();
+
+        assert_eq!(schema_version(&connection).unwrap(), CURRENT_SCHEMA_VERSION);
+        let series_uuid: String = connection
+            .query_row("SELECT repeat_series_uuid FROM todos", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(series_uuid, uuid);
     }
 }

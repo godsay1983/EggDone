@@ -3,7 +3,7 @@ import { derived, writable } from "svelte/store";
 import { todoApi } from "$lib/api/todoApi";
 import type { TodoScheduleInput } from "$lib/api/todoApi";
 import { scheduleAutoSync } from "$lib/sync/autoSync";
-import type { Todo, TodoGroup } from "$lib/types";
+import type { RepeatDeleteScope, Todo, TodoGroup } from "$lib/types";
 
 export interface TodoState {
   items: Todo[];
@@ -239,15 +239,16 @@ export function createTodoStore(api = todoApi, onChanged = scheduleAutoSync) {
       }
     },
 
-    async remove(id: number) {
-      const deletedTodo = await api.delete(id);
+    async remove(id: number, repeatScope: RepeatDeleteScope = "single") {
+      const result = await api.delete(id, repeatScope);
+      const deletedIds = new Set(result.deleted_todos.map((todo) => todo.id));
       update((state) => ({
         ...state,
-        items: state.items.filter((item) => item.id !== id),
+        items: state.items.filter((item) => !deletedIds.has(item.id)),
         error: null,
       }));
       onChanged();
-      return deletedTodo;
+      return result.deleted_todos;
     },
 
     async restore(id: number) {
