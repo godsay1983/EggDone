@@ -24,6 +24,13 @@
     type TodoListView,
   } from "$lib/utils/todoFilters";
   import { parseQuickAdd } from "$lib/utils/quickAdd";
+  import {
+    DEFAULT_LIST_VIEW_KEY,
+    LAST_LIST_VIEW_KEY,
+    initialListView,
+    normalizeDefaultListViewMode,
+    type DefaultListViewMode,
+  } from "$lib/utils/viewPreferences";
   import DataManager from "./DataManager.svelte";
   import SettingsPanel from "./SettingsPanel.svelte";
   import TodoItem from "./TodoItem.svelte";
@@ -63,6 +70,7 @@
   let searchQuery = "";
   let showCompleted = true;
   let listView: TodoListView = "all";
+  let defaultListViewMode: DefaultListViewMode = "remember";
   let selectedGroup = "all";
   let creatingGroup = false;
   let groupName = "";
@@ -105,8 +113,13 @@
     const savedTheme = localStorage.getItem("eggdone-theme");
     showCompleted =
       localStorage.getItem("eggdone-show-completed") !== "false";
-    listView =
-      localStorage.getItem("eggdone-list-view") === "today" ? "today" : "all";
+    defaultListViewMode = normalizeDefaultListViewMode(
+      localStorage.getItem(DEFAULT_LIST_VIEW_KEY),
+    );
+    listView = initialListView(
+      defaultListViewMode,
+      localStorage.getItem(LAST_LIST_VIEW_KEY),
+    );
     selectedGroup = localStorage.getItem("eggdone-selected-group") ?? "all";
     theme =
       savedTheme === "light" || savedTheme === "dark"
@@ -204,8 +217,16 @@
 
   function setListView(view: TodoListView) {
     listView = view;
-    localStorage.setItem("eggdone-list-view", view);
+    localStorage.setItem(LAST_LIST_VIEW_KEY, view);
     cancelDrag();
+  }
+
+  function setDefaultListViewMode(mode: DefaultListViewMode) {
+    defaultListViewMode = mode;
+    localStorage.setItem(DEFAULT_LIST_VIEW_KEY, mode);
+    if (mode !== "remember") {
+      setListView(mode);
+    }
   }
 
   function setSelectedGroup(group: string) {
@@ -1171,8 +1192,10 @@
 {#if showSettings && desktopSettings}
   <SettingsPanel
     settings={desktopSettings}
+    defaultListViewMode={defaultListViewMode}
     onClose={() => (showSettings = false)}
     onChange={(settings) => (desktopSettings = settings)}
+    onDefaultListViewChange={setDefaultListViewMode}
   />
 {/if}
 

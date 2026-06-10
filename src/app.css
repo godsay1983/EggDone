@@ -1559,7 +1559,8 @@ footer button {
 }
 
 .setting-row strong,
-.shortcut-select > span {
+.shortcut-select > span,
+.preference-select > span {
   color: #554b3d;
   font-size: 11px;
 }
@@ -1622,7 +1623,8 @@ footer button {
   opacity: 0.55;
 }
 
-.shortcut-select {
+.shortcut-select,
+.preference-select {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1630,7 +1632,8 @@ footer button {
   padding: 1px 2px 11px;
 }
 
-.shortcut-select select {
+.shortcut-select select,
+.preference-select select {
   max-width: 164px;
   padding: 5px 7px;
   border: 1px solid #e2d8c8;
@@ -1641,11 +1644,13 @@ footer button {
   font-size: 10px;
 }
 
-.shortcut-select select:focus {
+.shortcut-select select:focus,
+.preference-select select:focus {
   border-color: #d9ad31;
 }
 
-.shortcut-select select:disabled {
+.shortcut-select select:disabled,
+.preference-select select:disabled {
   opacity: 0.5;
 }
 
@@ -2523,7 +2528,8 @@ html[data-theme="dark"] .setting-row {
 }
 
 html[data-theme="dark"] .setting-row strong,
-html[data-theme="dark"] .shortcut-select > span {
+html[data-theme="dark"] .shortcut-select > span,
+html[data-theme="dark"] .preference-select > span {
   color: #ded4c4;
 }
 
@@ -2535,7 +2541,8 @@ html[data-theme="dark"] .switch input:checked + span {
   background: #789d7e;
 }
 
-html[data-theme="dark"] .shortcut-select select {
+html[data-theme="dark"] .shortcut-select select,
+html[data-theme="dark"] .preference-select select {
   border-color: #534b3f;
   color: #ded4c4;
   background: #312e28;

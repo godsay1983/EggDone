@@ -5,11 +5,14 @@
     updateShortcut,
     type DesktopSettings,
   } from "$lib/api/desktopSettings";
+  import type { DefaultListViewMode } from "$lib/utils/viewPreferences";
   import SyncSettings from "./SyncSettings.svelte";
 
   export let settings: DesktopSettings;
+  export let defaultListViewMode: DefaultListViewMode;
   export let onClose: () => void;
   export let onChange: (settings: DesktopSettings) => void;
+  export let onDefaultListViewChange: (mode: DefaultListViewMode) => void;
 
   let busy = false;
   let error = settings.shortcutError ?? settings.autostartError ?? "";
@@ -134,6 +137,21 @@
         <span></span>
       </label>
     </div>
+
+    <label class="preference-select">
+      <span>启动默认视图</span>
+      <select
+        value={defaultListViewMode}
+        onchange={(event) =>
+          onDefaultListViewChange(
+            event.currentTarget.value as DefaultListViewMode,
+          )}
+      >
+        <option value="remember">记住上次</option>
+        <option value="all">全部</option>
+        <option value="today">今天</option>
+      </select>
+    </label>
 
     <SyncSettings />
 
