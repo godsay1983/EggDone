@@ -3,7 +3,7 @@
   import { fly } from "svelte/transition";
 
   import type { TodoScheduleInput } from "$lib/api/todoApi";
-  import type { Todo, TodoGroup } from "$lib/types";
+  import type { RepeatRule, Todo, TodoGroup } from "$lib/types";
   import {
     formatDueLabel,
     getDueTone,
@@ -47,6 +47,7 @@
   let customDate = "";
   let customReminderDateTime = "";
   let reminderChoice: ReminderChoice = "none";
+  let repeatChoice: RepeatRule | "none" = "none";
   let groupSaving = false;
   let actionsOpen = false;
   let editInput: HTMLInputElement;
@@ -115,6 +116,7 @@
     scheduleError = "";
     customDate = todo.due_date ?? localDateString(0);
     reminderChoice = inferReminderChoice(todo.due_date, todo.reminder_at);
+    repeatChoice = todo.repeat_rule ?? "none";
     customReminderDateTime =
       todo.reminder_at !== null
         ? timestampToDateTimeLocal(todo.reminder_at)
@@ -129,6 +131,7 @@
 
   async function setDateOnly(date: string | null) {
     if (scheduleSaving) return;
+    const repeatRule = date && repeatChoice !== "none" ? repeatChoice : null;
     const reminderAt = date
       ? reminderAtForDate(date, reminderChoice, customReminderDateTime)
       : null;
@@ -144,6 +147,7 @@
         due_date: date,
         due_at: null,
         reminder_at: reminderAt,
+        repeat_rule: repeatRule,
       });
       scheduleOpen = false;
     } catch {
@@ -173,6 +177,14 @@
       hour: "2-digit",
       minute: "2-digit",
     }).format(new Date(reminderAt));
+  }
+
+  function repeatLabel(rule: RepeatRule | null) {
+    if (rule === "daily") return "每天";
+    if (rule === "weekly") return "每周";
+    if (rule === "monthly") return "每月";
+    if (rule === "weekdays") return "工作日";
+    return "";
   }
 
   async function moveToGroup(value: string) {
@@ -299,7 +311,7 @@
   {:else}
     <div class="todo-content">
       <p>{todo.title}</p>
-      {#if dueLabel || todo.pinned || todo.reminder_at !== null}
+      {#if dueLabel || todo.pinned || todo.reminder_at !== null || todo.repeat_rule !== null}
         <div class="todo-meta">
           {#if todo.pinned}
             <button
@@ -331,6 +343,16 @@
               onclick={toggleSchedule}
             >
               提醒 {formatReminderLabel(todo.reminder_at)}
+            </button>
+          {/if}
+          {#if todo.repeat_rule !== null}
+            <button
+              class="repeat-badge"
+              type="button"
+              title="修改重复规则"
+              onclick={toggleSchedule}
+            >
+              重复 {repeatLabel(todo.repeat_rule)}
             </button>
           {/if}
         </div>
@@ -375,6 +397,16 @@
               />
             </label>
           {/if}
+          <label>
+            <span>重复</span>
+            <select bind:value={repeatChoice} disabled={scheduleSaving}>
+              <option value="none">不重复</option>
+              <option value="daily">每天</option>
+              <option value="weekly">每周</option>
+              <option value="monthly">每月</option>
+              <option value="weekdays">工作日</option>
+            </select>
+          </label>
           <div class="schedule-footer">
             <button type="button" disabled={scheduleSaving} onclick={() => void setDateOnly(null)}>清除</button>
             <button type="button" disabled={scheduleSaving || !canSaveSchedule} onclick={() => void setDateOnly(customDate)}>保存</button>

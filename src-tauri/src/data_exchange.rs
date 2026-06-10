@@ -37,6 +37,10 @@ struct TransferTodo {
     due_at: Option<i64>,
     #[serde(default)]
     reminder_at: Option<i64>,
+    #[serde(default)]
+    repeat_rule: Option<String>,
+    #[serde(default)]
+    repeat_next_due_date: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -294,6 +298,14 @@ fn validate_import(import: &TodoExport) -> Result<(), String> {
         if todo.due_date.is_some() && todo.due_at.is_some() {
             return Err("导入文件包含重复到期信息".to_string());
         }
+        if todo.repeat_rule.is_some() && todo.due_date.is_none() {
+            return Err("导入文件包含缺少到期日期的重复任务".to_string());
+        }
+        validate_repeat_fields(
+            todo.repeat_rule.as_deref(),
+            todo.repeat_next_due_date.as_deref(),
+            "导入文件",
+        )?;
     }
     Ok(())
 }
@@ -321,7 +333,8 @@ fn read_all_todos(connection: &Connection) -> Result<Vec<TransferTodo>, String> 
         .prepare(
             "
             SELECT uuid, title, group_uuid, completed, pinned, sort_order, created_at, updated_at,
-                   completed_at, deleted_at, due_date, due_at, reminder_at
+                   completed_at, deleted_at, due_date, due_at, reminder_at,
+                   repeat_rule, repeat_next_due_date
             FROM todos
             ORDER BY completed ASC, pinned DESC, sort_order ASC, created_at DESC, id DESC
             ",
@@ -498,9 +511,10 @@ fn insert_todo(
             "
             INSERT INTO todos (
                 uuid, title, group_uuid, completed, pinned, sort_order, created_at, updated_at,
-                completed_at, deleted_at, due_date, due_at, reminder_at, updated_by
+                completed_at, deleted_at, due_date, due_at, reminder_at,
+                repeat_rule, repeat_next_due_date, updated_by
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
             ",
             params![
                 todo.uuid,
@@ -516,6 +530,8 @@ fn insert_todo(
                 todo.due_date,
                 todo.due_at,
                 todo.reminder_at,
+                todo.repeat_rule,
+                todo.repeat_next_due_date,
                 updated_by,
             ],
         )
@@ -535,8 +551,9 @@ fn update_todo(
             SET title = ?1, completed = ?2, pinned = ?3, sort_order = ?4,
                 created_at = ?5, updated_at = ?6, completed_at = ?7,
                 deleted_at = ?8, due_date = ?9, due_at = ?10, reminder_at = ?11,
-                group_uuid = ?12, updated_by = ?13
-            WHERE uuid = ?14
+                repeat_rule = ?12, repeat_next_due_date = ?13,
+                group_uuid = ?14, updated_by = ?15
+            WHERE uuid = ?16
             ",
             params![
                 todo.title.trim(),
@@ -550,6 +567,8 @@ fn update_todo(
                 todo.due_date,
                 todo.due_at,
                 todo.reminder_at,
+                todo.repeat_rule,
+                todo.repeat_next_due_date,
                 todo.group_uuid,
                 updated_by,
                 todo.uuid,
@@ -574,7 +593,31 @@ fn map_transfer_todo(row: &rusqlite::Row<'_>) -> rusqlite::Result<TransferTodo> 
         due_date: row.get(10)?,
         due_at: row.get(11)?,
         reminder_at: row.get(12)?,
+        repeat_rule: row.get(13)?,
+        repeat_next_due_date: row.get(14)?,
     })
+}
+
+fn validate_repeat_fields(
+    repeat_rule: Option<&str>,
+    repeat_next_due_date: Option<&str>,
+    source: &str,
+) -> Result<(), String> {
+    if let Some(rule) = repeat_rule {
+        match rule {
+            "daily" | "weekly" | "monthly" | "weekdays" => {}
+            _ => return Err(format!("{source}包含无效重复规则")),
+        }
+        let Some(next_due_date) = repeat_next_due_date else {
+            return Err(format!("{source}包含缺失的下次重复日期"));
+        };
+        if !is_valid_date_only(next_due_date) {
+            return Err(format!("{source}包含无效下次重复日期"));
+        }
+    } else if repeat_next_due_date.is_some() {
+        return Err(format!("{source}包含孤立的下次重复日期"));
+    }
+    Ok(())
 }
 
 fn map_transfer_group(row: &rusqlite::Row<'_>) -> rusqlite::Result<TransferGroup> {
@@ -665,6 +708,8 @@ mod tests {
             due_date: None,
             due_at: None,
             reminder_at: None,
+            repeat_rule: None,
+            repeat_next_due_date: None,
         }
     }
 
@@ -686,6 +731,8 @@ mod tests {
         let mut active = todo("00000000-0000-4000-8000-000000000001", "active", 2);
         active.pinned = true;
         active.due_date = Some("2026-06-10".to_string());
+        active.repeat_rule = Some("daily".to_string());
+        active.repeat_next_due_date = Some("2026-06-11".to_string());
         let work = group("00000000-0000-4000-8000-0000000000aa", "工作", 2);
         active.group_uuid = Some(work.uuid.clone());
         let mut deleted = todo("00000000-0000-4000-8000-000000000002", "deleted", 3);

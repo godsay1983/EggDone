@@ -414,6 +414,7 @@
         due_date: todo.due_date,
         due_at: todo.due_at,
         reminder_at: reminderAt,
+        repeat_rule: todo.repeat_rule,
       });
     } catch (error) {
       todos.reportError(error);

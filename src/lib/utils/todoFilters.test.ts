@@ -24,6 +24,8 @@ function makeTodo(
     due_date: null,
     due_at: null,
     reminder_at: null,
+    repeat_rule: null,
+    repeat_next_due_date: null,
     ...overrides,
   };
 }

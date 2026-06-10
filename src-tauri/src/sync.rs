@@ -31,6 +31,10 @@ pub(crate) struct SyncTodo {
     pub due_at: Option<i64>,
     #[serde(default)]
     pub reminder_at: Option<i64>,
+    #[serde(default)]
+    pub repeat_rule: Option<String>,
+    #[serde(default)]
+    pub repeat_next_due_date: Option<String>,
     pub updated_by: String,
 }
 
@@ -80,7 +84,8 @@ pub(crate) fn build_document(
         .prepare(
             "
             SELECT uuid, title, group_uuid, completed, pinned, sort_order, created_at, updated_at,
-                   completed_at, deleted_at, due_date, due_at, reminder_at, updated_by
+                   completed_at, deleted_at, due_date, due_at, reminder_at,
+                   repeat_rule, repeat_next_due_date, updated_by
             FROM todos
             ORDER BY uuid ASC
             ",
@@ -188,9 +193,10 @@ pub(crate) fn merge_remote_document(
                 "
                 INSERT INTO todos (
                     uuid, title, group_uuid, completed, pinned, sort_order, created_at, updated_at,
-                    completed_at, deleted_at, due_date, due_at, reminder_at, updated_by
+                    completed_at, deleted_at, due_date, due_at, reminder_at,
+                    repeat_rule, repeat_next_due_date, updated_by
                 )
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
                 ON CONFLICT(uuid) DO UPDATE SET
                     title = excluded.title,
                     group_uuid = excluded.group_uuid,
@@ -204,6 +210,8 @@ pub(crate) fn merge_remote_document(
                     due_date = excluded.due_date,
                     due_at = excluded.due_at,
                     reminder_at = excluded.reminder_at,
+                    repeat_rule = excluded.repeat_rule,
+                    repeat_next_due_date = excluded.repeat_next_due_date,
                     updated_by = excluded.updated_by
                 ",
                 params![
@@ -220,6 +228,8 @@ pub(crate) fn merge_remote_document(
                     todo.due_date,
                     todo.due_at,
                     todo.reminder_at,
+                    todo.repeat_rule,
+                    todo.repeat_next_due_date,
                     todo.updated_by,
                 ],
             )
@@ -306,6 +316,14 @@ pub(crate) fn validate_document(document: &SyncDocument) -> Result<(), String> {
         if todo.due_date.is_some() && todo.due_at.is_some() {
             return Err("同步文件包含重复到期信息".to_string());
         }
+        if todo.repeat_rule.is_some() && todo.due_date.is_none() {
+            return Err("同步文件包含缺少到期日期的重复任务".to_string());
+        }
+        validate_repeat_fields(
+            todo.repeat_rule.as_deref(),
+            todo.repeat_next_due_date.as_deref(),
+            "同步文件",
+        )?;
     }
     Ok(())
 }
@@ -349,6 +367,8 @@ fn canonical_tie_break(
     Option<&str>,
     Option<i64>,
     Option<i64>,
+    Option<&str>,
+    Option<&str>,
     i64,
     &str,
     i64,
@@ -361,6 +381,8 @@ fn canonical_tie_break(
         todo.due_date.as_deref(),
         todo.due_at,
         todo.reminder_at,
+        todo.repeat_rule.as_deref(),
+        todo.repeat_next_due_date.as_deref(),
         todo.sort_order,
         todo.title.as_str(),
         todo.created_at,
@@ -382,8 +404,32 @@ fn map_sync_todo(row: &rusqlite::Row<'_>) -> rusqlite::Result<SyncTodo> {
         due_date: row.get(10)?,
         due_at: row.get(11)?,
         reminder_at: row.get(12)?,
-        updated_by: row.get(13)?,
+        repeat_rule: row.get(13)?,
+        repeat_next_due_date: row.get(14)?,
+        updated_by: row.get(15)?,
     })
+}
+
+fn validate_repeat_fields(
+    repeat_rule: Option<&str>,
+    repeat_next_due_date: Option<&str>,
+    source: &str,
+) -> Result<(), String> {
+    if let Some(rule) = repeat_rule {
+        match rule {
+            "daily" | "weekly" | "monthly" | "weekdays" => {}
+            _ => return Err(format!("{source}包含无效重复规则")),
+        }
+        let Some(next_due_date) = repeat_next_due_date else {
+            return Err(format!("{source}包含缺失的下次重复日期"));
+        };
+        if !is_valid_date_only(next_due_date) {
+            return Err(format!("{source}包含无效下次重复日期"));
+        }
+    } else if repeat_next_due_date.is_some() {
+        return Err(format!("{source}包含孤立的下次重复日期"));
+    }
+    Ok(())
 }
 
 fn map_sync_group(row: &rusqlite::Row<'_>) -> rusqlite::Result<SyncGroup> {
@@ -473,6 +519,8 @@ mod tests {
             due_date: None,
             due_at: None,
             reminder_at: None,
+            repeat_rule: None,
+            repeat_next_due_date: None,
             updated_by: updated_by.to_string(),
         }
     }

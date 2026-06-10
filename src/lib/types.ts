@@ -13,7 +13,11 @@ export interface Todo {
   due_date: string | null;
   due_at: number | null;
   reminder_at: number | null;
+  repeat_rule: RepeatRule | null;
+  repeat_next_due_date: string | null;
 }
+
+export type RepeatRule = "daily" | "weekly" | "monthly" | "weekdays";
 
 export interface TodoGroup {
   id: number;

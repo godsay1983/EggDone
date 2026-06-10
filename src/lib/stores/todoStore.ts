@@ -62,12 +62,15 @@ export function createTodoStore(api = todoApi, onChanged = scheduleAutoSync) {
     },
 
     async toggle(todo: Todo) {
-      const updatedTodo = await api.setCompleted(todo.id, !todo.completed);
+      const result = await api.setCompleted(todo.id, !todo.completed);
       update((state) => ({
         ...state,
-        items: state.items
-          .map((item) => (item.id === updatedTodo.id ? updatedTodo : item))
-          .sort(sortTodos),
+        items: [
+          ...state.items.map((item) =>
+            item.id === result.updated_todo.id ? result.updated_todo : item,
+          ),
+          ...(result.created_todo ? [result.created_todo] : []),
+        ].sort(sortTodos),
         error: null,
       }));
       onChanged();

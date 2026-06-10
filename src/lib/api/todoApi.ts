@@ -1,11 +1,17 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import type { Todo, TodoGroup } from "$lib/types";
+import type { RepeatRule, Todo, TodoGroup } from "$lib/types";
 
 export interface TodoScheduleInput {
   due_date: string | null;
   due_at: number | null;
   reminder_at: number | null;
+  repeat_rule: RepeatRule | null;
+}
+
+export interface TodoCompletionResult {
+  updated_todo: Todo;
+  created_todo: Todo | null;
 }
 
 export const todoApi = {
@@ -41,8 +47,8 @@ export const todoApi = {
     return invoke<TodoGroup[]>("reorder_groups", { orderedUuids });
   },
 
-  setCompleted(id: number, completed: boolean): Promise<Todo> {
-    return invoke<Todo>("set_todo_completed", { id, completed });
+  setCompleted(id: number, completed: boolean): Promise<TodoCompletionResult> {
+    return invoke<TodoCompletionResult>("set_todo_completed", { id, completed });
   },
 
   updateTitle(id: number, title: string): Promise<Todo> {
@@ -59,6 +65,7 @@ export const todoApi = {
       dueDate: schedule.due_date,
       dueAt: schedule.due_at,
       reminderAt: schedule.reminder_at,
+      repeatRule: schedule.repeat_rule,
     });
   },
 

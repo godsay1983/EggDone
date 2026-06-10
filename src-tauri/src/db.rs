@@ -9,7 +9,7 @@ use rusqlite::{params, Connection, Transaction};
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
-const CURRENT_SCHEMA_VERSION: i64 = 8;
+const CURRENT_SCHEMA_VERSION: i64 = 9;
 const DEVICE_ID_KEY: &str = "device_id";
 
 pub struct Database {
@@ -71,6 +71,7 @@ pub(crate) fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {
     apply_migration(connection, 6, add_todo_due_fields)?;
     apply_migration(connection, 7, add_reminder_deliveries)?;
     apply_migration(connection, 8, add_todo_groups)?;
+    apply_migration(connection, 9, add_todo_repeats)?;
 
     debug_assert_eq!(schema_version(connection)?, CURRENT_SCHEMA_VERSION);
     Ok(())
@@ -342,6 +343,22 @@ fn add_todo_groups(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
     )
 }
 
+fn add_todo_repeats(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
+    transaction.execute_batch(
+        "
+        ALTER TABLE todos
+            ADD COLUMN repeat_rule TEXT
+                CHECK(repeat_rule IS NULL OR repeat_rule IN ('daily', 'weekly', 'monthly', 'weekdays'));
+        ALTER TABLE todos
+            ADD COLUMN repeat_next_due_date TEXT
+                CHECK(repeat_next_due_date IS NULL OR length(repeat_next_due_date) = 10);
+
+        CREATE INDEX idx_todos_repeat_next_due_date
+            ON todos(deleted_at, repeat_rule, repeat_next_due_date);
+        ",
+    )
+}
+
 pub(crate) fn device_id(connection: &Connection) -> rusqlite::Result<String> {
     connection.query_row(
         "SELECT value FROM app_metadata WHERE key = ?1",
@@ -397,6 +414,8 @@ mod tests {
             "due_at",
             "reminder_at",
             "group_uuid",
+            "repeat_rule",
+            "repeat_next_due_date",
         ] {
             assert!(columns.iter().any(|column| column == expected));
         }
@@ -739,6 +758,10 @@ mod tests {
             .collect::<Result<_, _>>()
             .unwrap();
         assert!(columns.iter().any(|column| column == "group_uuid"));
+        assert!(columns.iter().any(|column| column == "repeat_rule"));
+        assert!(columns
+            .iter()
+            .any(|column| column == "repeat_next_due_date"));
         let group_tables: i64 = connection
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'groups'",
@@ -747,5 +770,43 @@ mod tests {
             )
             .unwrap();
         assert_eq!(group_tables, 1);
+    }
+
+    #[test]
+    fn upgrades_v8_database_with_repeat_support() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "
+                CREATE TABLE schema_migrations (
+                    version INTEGER PRIMARY KEY,
+                    applied_at INTEGER NOT NULL
+                );
+                ",
+            )
+            .unwrap();
+        apply_migration(&mut connection, 1, create_legacy_schema).unwrap();
+        apply_migration(&mut connection, 2, migrate_todos_for_sync).unwrap();
+        apply_migration(&mut connection, 3, add_sync_identity).unwrap();
+        apply_migration(&mut connection, 4, add_sync_settings).unwrap();
+        apply_migration(&mut connection, 5, add_todo_pinning).unwrap();
+        apply_migration(&mut connection, 6, add_todo_due_fields).unwrap();
+        apply_migration(&mut connection, 7, add_reminder_deliveries).unwrap();
+        apply_migration(&mut connection, 8, add_todo_groups).unwrap();
+
+        migrate(&mut connection).unwrap();
+
+        assert_eq!(schema_version(&connection).unwrap(), CURRENT_SCHEMA_VERSION);
+        let columns: Vec<String> = connection
+            .prepare("PRAGMA table_info(todos)")
+            .unwrap()
+            .query_map([], |row| row.get(1))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert!(columns.iter().any(|column| column == "repeat_rule"));
+        assert!(columns
+            .iter()
+            .any(|column| column == "repeat_next_due_date"));
     }
 }

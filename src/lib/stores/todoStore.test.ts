@@ -21,6 +21,8 @@ function makeTodo(id: number, overrides: Partial<Todo> = {}): Todo {
     due_date: null,
     due_at: null,
     reminder_at: null,
+    repeat_rule: null,
+    repeat_next_due_date: null,
     ...overrides,
   };
 }
@@ -70,12 +72,13 @@ function createApi(initialItems: Todo[] = []) {
         sort_order: index * 1024,
       })),
     ),
-    setCompleted: vi.fn(async (id, completed) =>
-      makeTodo(id, {
+    setCompleted: vi.fn(async (id, completed) => ({
+      updated_todo: makeTodo(id, {
         completed,
         completed_at: completed ? 100 : null,
       }),
-    ),
+      created_todo: null,
+    })),
     updateTitle: vi.fn(async (id, title) => makeTodo(id, { title })),
     setPinned: vi.fn(async (id, pinned) => makeTodo(id, { pinned })),
     setSchedule: vi.fn(async (id, schedule) => makeTodo(id, schedule)),
@@ -114,6 +117,7 @@ describe("todo store", () => {
       due_date: "2026-06-10",
       due_at: null,
       reminder_at: null,
+      repeat_rule: null,
     });
     expect(get(store).items.find((todo) => todo.id === 1)?.due_date).toBe(
       "2026-06-10",
@@ -182,6 +186,37 @@ describe("todo store", () => {
     await store.load();
     expect(await store.clearCompleted()).toBe(1);
     expect(get(store).items.map((todo) => todo.id)).toEqual([1]);
+  });
+
+  it("adds the generated next instance when completing a repeating todo", async () => {
+    const current = makeTodo(1, {
+      due_date: "2026-06-10",
+      repeat_rule: "daily",
+      repeat_next_due_date: "2026-06-11",
+    });
+    const next = makeTodo(2, {
+      due_date: "2026-06-11",
+      repeat_rule: "daily",
+      repeat_next_due_date: "2026-06-12",
+      sort_order: -1024,
+    });
+    const api = createApi([current]);
+    vi.mocked(api.setCompleted).mockResolvedValueOnce({
+      updated_todo: makeTodo(1, {
+        completed: true,
+        completed_at: 100,
+        due_date: "2026-06-10",
+        repeat_rule: "daily",
+        repeat_next_due_date: "2026-06-11",
+      }),
+      created_todo: next,
+    });
+    const store = createTodoStore(api, vi.fn());
+
+    await store.load();
+    await store.toggle(current);
+
+    expect(get(store).items.map((todo) => todo.id)).toEqual([2, 1]);
   });
 
   it("orders pinned todos before normal todos within each completion group", async () => {

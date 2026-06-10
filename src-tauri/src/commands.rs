@@ -29,6 +29,14 @@ pub struct Todo {
     due_date: Option<String>,
     due_at: Option<i64>,
     reminder_at: Option<i64>,
+    repeat_rule: Option<String>,
+    repeat_next_due_date: Option<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+pub struct TodoCompletion {
+    updated_todo: Todo,
+    created_todo: Option<Todo>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -148,10 +156,10 @@ pub fn set_todo_completed(
     completed: bool,
     app: AppHandle,
     database: State<'_, Database>,
-) -> Result<Todo, String> {
+) -> Result<TodoCompletion, String> {
     let result = {
-        let connection = lock_database(&database)?;
-        set_todo_completed_in_connection(&connection, id, completed)
+        let mut connection = lock_database(&database)?;
+        set_todo_completed_in_connection(&mut connection, id, completed)
     };
     refresh_badge_after_success(&app, &result);
     result
@@ -193,12 +201,13 @@ pub fn set_todo_schedule(
     due_date: Option<String>,
     due_at: Option<i64>,
     reminder_at: Option<i64>,
+    repeat_rule: Option<String>,
     app: AppHandle,
     database: State<'_, Database>,
 ) -> Result<Todo, String> {
     let result = {
         let connection = lock_database(&database)?;
-        set_todo_schedule_in_connection(&connection, id, due_date, due_at, reminder_at)
+        set_todo_schedule_in_connection(&connection, id, due_date, due_at, reminder_at, repeat_rule)
     };
     refresh_badge_after_success(&app, &result);
     result
@@ -406,7 +415,7 @@ fn list_todos_from_connection(connection: &Connection) -> Result<Vec<Todo>, Stri
             SELECT
                 id, uuid, title, group_uuid, completed, pinned, sort_order,
                 created_at, updated_at, completed_at, deleted_at,
-                due_date, due_at, reminder_at
+                due_date, due_at, reminder_at, repeat_rule, repeat_next_due_date
             FROM todos
             WHERE deleted_at IS NULL
             ORDER BY completed ASC, pinned DESC, sort_order ASC, created_at DESC, id DESC
@@ -468,9 +477,9 @@ fn create_todo_in_connection(
             INSERT INTO todos (
                 uuid, title, group_uuid, completed, sort_order,
                 created_at, updated_at, completed_at, deleted_at,
-                due_date, due_at, reminder_at, updated_by
+                due_date, due_at, reminder_at, repeat_rule, repeat_next_due_date, updated_by
             )
-            VALUES (?1, ?2, ?3, 0, ?4, ?5, ?5, NULL, NULL, NULL, NULL, NULL, ?6)
+            VALUES (?1, ?2, ?3, 0, ?4, ?5, ?5, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?6)
             ",
             params![uuid, title, group_uuid, sort_order, now, updated_by],
         )
@@ -649,13 +658,15 @@ fn reorder_groups_in_connection(
 }
 
 fn set_todo_completed_in_connection(
-    connection: &Connection,
+    connection: &mut Connection,
     id: i64,
     completed: bool,
-) -> Result<Todo, String> {
+) -> Result<TodoCompletion, String> {
+    let before = find_todo(connection, id)?.ok_or_else(|| "任务不存在".to_string())?;
     let now = now_millis();
     let updated_by = device_id(connection).map_err(database_error)?;
-    let changed = connection
+    let transaction = connection.transaction().map_err(database_error)?;
+    let changed = transaction
         .execute(
             "
             UPDATE todos
@@ -674,7 +685,23 @@ fn set_todo_completed_in_connection(
         return Err("任务不存在".to_string());
     }
 
-    find_todo(connection, id)?.ok_or_else(|| "更新后未能读取任务".to_string())
+    let created_id = if completed && !before.completed {
+        create_next_repeat_instance(&transaction, &before, now, &updated_by)?
+    } else {
+        None
+    };
+    transaction.commit().map_err(database_error)?;
+
+    let updated_todo =
+        find_todo(connection, id)?.ok_or_else(|| "更新后未能读取任务".to_string())?;
+    let created_todo = created_id
+        .map(|id| find_todo(connection, id))
+        .transpose()?
+        .flatten();
+    Ok(TodoCompletion {
+        updated_todo,
+        created_todo,
+    })
 }
 
 fn update_todo_title_in_connection(
@@ -744,27 +771,42 @@ fn set_todo_schedule_in_connection(
     due_date: Option<String>,
     due_at: Option<i64>,
     reminder_at: Option<i64>,
+    repeat_rule: Option<String>,
 ) -> Result<Todo, String> {
     let due_date = normalize_due_date(due_date)?;
+    let repeat_rule = normalize_repeat_rule(repeat_rule)?;
     if due_at.is_some_and(|value| value < 0) || reminder_at.is_some_and(|value| value < 0) {
         return Err("到期或提醒时间无效".to_string());
     }
     if due_date.is_some() && due_at.is_some() {
         return Err("纯日期任务不能同时设置具体到期时间".to_string());
     }
+    if repeat_rule.is_some() && due_date.is_none() {
+        return Err("重复任务需要先设置到期日期".to_string());
+    }
+    if repeat_rule.is_some() && due_at.is_some() {
+        return Err("重复任务暂只支持日期级到期".to_string());
+    }
+    let repeat_next_due_date = match (&due_date, &repeat_rule) {
+        (Some(date), Some(rule)) => Some(next_repeat_due_date(date, rule)?),
+        _ => None,
+    };
 
     let changed = connection
         .execute(
             "
             UPDATE todos
             SET due_date = ?1, due_at = ?2, reminder_at = ?3,
-                updated_at = ?4, updated_by = ?5
-            WHERE id = ?6 AND deleted_at IS NULL
+                repeat_rule = ?4, repeat_next_due_date = ?5,
+                updated_at = ?6, updated_by = ?7
+            WHERE id = ?8 AND deleted_at IS NULL
             ",
             params![
                 due_date,
                 due_at,
                 reminder_at,
+                repeat_rule,
+                repeat_next_due_date,
                 now_millis(),
                 device_id(connection).map_err(database_error)?,
                 id
@@ -905,7 +947,7 @@ fn find_todo(connection: &Connection, id: i64) -> Result<Option<Todo>, String> {
             SELECT
                 id, uuid, title, group_uuid, completed, pinned, sort_order,
                 created_at, updated_at, completed_at, deleted_at,
-                due_date, due_at, reminder_at
+                due_date, due_at, reminder_at, repeat_rule, repeat_next_due_date
             FROM todos
             WHERE id = ?1
             ",
@@ -932,6 +974,8 @@ fn map_todo(row: &rusqlite::Row<'_>) -> rusqlite::Result<Todo> {
         due_date: row.get(11)?,
         due_at: row.get(12)?,
         reminder_at: row.get(13)?,
+        repeat_rule: row.get(14)?,
+        repeat_next_due_date: row.get(15)?,
     })
 }
 
@@ -1058,6 +1102,165 @@ fn normalize_due_date(due_date: Option<String>) -> Result<Option<String>, String
     Ok(Some(trimmed.to_string()))
 }
 
+fn normalize_repeat_rule(repeat_rule: Option<String>) -> Result<Option<String>, String> {
+    let Some(value) = repeat_rule else {
+        return Ok(None);
+    };
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    match trimmed {
+        "daily" | "weekly" | "monthly" | "weekdays" => Ok(Some(trimmed.to_string())),
+        _ => Err("重复规则无效".to_string()),
+    }
+}
+
+fn create_next_repeat_instance(
+    connection: &Connection,
+    source: &Todo,
+    now: i64,
+    updated_by: &str,
+) -> Result<Option<i64>, String> {
+    let Some(rule) = source.repeat_rule.as_deref() else {
+        return Ok(None);
+    };
+    let Some(next_due_date) = source.repeat_next_due_date.as_deref() else {
+        return Ok(None);
+    };
+    let next_repeat_next_due_date = next_repeat_due_date(next_due_date, rule)?;
+    let uuid = Uuid::new_v4().to_string();
+    let sort_order: i64 = connection
+        .query_row(
+            "
+            SELECT COALESCE(MIN(sort_order), 1024) - 1024
+            FROM todos
+            WHERE deleted_at IS NULL
+            ",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(database_error)?;
+
+    connection
+        .execute(
+            "
+            INSERT INTO todos (
+                uuid, title, group_uuid, completed, pinned, sort_order,
+                created_at, updated_at, completed_at, deleted_at,
+                due_date, due_at, reminder_at, repeat_rule, repeat_next_due_date, updated_by
+            )
+            VALUES (?1, ?2, ?3, 0, ?4, ?5, ?6, ?6, NULL, NULL, ?7, NULL, NULL, ?8, ?9, ?10)
+            ",
+            params![
+                uuid,
+                source.title,
+                source.group_uuid,
+                source.pinned,
+                sort_order,
+                now,
+                next_due_date,
+                rule,
+                next_repeat_next_due_date,
+                updated_by,
+            ],
+        )
+        .map_err(database_error)?;
+
+    Ok(Some(connection.last_insert_rowid()))
+}
+
+fn next_repeat_due_date(date: &str, rule: &str) -> Result<String, String> {
+    let (year, month, day) = parse_date_only(date)?;
+    let next = match rule {
+        "daily" => add_days(year, month, day, 1),
+        "weekly" => add_days(year, month, day, 7),
+        "monthly" => add_month(year, month, day),
+        "weekdays" => {
+            let mut candidate = add_days(year, month, day, 1);
+            while weekday(candidate.0, candidate.1, candidate.2) >= 6 {
+                candidate = add_days(candidate.0, candidate.1, candidate.2, 1);
+            }
+            candidate
+        }
+        _ => return Err("重复规则无效".to_string()),
+    };
+    Ok(format!("{:04}-{:02}-{:02}", next.0, next.1, next.2))
+}
+
+fn parse_date_only(value: &str) -> Result<(u32, u32, u32), String> {
+    if !is_valid_date_only(value) {
+        return Err("日期格式应为 YYYY-MM-DD".to_string());
+    }
+    let year = value[0..4]
+        .parse::<u32>()
+        .map_err(|_| "日期格式应为 YYYY-MM-DD".to_string())?;
+    let month = value[5..7]
+        .parse::<u32>()
+        .map_err(|_| "日期格式应为 YYYY-MM-DD".to_string())?;
+    let day = value[8..10]
+        .parse::<u32>()
+        .map_err(|_| "日期格式应为 YYYY-MM-DD".to_string())?;
+    Ok((year, month, day))
+}
+
+fn add_days(mut year: u32, mut month: u32, mut day: u32, days: u32) -> (u32, u32, u32) {
+    for _ in 0..days {
+        day += 1;
+        let max_day = days_in_month(year, month);
+        if day > max_day {
+            day = 1;
+            month += 1;
+            if month > 12 {
+                month = 1;
+                year += 1;
+            }
+        }
+    }
+    (year, month, day)
+}
+
+fn add_month(mut year: u32, mut month: u32, day: u32) -> (u32, u32, u32) {
+    month += 1;
+    if month > 12 {
+        month = 1;
+        year += 1;
+    }
+    (year, month, day.min(days_in_month(year, month)))
+}
+
+fn weekday(year: u32, month: u32, day: u32) -> u32 {
+    let (mut year, mut month) = (year as i32, month as i32);
+    if month < 3 {
+        month += 12;
+        year -= 1;
+    }
+    let century = year / 100;
+    let year_of_century = year % 100;
+    let h = (day as i32
+        + ((13 * (month + 1)) / 5)
+        + year_of_century
+        + (year_of_century / 4)
+        + (century / 4)
+        + (5 * century))
+        % 7;
+    match h {
+        0 => 6,
+        1 => 7,
+        value => (value - 1) as u32,
+    }
+}
+
+fn days_in_month(year: u32, month: u32) -> u32 {
+    match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if is_leap_year(year) => 29,
+        2 => 28,
+        _ => 0,
+    }
+}
+
 fn is_valid_date_only(value: &str) -> bool {
     let bytes = value.as_bytes();
     if bytes.len() != 10 || bytes[4] != b'-' || bytes[7] != b'-' {
@@ -1080,14 +1283,7 @@ fn is_valid_date_only(value: &str) -> bool {
     let Ok(day) = value[8..10].parse::<u32>() else {
         return false;
     };
-    let max_day = match month {
-        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
-        4 | 6 | 9 | 11 => 30,
-        2 if is_leap_year(year) => 29,
-        2 => 28,
-        _ => return false,
-    };
-    (1..=max_day).contains(&day)
+    (1..=days_in_month(year, month)).contains(&day)
 }
 
 fn is_leap_year(year: u32) -> bool {
@@ -1112,7 +1308,7 @@ mod tests {
 
     #[test]
     fn todo_lifecycle_uses_sync_ready_fields() {
-        let connection = connection();
+        let mut connection = connection();
 
         let created = create_todo_in_connection(&connection, "  新任务  ", None).unwrap();
         assert_eq!(created.title, "新任务");
@@ -1125,14 +1321,20 @@ mod tests {
         assert_eq!(created.due_date, None);
         assert_eq!(created.due_at, None);
         assert_eq!(created.reminder_at, None);
+        assert_eq!(created.repeat_rule, None);
+        assert_eq!(created.repeat_next_due_date, None);
         assert_eq!(list_todos_from_connection(&connection).unwrap().len(), 1);
 
-        let completed = set_todo_completed_in_connection(&connection, created.id, true).unwrap();
+        let completed = set_todo_completed_in_connection(&mut connection, created.id, true)
+            .unwrap()
+            .updated_todo;
         assert!(completed.completed);
         assert!(completed.completed_at.is_some());
         assert!(completed.updated_at >= created.updated_at);
 
-        let reopened = set_todo_completed_in_connection(&connection, created.id, false).unwrap();
+        let reopened = set_todo_completed_in_connection(&mut connection, created.id, false)
+            .unwrap()
+            .updated_todo;
         assert!(!reopened.completed);
         assert_eq!(reopened.completed_at, None);
 
@@ -1180,6 +1382,7 @@ mod tests {
             Some("2026-06-10".to_string()),
             None,
             None,
+            None,
         )
         .unwrap();
         assert_eq!(scheduled.due_date.as_deref(), Some("2026-06-10"));
@@ -1187,6 +1390,7 @@ mod tests {
             &connection,
             first.id,
             Some("2026/06/10".to_string()),
+            None,
             None,
             None
         )
@@ -1196,20 +1400,81 @@ mod tests {
             first.id,
             Some("2026-02-31".to_string()),
             None,
+            None,
             None
         )
         .is_err());
+        let repeating = set_todo_schedule_in_connection(
+            &connection,
+            first.id,
+            Some("2026-06-10".to_string()),
+            None,
+            None,
+            Some("daily".to_string()),
+        )
+        .unwrap();
+        assert_eq!(repeating.repeat_rule.as_deref(), Some("daily"));
+        assert_eq!(
+            repeating.repeat_next_due_date.as_deref(),
+            Some("2026-06-11")
+        );
 
         let reordered =
             reorder_todos_in_connection(&mut connection, &[first.id, second.id]).unwrap();
         assert_eq!(reordered[0].id, first.id);
         assert_eq!(reordered[1].id, second.id);
 
-        set_todo_completed_in_connection(&connection, first.id, true).unwrap();
+        set_todo_completed_in_connection(&mut connection, first.id, true).unwrap();
         assert_eq!(clear_completed_todos_in_connection(&connection).unwrap(), 1);
         let remaining = list_todos_from_connection(&connection).unwrap();
-        assert_eq!(remaining.len(), 1);
-        assert_eq!(remaining[0].id, second.id);
+        assert_eq!(remaining.len(), 2);
+        assert_eq!(remaining[0].due_date.as_deref(), Some("2026-06-11"));
+        assert!(remaining.iter().any(|todo| todo.id == second.id));
+    }
+
+    #[test]
+    fn completing_repeating_todo_creates_only_the_next_instance() {
+        let mut connection = connection();
+        let created = create_todo_in_connection(&connection, "repeat", None).unwrap();
+        let repeating = set_todo_schedule_in_connection(
+            &connection,
+            created.id,
+            Some("2026-06-12".to_string()),
+            None,
+            None,
+            Some("weekdays".to_string()),
+        )
+        .unwrap();
+        assert_eq!(
+            repeating.repeat_next_due_date.as_deref(),
+            Some("2026-06-15")
+        );
+
+        let result = set_todo_completed_in_connection(&mut connection, created.id, true).unwrap();
+        assert!(result.updated_todo.completed);
+        let next = result.created_todo.expect("next repeat instance");
+        assert_eq!(next.title, "repeat");
+        assert!(!next.completed);
+        assert_eq!(next.due_date.as_deref(), Some("2026-06-15"));
+        assert_eq!(next.repeat_rule.as_deref(), Some("weekdays"));
+        assert_eq!(next.repeat_next_due_date.as_deref(), Some("2026-06-16"));
+        assert_eq!(list_todos_from_connection(&connection).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn repeat_date_calculation_clamps_months_and_skips_weekends() {
+        assert_eq!(
+            next_repeat_due_date("2026-01-31", "monthly").unwrap(),
+            "2026-02-28"
+        );
+        assert_eq!(
+            next_repeat_due_date("2028-01-31", "monthly").unwrap(),
+            "2028-02-29"
+        );
+        assert_eq!(
+            next_repeat_due_date("2026-06-12", "weekdays").unwrap(),
+            "2026-06-15"
+        );
     }
 
     #[test]
