@@ -89,6 +89,18 @@ export function createTodoStore(api = todoApi, onChanged = scheduleAutoSync) {
       onChanged();
     },
 
+    async setNote(id: number, note: string | null) {
+      const updatedTodo = await api.updateNote(id, note);
+      update((state) => ({
+        ...state,
+        items: state.items.map((item) =>
+          item.id === updatedTodo.id ? updatedTodo : item,
+        ),
+        error: null,
+      }));
+      onChanged();
+    },
+
     async setPinned(todo: Todo, pinned: boolean) {
       const updatedTodo = await api.setPinned(todo.id, pinned);
       update((state) => ({

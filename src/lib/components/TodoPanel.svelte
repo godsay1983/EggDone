@@ -346,6 +346,15 @@
     }
   }
 
+  async function noteTodo(id: number, note: string | null) {
+    try {
+      await todos.setNote(id, note);
+    } catch (error) {
+      todos.reportError(error);
+      throw error;
+    }
+  }
+
   async function pinTodo(todo: Todo, pinned: boolean) {
     try {
       await todos.setPinned(todo, pinned);
@@ -1241,6 +1250,7 @@
             {todo}
             onToggle={toggleTodo}
             onEdit={editTodo}
+            onNote={noteTodo}
             onPin={pinTodo}
             onSchedule={scheduleTodo}
             onSnooze={snoozeTodo}

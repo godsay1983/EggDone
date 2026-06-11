@@ -10,6 +10,7 @@ function makeTodo(id: number, overrides: Partial<Todo> = {}): Todo {
     id,
     uuid: `00000000-0000-4000-8000-${id.toString().padStart(12, "0")}`,
     title: `todo-${id}`,
+    note: null,
     group_uuid: null,
     completed: false,
     pinned: false,
@@ -81,6 +82,7 @@ function createApi(initialItems: Todo[] = []) {
       created_todo: null,
     })),
     updateTitle: vi.fn(async (id, title) => makeTodo(id, { title })),
+    updateNote: vi.fn(async (id, note) => makeTodo(id, { note })),
     setPinned: vi.fn(async (id, pinned) => makeTodo(id, { pinned })),
     setSchedule: vi.fn(async (id, schedule) => makeTodo(id, schedule)),
     setGroup: vi.fn(async (id, groupUuid) => makeTodo(id, { group_uuid: groupUuid })),
@@ -113,6 +115,9 @@ describe("todo store", () => {
     await store.edit(1, "edited");
     expect(get(store).items.find((todo) => todo.id === 1)?.title).toBe("edited");
 
+    await store.setNote(1, "context");
+    expect(get(store).items.find((todo) => todo.id === 1)?.note).toBe("context");
+
     await store.setPinned(get(store).items.find((todo) => todo.id === 1)!, true);
     expect(get(store).items.find((todo) => todo.id === 1)?.pinned).toBe(true);
 
@@ -135,7 +140,7 @@ describe("todo store", () => {
 
     await store.restore(1);
     expect(get(store).items.some((todo) => todo.id === 1)).toBe(true);
-    expect(onChanged).toHaveBeenCalledTimes(7);
+    expect(onChanged).toHaveBeenCalledTimes(8);
   });
 
   it("creates groups and adds todos into the selected group", async () => {

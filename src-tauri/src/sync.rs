@@ -10,11 +10,14 @@ use uuid::Uuid;
 use crate::db::device_id;
 
 pub(crate) const SYNC_FORMAT_VERSION: u32 = 1;
+const TODO_NOTE_MAX_CHARS: usize = 1000;
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub(crate) struct SyncTodo {
     pub uuid: String,
     pub title: String,
+    #[serde(default)]
+    pub note: Option<String>,
     #[serde(default)]
     pub group_uuid: Option<String>,
     pub completed: bool,
@@ -87,7 +90,7 @@ pub(crate) fn build_document(
             "
             SELECT uuid, title, group_uuid, completed, pinned, sort_order, created_at, updated_at,
                    completed_at, deleted_at, due_date, due_at, reminder_at,
-                   repeat_rule, repeat_next_due_date, repeat_series_uuid, updated_by
+                   repeat_rule, repeat_next_due_date, repeat_series_uuid, note, updated_by
             FROM todos
             ORDER BY uuid ASC
             ",
@@ -196,9 +199,9 @@ pub(crate) fn merge_remote_document(
                 INSERT INTO todos (
                     uuid, title, group_uuid, completed, pinned, sort_order, created_at, updated_at,
                     completed_at, deleted_at, due_date, due_at, reminder_at,
-                    repeat_rule, repeat_next_due_date, repeat_series_uuid, updated_by
+                    repeat_rule, repeat_next_due_date, repeat_series_uuid, note, updated_by
                 )
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
                 ON CONFLICT(uuid) DO UPDATE SET
                     title = excluded.title,
                     group_uuid = excluded.group_uuid,
@@ -215,6 +218,7 @@ pub(crate) fn merge_remote_document(
                     repeat_rule = excluded.repeat_rule,
                     repeat_next_due_date = excluded.repeat_next_due_date,
                     repeat_series_uuid = excluded.repeat_series_uuid,
+                    note = excluded.note,
                     updated_by = excluded.updated_by
                 ",
                 params![
@@ -234,6 +238,7 @@ pub(crate) fn merge_remote_document(
                     todo.repeat_rule,
                     todo.repeat_next_due_date,
                     todo.repeat_series_uuid,
+                    todo.note,
                     todo.updated_by,
                 ],
             )
@@ -311,6 +316,15 @@ pub(crate) fn validate_document(document: &SyncDocument) -> Result<(), String> {
         if todo.title.trim().is_empty() {
             return Err("同步文件包含空标题任务".to_string());
         }
+        if todo
+            .note
+            .as_deref()
+            .is_some_and(|value| value.chars().count() > TODO_NOTE_MAX_CHARS)
+        {
+            return Err(format!(
+                "同步文件包含超过 {TODO_NOTE_MAX_CHARS} 个字符的备注"
+            ));
+        }
         if todo.created_at < 0
             || todo.updated_at < 0
             || todo.completed_at.is_some_and(|value| value < 0)
@@ -348,6 +362,7 @@ fn compare_todos(left: &SyncTodo, right: &SyncTodo) -> Ordering {
         .then_with(|| left.deleted_at.is_some().cmp(&right.deleted_at.is_some()))
         .then_with(|| left.updated_by.cmp(&right.updated_by))
         .then_with(|| left.repeat_series_uuid.cmp(&right.repeat_series_uuid))
+        .then_with(|| left.note.cmp(&right.note))
         .then_with(|| canonical_tie_break(left).cmp(&canonical_tie_break(right)))
 }
 
@@ -422,7 +437,8 @@ fn map_sync_todo(row: &rusqlite::Row<'_>) -> rusqlite::Result<SyncTodo> {
         repeat_rule: row.get(13)?,
         repeat_next_due_date: row.get(14)?,
         repeat_series_uuid: row.get(15)?,
-        updated_by: row.get(16)?,
+        note: row.get(16)?,
+        updated_by: row.get(17)?,
     })
 }
 
@@ -524,6 +540,7 @@ mod tests {
         SyncTodo {
             uuid: TODO_ID.to_string(),
             title: title.to_string(),
+            note: None,
             group_uuid: None,
             completed: false,
             pinned: false,
@@ -635,6 +652,7 @@ mod tests {
 
         let mut remote_todo = todo("remote deleted", 11, DEVICE_B);
         remote_todo.pinned = true;
+        remote_todo.note = Some("remote note".to_string());
         remote_todo.due_date = Some("2026-06-10".to_string());
         remote_todo.deleted_at = Some(11);
         let merged =
@@ -645,6 +663,7 @@ mod tests {
         let persisted = build_document(&connection, 31).unwrap();
         assert_eq!(persisted.todos[0].deleted_at, Some(11));
         assert!(persisted.todos[0].pinned);
+        assert_eq!(persisted.todos[0].note.as_deref(), Some("remote note"));
         assert_eq!(persisted.todos[0].due_date.as_deref(), Some("2026-06-10"));
         assert_eq!(persisted.todos[0].updated_by, DEVICE_B);
     }
@@ -712,6 +731,7 @@ mod tests {
 
         let document: SyncDocument = serde_json::from_str(&json).unwrap();
         assert!(!document.todos[0].pinned);
+        assert_eq!(document.todos[0].note, None);
         assert!(document.groups.is_empty());
         assert_eq!(document.todos[0].due_date, None);
         validate_document(&document).unwrap();

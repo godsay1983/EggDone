@@ -27,6 +27,7 @@
   export let todo: Todo;
   export let onToggle: (todo: Todo) => Promise<void>;
   export let onEdit: (id: number, title: string) => Promise<void>;
+  export let onNote: (id: number, note: string | null) => Promise<void>;
   export let onPin: (todo: Todo, pinned: boolean) => Promise<void>;
   export let onSchedule: (id: number, schedule: TodoScheduleInput) => Promise<void>;
   export let onSnooze: (todo: Todo, reminderAt: number) => Promise<void>;
@@ -53,6 +54,10 @@
   let scheduleOpen = false;
   let scheduleSaving = false;
   let scheduleError = "";
+  let noteOpen = false;
+  let noteDraft = "";
+  let noteSaving = false;
+  let noteError = "";
   let customDate = "";
   let customReminderDateTime = "";
   let reminderChoice: ReminderChoice = "none";
@@ -60,10 +65,12 @@
   let groupSaving = false;
   let actionsOpen = false;
   let editInput: HTMLInputElement;
+  let noteInput: HTMLTextAreaElement;
   let itemElement: HTMLElement;
   let animationDuration = 140;
   $: dueLabel = formatDueLabel(todo);
   $: dueTone = getDueTone(todo);
+  $: notePreview = todo.note?.trim() ?? "";
   $: canSaveSchedule =
     Boolean(customDate) &&
     (reminderChoice !== "custom" || Boolean(customReminderDateTime));
@@ -92,6 +99,14 @@
         scheduleOpen = false;
       }
       if (
+        noteOpen &&
+        event.target instanceof Node &&
+        !itemElement.contains(event.target)
+      ) {
+        noteOpen = false;
+        noteError = "";
+      }
+      if (
         actionsOpen &&
         event.target instanceof Node &&
         !itemElement.contains(event.target)
@@ -106,6 +121,7 @@
 
   async function beginEdit() {
     scheduleOpen = false;
+    noteOpen = false;
     actionsOpen = false;
     editing = true;
     editTitle = todo.title;
@@ -124,6 +140,7 @@
   function toggleSchedule() {
     if (editing) return;
     actionsOpen = false;
+    noteOpen = false;
     scheduleOpen = !scheduleOpen;
     scheduleError = "";
     customDate = todo.due_date ?? localDateString(0);
@@ -138,7 +155,19 @@
   function toggleActions() {
     if (editing) return;
     scheduleOpen = false;
+    noteOpen = false;
     actionsOpen = !actionsOpen;
+  }
+
+  async function openNoteEditor() {
+    if (editing) return;
+    scheduleOpen = false;
+    actionsOpen = false;
+    noteOpen = true;
+    noteDraft = todo.note ?? "";
+    noteError = "";
+    await tick();
+    noteInput?.focus();
   }
 
   async function setDateOnly(date: string | null) {
@@ -237,6 +266,31 @@
     }
   }
 
+  async function saveNote() {
+    if (noteSaving) return;
+
+    const nextNote = noteDraft.trim();
+    const normalizedNote = nextNote ? nextNote : null;
+    if (normalizedNote === todo.note) {
+      noteOpen = false;
+      noteError = "";
+      return;
+    }
+
+    noteSaving = true;
+    noteError = "";
+    try {
+      await onNote(todo.id, normalizedNote);
+      noteOpen = false;
+    } catch {
+      noteError = "备注保存失败，请重试";
+      await tick();
+      noteInput?.focus();
+    } finally {
+      noteSaving = false;
+    }
+  }
+
   function handleEditKeydown(event: KeyboardEvent) {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -244,6 +298,17 @@
     } else if (event.key === "Escape") {
       event.preventDefault();
       cancelEdit();
+    }
+  }
+
+  function handleNoteKeydown(event: KeyboardEvent) {
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      event.preventDefault();
+      void saveNote();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      noteOpen = false;
+      noteError = "";
     }
   }
 </script>
@@ -323,6 +388,16 @@
   {:else}
     <div class="todo-content">
       <p>{todo.title}</p>
+      {#if notePreview}
+        <button
+          class="todo-note"
+          type="button"
+          title="编辑备注"
+          onclick={() => void openNoteEditor()}
+        >
+          {notePreview}
+        </button>
+      {/if}
       {#if dueLabel || todo.pinned || todo.reminder_at !== null || todo.repeat_rule !== null}
         <div class="todo-meta">
           {#if todo.pinned}
@@ -426,6 +501,39 @@
           {#if scheduleError}<small>{scheduleError}</small>{/if}
         </div>
       {/if}
+      {#if noteOpen}
+        <div class="note-popover" role="dialog" aria-label="编辑备注">
+          <strong>备注</strong>
+          <textarea
+            bind:this={noteInput}
+            bind:value={noteDraft}
+            maxlength="1000"
+            rows="4"
+            placeholder="补充一点上下文，纯文本即可"
+            disabled={noteSaving}
+            onkeydown={handleNoteKeydown}
+          ></textarea>
+          <div class="note-footer">
+            <small>{noteDraft.length}/1000</small>
+            <div>
+              <button
+                type="button"
+                disabled={noteSaving}
+                onclick={() => {
+                  noteOpen = false;
+                  noteError = "";
+                }}>取消</button
+              >
+              <button
+                type="button"
+                disabled={noteSaving}
+                onclick={() => void saveNote()}>保存</button
+              >
+            </div>
+          </div>
+          {#if noteError}<small class="note-error">{noteError}</small>{/if}
+        </div>
+      {/if}
     </div>
   {/if}
 
@@ -449,6 +557,13 @@
     </button>
     {#if actionsOpen}
       <div class="actions-menu" role="menu">
+        <button
+          type="button"
+          role="menuitem"
+          onclick={() => void openNoteEditor()}
+        >
+          {todo.note ? "编辑备注" : "添加备注"}
+        </button>
         <button type="button" role="menuitem" onclick={toggleSchedule}>
           设置日期
         </button>

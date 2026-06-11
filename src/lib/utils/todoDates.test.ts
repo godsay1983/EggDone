@@ -13,6 +13,7 @@ function makeTodo(overrides: Partial<Todo> = {}): Todo {
     id: 1,
     uuid: "00000000-0000-4000-8000-000000000001",
     title: "todo",
+    note: null,
     group_uuid: null,
     completed: false,
     pinned: false,

@@ -16,11 +16,14 @@ use crate::{
 };
 
 const FORMAT_VERSION: u32 = 1;
+const TODO_NOTE_MAX_CHARS: usize = 1000;
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 struct TransferTodo {
     uuid: String,
     title: String,
+    #[serde(default)]
+    note: Option<String>,
     #[serde(default)]
     group_uuid: Option<String>,
     completed: bool,
@@ -291,6 +294,15 @@ fn validate_import(import: &TodoExport) -> Result<(), String> {
         if todo.title.trim().is_empty() {
             return Err("导入文件包含空标题任务".to_string());
         }
+        if todo
+            .note
+            .as_deref()
+            .is_some_and(|value| value.chars().count() > TODO_NOTE_MAX_CHARS)
+        {
+            return Err(format!(
+                "导入文件包含超过 {TODO_NOTE_MAX_CHARS} 个字符的备注"
+            ));
+        }
         if todo.created_at < 0
             || todo.updated_at < 0
             || todo.completed_at.is_some_and(|value| value < 0)
@@ -346,7 +358,7 @@ fn read_all_todos(connection: &Connection) -> Result<Vec<TransferTodo>, String> 
             "
             SELECT uuid, title, group_uuid, completed, pinned, sort_order, created_at, updated_at,
                    completed_at, deleted_at, due_date, due_at, reminder_at,
-                   repeat_rule, repeat_next_due_date, repeat_series_uuid
+                   repeat_rule, repeat_next_due_date, repeat_series_uuid, note
             FROM todos
             ORDER BY completed ASC, pinned DESC, sort_order ASC, created_at DESC, id DESC
             ",
@@ -524,9 +536,9 @@ fn insert_todo(
             INSERT INTO todos (
                 uuid, title, group_uuid, completed, pinned, sort_order, created_at, updated_at,
                 completed_at, deleted_at, due_date, due_at, reminder_at,
-                repeat_rule, repeat_next_due_date, repeat_series_uuid, updated_by
+                repeat_rule, repeat_next_due_date, repeat_series_uuid, note, updated_by
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
             ",
             params![
                 todo.uuid,
@@ -545,6 +557,7 @@ fn insert_todo(
                 todo.repeat_rule,
                 todo.repeat_next_due_date,
                 todo.repeat_series_uuid,
+                todo.note,
                 updated_by,
             ],
         )
@@ -565,8 +578,8 @@ fn update_todo(
                 created_at = ?5, updated_at = ?6, completed_at = ?7,
                 deleted_at = ?8, due_date = ?9, due_at = ?10, reminder_at = ?11,
                 repeat_rule = ?12, repeat_next_due_date = ?13,
-                repeat_series_uuid = ?14, group_uuid = ?15, updated_by = ?16
-            WHERE uuid = ?17
+                repeat_series_uuid = ?14, note = ?15, group_uuid = ?16, updated_by = ?17
+            WHERE uuid = ?18
             ",
             params![
                 todo.title.trim(),
@@ -583,6 +596,7 @@ fn update_todo(
                 todo.repeat_rule,
                 todo.repeat_next_due_date,
                 todo.repeat_series_uuid,
+                todo.note,
                 todo.group_uuid,
                 updated_by,
                 todo.uuid,
@@ -610,6 +624,7 @@ fn map_transfer_todo(row: &rusqlite::Row<'_>) -> rusqlite::Result<TransferTodo> 
         repeat_rule: row.get(13)?,
         repeat_next_due_date: row.get(14)?,
         repeat_series_uuid: row.get(15)?,
+        note: row.get(16)?,
     })
 }
 
@@ -712,6 +727,7 @@ mod tests {
         TransferTodo {
             uuid: uuid.to_string(),
             title: title.to_string(),
+            note: None,
             group_uuid: None,
             completed: false,
             pinned: false,
@@ -746,6 +762,7 @@ mod tests {
         let mut source = connection();
         let mut active = todo("00000000-0000-4000-8000-000000000001", "active", 2);
         active.pinned = true;
+        active.note = Some("exported note".to_string());
         active.due_date = Some("2026-06-10".to_string());
         active.repeat_rule = Some("daily".to_string());
         active.repeat_next_due_date = Some("2026-06-11".to_string());
@@ -849,6 +866,7 @@ mod tests {
         let import: TodoExport = serde_json::from_str(json).unwrap();
         assert!(import.groups.is_empty());
         assert!(!import.todos[0].pinned);
+        assert_eq!(import.todos[0].note, None);
         assert_eq!(import.todos[0].due_date, None);
         validate_import(&import).unwrap();
     }

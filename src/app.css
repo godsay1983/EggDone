@@ -672,6 +672,31 @@ footer {
   line-height: 1.45;
 }
 
+.todo-note {
+  display: -webkit-box;
+  width: 100%;
+  margin-top: 5px;
+  padding: 5px 7px;
+  overflow: hidden;
+  border: 0;
+  border-left: 3px solid #f0c24a;
+  border-radius: 9px;
+  color: #7a6a53;
+  background: #fff6d8;
+  font-size: 11px;
+  line-height: 1.45;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.todo-note:hover {
+  color: #5f4c1e;
+  background: #fff0bd;
+}
+
 .todo-meta {
   display: flex;
   flex-wrap: wrap;
@@ -832,6 +857,98 @@ footer {
   margin-top: 6px;
   color: #a76455;
   font-size: 9px;
+}
+
+.note-popover {
+  position: absolute;
+  top: calc(100% + 7px);
+  left: 0;
+  z-index: 7;
+  width: 238px;
+  padding: 10px;
+  border: 1px solid #eadfcf;
+  border-radius: 13px;
+  background: #fffdf8;
+  box-shadow: 0 14px 34px rgb(78 60 31 / 18%);
+}
+
+.note-popover strong {
+  display: block;
+  margin-bottom: 7px;
+  color: #665844;
+  font-size: 11px;
+}
+
+.note-popover textarea {
+  width: 100%;
+  min-width: 0;
+  resize: vertical;
+  padding: 7px 8px;
+  border: 1px solid #e1d5c2;
+  border-radius: 9px;
+  outline: 0;
+  color: #463e31;
+  background: #fffdf8;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.note-popover textarea:focus {
+  border-color: #d9ad31;
+  box-shadow: 0 0 0 2px rgb(246 201 76 / 14%);
+}
+
+.note-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 7px;
+}
+
+.note-footer div {
+  display: flex;
+  gap: 6px;
+}
+
+.note-footer button {
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 8px;
+  color: #6f6048;
+  background: #f0eadf;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.note-footer button:hover {
+  color: #5f4c1e;
+  background: #f6c94c;
+}
+
+.note-footer button:last-child {
+  color: #5f4c1e;
+  background: #f6c94c;
+  font-weight: 700;
+}
+
+.note-popover textarea:disabled,
+.note-footer button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.note-footer small,
+.note-error {
+  display: block;
+  color: #9a8461;
+  font-size: 9px;
+}
+
+.note-error {
+  margin-top: 6px;
+  color: #a76455;
 }
 
 .drag-handle {
@@ -2245,6 +2362,17 @@ html[data-theme="dark"] .todo-item.completed p {
   text-decoration-color: #817767;
 }
 
+html[data-theme="dark"] .todo-note {
+  border-left-color: #c89f37;
+  color: #cfc4b3;
+  background: #352f22;
+}
+
+html[data-theme="dark"] .todo-note:hover {
+  color: #f1e9dc;
+  background: #423824;
+}
+
 html[data-theme="dark"] .due-badge {
   color: #c9b487;
   background: #3a3429;
@@ -2316,6 +2444,46 @@ html[data-theme="dark"] .schedule-popover select:focus {
 }
 
 html[data-theme="dark"] .schedule-popover small {
+  color: #d38a78;
+}
+
+html[data-theme="dark"] .note-popover {
+  border-color: #494238;
+  background: #292621;
+  box-shadow: 0 16px 38px rgb(0 0 0 / 42%);
+}
+
+html[data-theme="dark"] .note-popover strong {
+  color: #ded4c4;
+}
+
+html[data-theme="dark"] .note-popover textarea {
+  border-color: #534b3f;
+  color: #f1e9dc;
+  background: #211f1b;
+}
+
+html[data-theme="dark"] .note-popover textarea:focus {
+  border-color: #aa8735;
+  box-shadow: 0 0 0 2px rgb(246 201 76 / 10%);
+}
+
+html[data-theme="dark"] .note-footer button {
+  color: #cfc4b3;
+  background: #454038;
+}
+
+html[data-theme="dark"] .note-footer button:hover,
+html[data-theme="dark"] .note-footer button:last-child {
+  color: #352c17;
+  background: #d8ae3c;
+}
+
+html[data-theme="dark"] .note-footer small {
+  color: #a89d8c;
+}
+
+html[data-theme="dark"] .note-error {
   color: #d38a78;
 }
 

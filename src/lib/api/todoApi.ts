@@ -64,6 +64,10 @@ export const todoApi = {
     return invoke<Todo>("update_todo_title", { id, title });
   },
 
+  updateNote(id: number, note: string | null): Promise<Todo> {
+    return invoke<Todo>("update_todo_note", { id, note });
+  },
+
   setPinned(id: number, pinned: boolean): Promise<Todo> {
     return invoke<Todo>("set_todo_pinned", { id, pinned });
   },

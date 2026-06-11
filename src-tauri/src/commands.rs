@@ -13,11 +13,14 @@ use crate::{
     tray::{self, PanelState},
 };
 
+const TODO_NOTE_MAX_CHARS: usize = 1000;
+
 #[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct Todo {
     id: i64,
     uuid: String,
     title: String,
+    note: Option<String>,
     group_uuid: Option<String>,
     completed: bool,
     pinned: bool,
@@ -181,6 +184,21 @@ pub fn update_todo_title(
     let result = {
         let connection = lock_database(&database)?;
         update_todo_title_in_connection(&connection, id, &title)
+    };
+    refresh_badge_after_success(&app, &result);
+    result
+}
+
+#[tauri::command]
+pub fn update_todo_note(
+    id: i64,
+    note: Option<String>,
+    app: AppHandle,
+    database: State<'_, Database>,
+) -> Result<Todo, String> {
+    let result = {
+        let connection = lock_database(&database)?;
+        update_todo_note_in_connection(&connection, id, note)
     };
     refresh_badge_after_success(&app, &result);
     result
@@ -424,7 +442,7 @@ fn list_todos_from_connection(connection: &Connection) -> Result<Vec<Todo>, Stri
         .prepare(
             "
             SELECT
-                id, uuid, title, group_uuid, completed, pinned, sort_order,
+                id, uuid, title, note, group_uuid, completed, pinned, sort_order,
                 created_at, updated_at, completed_at, deleted_at,
                 due_date, due_at, reminder_at,
                 repeat_rule, repeat_next_due_date, repeat_series_uuid
@@ -487,12 +505,12 @@ fn create_todo_in_connection(
         .execute(
             "
             INSERT INTO todos (
-                uuid, title, group_uuid, completed, sort_order,
+                uuid, title, note, group_uuid, completed, sort_order,
                 created_at, updated_at, completed_at, deleted_at,
                 due_date, due_at, reminder_at,
                 repeat_rule, repeat_next_due_date, repeat_series_uuid, updated_by
             )
-            VALUES (?1, ?2, ?3, 0, ?4, ?5, ?5, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?6)
+            VALUES (?1, ?2, NULL, ?3, 0, ?4, ?5, ?5, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?6)
             ",
             params![uuid, title, group_uuid, sort_order, now, updated_by],
         )
@@ -748,6 +766,35 @@ fn update_todo_title_in_connection(
     }
 
     find_todo(connection, id)?.ok_or_else(|| "编辑后未能读取任务".to_string())
+}
+
+fn update_todo_note_in_connection(
+    connection: &Connection,
+    id: i64,
+    note: Option<String>,
+) -> Result<Todo, String> {
+    let note = normalize_todo_note(note)?;
+    let changed = connection
+        .execute(
+            "
+            UPDATE todos
+            SET note = ?1, updated_at = ?2, updated_by = ?3
+            WHERE id = ?4 AND deleted_at IS NULL
+            ",
+            params![
+                note,
+                now_millis(),
+                device_id(connection).map_err(database_error)?,
+                id
+            ],
+        )
+        .map_err(database_error)?;
+
+    if changed == 0 {
+        return Err("任务不存在".to_string());
+    }
+
+    find_todo(connection, id)?.ok_or_else(|| "备注保存后未能读取任务".to_string())
 }
 
 fn set_todo_pinned_in_connection(
@@ -1016,7 +1063,7 @@ fn find_todo(connection: &Connection, id: i64) -> Result<Option<Todo>, String> {
         .query_row(
             "
             SELECT
-                id, uuid, title, group_uuid, completed, pinned, sort_order,
+                id, uuid, title, note, group_uuid, completed, pinned, sort_order,
                 created_at, updated_at, completed_at, deleted_at,
                 due_date, due_at, reminder_at,
                 repeat_rule, repeat_next_due_date, repeat_series_uuid
@@ -1035,20 +1082,21 @@ fn map_todo(row: &rusqlite::Row<'_>) -> rusqlite::Result<Todo> {
         id: row.get(0)?,
         uuid: row.get(1)?,
         title: row.get(2)?,
-        group_uuid: row.get(3)?,
-        completed: row.get::<_, i64>(4)? != 0,
-        pinned: row.get::<_, i64>(5)? != 0,
-        sort_order: row.get(6)?,
-        created_at: row.get(7)?,
-        updated_at: row.get(8)?,
-        completed_at: row.get(9)?,
-        deleted_at: row.get(10)?,
-        due_date: row.get(11)?,
-        due_at: row.get(12)?,
-        reminder_at: row.get(13)?,
-        repeat_rule: row.get(14)?,
-        repeat_next_due_date: row.get(15)?,
-        repeat_series_uuid: row.get(16)?,
+        note: row.get(3)?,
+        group_uuid: row.get(4)?,
+        completed: row.get::<_, i64>(5)? != 0,
+        pinned: row.get::<_, i64>(6)? != 0,
+        sort_order: row.get(7)?,
+        created_at: row.get(8)?,
+        updated_at: row.get(9)?,
+        completed_at: row.get(10)?,
+        deleted_at: row.get(11)?,
+        due_date: row.get(12)?,
+        due_at: row.get(13)?,
+        reminder_at: row.get(14)?,
+        repeat_rule: row.get(15)?,
+        repeat_next_due_date: row.get(16)?,
+        repeat_series_uuid: row.get(17)?,
     })
 }
 
@@ -1153,6 +1201,20 @@ fn normalize_group_name(name: &str) -> Result<String, String> {
     Ok(name.to_string())
 }
 
+fn normalize_todo_note(note: Option<String>) -> Result<Option<String>, String> {
+    let Some(note) = note else {
+        return Ok(None);
+    };
+    let note = note.trim();
+    if note.is_empty() {
+        return Ok(None);
+    }
+    if note.chars().count() > TODO_NOTE_MAX_CHARS {
+        return Err(format!("备注不能超过 {TODO_NOTE_MAX_CHARS} 个字符"));
+    }
+    Ok(Some(note.to_string()))
+}
+
 fn normalize_group_color(color: &str) -> Result<&str, String> {
     let color = color.trim();
     match color {
@@ -1223,16 +1285,17 @@ fn create_next_repeat_instance(
         .execute(
             "
             INSERT INTO todos (
-                uuid, title, group_uuid, completed, pinned, sort_order,
+                uuid, title, note, group_uuid, completed, pinned, sort_order,
                 created_at, updated_at, completed_at, deleted_at,
                 due_date, due_at, reminder_at,
                 repeat_rule, repeat_next_due_date, repeat_series_uuid, updated_by
             )
-            VALUES (?1, ?2, ?3, 0, ?4, ?5, ?6, ?6, NULL, NULL, ?7, NULL, NULL, ?8, ?9, ?10, ?11)
+            VALUES (?1, ?2, ?3, ?4, 0, ?5, ?6, ?7, ?7, NULL, NULL, ?8, NULL, NULL, ?9, ?10, ?11, ?12)
             ",
             params![
                 uuid,
                 source.title,
+                source.note,
                 source.group_uuid,
                 source.pinned,
                 sort_order,
@@ -1428,6 +1491,27 @@ mod tests {
         let restored = restore_todo_in_connection(&connection, created.id).unwrap();
         assert_eq!(restored.deleted_at, None);
         assert_eq!(list_todos_from_connection(&connection).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn updates_todo_note_with_normalization() {
+        let connection = connection();
+        let created = create_todo_in_connection(&connection, "task", None).unwrap();
+
+        let with_note =
+            update_todo_note_in_connection(&connection, created.id, Some("  detail  ".to_string()))
+                .unwrap();
+        assert_eq!(with_note.note.as_deref(), Some("detail"));
+
+        let cleared =
+            update_todo_note_in_connection(&connection, created.id, Some("   ".to_string()))
+                .unwrap();
+        assert_eq!(cleared.note, None);
+
+        let long_note = "x".repeat(TODO_NOTE_MAX_CHARS + 1);
+        let error =
+            update_todo_note_in_connection(&connection, created.id, Some(long_note)).unwrap_err();
+        assert!(error.contains("备注不能超过"));
     }
 
     #[test]

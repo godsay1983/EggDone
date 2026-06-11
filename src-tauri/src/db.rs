@@ -9,7 +9,7 @@ use rusqlite::{params, Connection, Transaction};
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
-const CURRENT_SCHEMA_VERSION: i64 = 10;
+const CURRENT_SCHEMA_VERSION: i64 = 11;
 const DEVICE_ID_KEY: &str = "device_id";
 
 pub struct Database {
@@ -73,6 +73,7 @@ pub(crate) fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {
     apply_migration(connection, 8, add_todo_groups)?;
     apply_migration(connection, 9, add_todo_repeats)?;
     apply_migration(connection, 10, add_repeat_series_uuid)?;
+    apply_migration(connection, 11, add_todo_note)?;
 
     debug_assert_eq!(schema_version(connection)?, CURRENT_SCHEMA_VERSION);
     Ok(())
@@ -376,6 +377,15 @@ fn add_repeat_series_uuid(transaction: &Transaction<'_>) -> rusqlite::Result<()>
     )
 }
 
+fn add_todo_note(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
+    transaction.execute_batch(
+        "
+        ALTER TABLE todos
+            ADD COLUMN note TEXT;
+        ",
+    )
+}
+
 pub(crate) fn device_id(connection: &Connection) -> rusqlite::Result<String> {
     connection.query_row(
         "SELECT value FROM app_metadata WHERE key = ?1",
@@ -434,6 +444,7 @@ mod tests {
             "repeat_rule",
             "repeat_next_due_date",
             "repeat_series_uuid",
+            "note",
         ] {
             assert!(columns.iter().any(|column| column == expected));
         }
@@ -875,5 +886,42 @@ mod tests {
             .query_row("SELECT repeat_series_uuid FROM todos", [], |row| row.get(0))
             .unwrap();
         assert_eq!(series_uuid, uuid);
+    }
+
+    #[test]
+    fn upgrades_v10_database_with_note_field() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "
+                CREATE TABLE schema_migrations (
+                    version INTEGER PRIMARY KEY,
+                    applied_at INTEGER NOT NULL
+                );
+                ",
+            )
+            .unwrap();
+        apply_migration(&mut connection, 1, create_legacy_schema).unwrap();
+        apply_migration(&mut connection, 2, migrate_todos_for_sync).unwrap();
+        apply_migration(&mut connection, 3, add_sync_identity).unwrap();
+        apply_migration(&mut connection, 4, add_sync_settings).unwrap();
+        apply_migration(&mut connection, 5, add_todo_pinning).unwrap();
+        apply_migration(&mut connection, 6, add_todo_due_fields).unwrap();
+        apply_migration(&mut connection, 7, add_reminder_deliveries).unwrap();
+        apply_migration(&mut connection, 8, add_todo_groups).unwrap();
+        apply_migration(&mut connection, 9, add_todo_repeats).unwrap();
+        apply_migration(&mut connection, 10, add_repeat_series_uuid).unwrap();
+
+        migrate(&mut connection).unwrap();
+
+        assert_eq!(schema_version(&connection).unwrap(), CURRENT_SCHEMA_VERSION);
+        let columns: Vec<String> = connection
+            .prepare("PRAGMA table_info(todos)")
+            .unwrap()
+            .query_map([], |row| row.get(1))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert!(columns.iter().any(|column| column == "note"));
     }
 }

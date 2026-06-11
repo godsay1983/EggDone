@@ -86,6 +86,7 @@ pub fn run() {
             commands::reorder_groups,
             commands::set_todo_completed,
             commands::update_todo_title,
+            commands::update_todo_note,
             commands::set_todo_pinned,
             commands::set_todo_schedule,
             commands::set_todo_group,

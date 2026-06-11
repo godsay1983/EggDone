@@ -2,6 +2,7 @@ export interface Todo {
   id: number;
   uuid: string;
   title: string;
+  note: string | null;
   group_uuid: string | null;
   completed: boolean;
   pinned: boolean;
