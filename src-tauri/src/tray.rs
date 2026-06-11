@@ -5,9 +5,9 @@ use std::{
 
 use tauri::{
     image::Image,
-    menu::{Menu, MenuItem, PredefinedMenuItem},
+    menu::{IsMenuItem, Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Manager, Monitor, PhysicalPosition,
+    AppHandle, Emitter, Manager, Monitor, PhysicalPosition, Wry,
 };
 
 use crate::{
@@ -19,6 +19,8 @@ const RECENT_BLUR_DURATION: Duration = Duration::from_millis(350);
 const DIALOG_CLOSE_GRACE: Duration = Duration::from_millis(500);
 const INTERNAL_INTERACTION_GRACE: Duration = Duration::from_millis(300);
 const TRAY_ID: &str = "eggdone-tray";
+const TODAY_TASK_MENU_LIMIT: usize = 3;
+const TODAY_TASK_MENU_TITLE_MAX_CHARS: usize = 18;
 
 #[derive(Default)]
 struct PanelStateInner {
@@ -143,23 +145,7 @@ fn duration_since(later: Instant, earlier: Instant) -> Duration {
 }
 
 pub fn create_tray(app: &AppHandle) -> tauri::Result<TrayIcon> {
-    let toggle_item = MenuItem::with_id(app, "toggle", "打开 / 隐藏面板", true, None::<&str>)?;
-    let new_item = MenuItem::with_id(app, "new", "新增任务", true, None::<&str>)?;
-    let today_item = MenuItem::with_id(app, "today", "今天任务", true, None::<&str>)?;
-    let about_item = MenuItem::with_id(app, "about", "关于 EggDone", true, None::<&str>)?;
-    let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
-    let separator = PredefinedMenuItem::separator(app)?;
-    let menu = Menu::with_items(
-        app,
-        &[
-            &toggle_item,
-            &new_item,
-            &today_item,
-            &separator,
-            &about_item,
-            &quit_item,
-        ],
-    )?;
+    let menu = build_tray_menu(app, &[])?;
 
     let tray_icon = app
         .default_window_icon()
@@ -180,6 +166,10 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<TrayIcon> {
                 let _ = app.emit_to("main", "focus-new-todo", ());
             }
             "today" => {
+                show_panel(app, None);
+                let _ = app.emit_to("main", "show-today", ());
+            }
+            id if id.starts_with("today-task-") => {
                 show_panel(app, None);
                 let _ = app.emit_to("main", "show-today", ());
             }
@@ -226,6 +216,43 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<TrayIcon> {
     Ok(tray)
 }
 
+fn build_tray_menu(app: &AppHandle, today_task_titles: &[String]) -> tauri::Result<Menu<Wry>> {
+    let toggle_item = MenuItem::with_id(app, "toggle", "打开 / 隐藏面板", true, None::<&str>)?;
+    let new_item = MenuItem::with_id(app, "new", "新增任务", true, None::<&str>)?;
+    let today_item = MenuItem::with_id(app, "today", "今天任务", true, None::<&str>)?;
+    let preview_separator = PredefinedMenuItem::separator(app)?;
+    let separator = PredefinedMenuItem::separator(app)?;
+    let about_item = MenuItem::with_id(app, "about", "关于 EggDone", true, None::<&str>)?;
+    let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+    let preview_items = today_task_titles
+        .iter()
+        .take(TODAY_TASK_MENU_LIMIT)
+        .enumerate()
+        .map(|(index, title)| {
+            MenuItem::with_id(
+                app,
+                format!("today-task-{index}"),
+                today_task_menu_label(index, title),
+                true,
+                None::<&str>,
+            )
+        })
+        .collect::<tauri::Result<Vec<_>>>()?;
+
+    let mut items: Vec<&dyn IsMenuItem<_>> = vec![&toggle_item, &new_item, &today_item];
+    if !preview_items.is_empty() {
+        items.push(&preview_separator);
+        for item in &preview_items {
+            items.push(item);
+        }
+    }
+    items.push(&separator);
+    items.push(&about_item);
+    items.push(&quit_item);
+
+    Menu::with_items(app, &items)
+}
+
 pub(crate) fn update_task_badge(app: &AppHandle) {
     let Some(tray) = app.tray_by_id(TRAY_ID) else {
         return;
@@ -264,6 +291,8 @@ pub(crate) fn update_task_badge(app: &AppHandle) {
     let Ok((remaining, total, today_due)) = counts else {
         return;
     };
+    let today_task_titles =
+        today_task_titles(&connection, TODAY_TASK_MENU_LIMIT).unwrap_or_default();
     drop(connection);
 
     let Some(base) = app.default_window_icon() else {
@@ -272,10 +301,58 @@ pub(crate) fn update_task_badge(app: &AppHandle) {
     let badge = draw_task_badge(base, remaining, total);
     let _ = tray.set_icon(Some(badge));
     let _ = tray.set_tooltip(Some(task_tooltip(remaining, total, today_due)));
+    if let Ok(menu) = build_tray_menu(app, &today_task_titles) {
+        let _ = tray.set_menu(Some(menu));
+    }
 }
 
 fn task_tooltip(remaining: u32, total: u32, today_due: u32) -> String {
     format!("蛋定 Todo · {remaining}/{total} 项未完成 · 今天 {today_due} 项")
+}
+
+fn today_task_titles(
+    connection: &rusqlite::Connection,
+    limit: usize,
+) -> rusqlite::Result<Vec<String>> {
+    let mut statement = connection.prepare(
+        "
+        SELECT title
+        FROM todos
+        WHERE deleted_at IS NULL
+            AND completed = 0
+            AND (
+                due_date <= date('now', 'localtime')
+                OR date(due_at / 1000, 'unixepoch', 'localtime') <= date('now', 'localtime')
+            )
+        ORDER BY
+            pinned DESC,
+            COALESCE(due_date, date(due_at / 1000, 'unixepoch', 'localtime')) ASC,
+            sort_order ASC,
+            created_at ASC,
+            id ASC
+        LIMIT ?1
+        ",
+    )?;
+    let rows = statement.query_map(rusqlite::params![limit as i64], |row| row.get(0))?;
+    rows.collect()
+}
+
+fn today_task_menu_label(index: usize, title: &str) -> String {
+    format!(
+        "{}. {}",
+        index + 1,
+        truncate_menu_title(title, TODAY_TASK_MENU_TITLE_MAX_CHARS)
+    )
+}
+
+fn truncate_menu_title(title: &str, max_chars: usize) -> String {
+    let title = title.trim();
+    if title.chars().count() <= max_chars {
+        return title.to_string();
+    }
+
+    let keep = max_chars.saturating_sub(3);
+    format!("{}...", title.chars().take(keep).collect::<String>())
 }
 
 fn draw_task_badge(base: &Image<'_>, remaining: u32, total: u32) -> Image<'static> {
@@ -594,6 +671,15 @@ mod tests {
         assert_eq!(
             task_tooltip(3, 4, 2),
             "蛋定 Todo · 3/4 项未完成 · 今天 2 项"
+        );
+    }
+
+    #[test]
+    fn formats_today_task_menu_labels_compactly() {
+        assert_eq!(today_task_menu_label(0, "写周报"), "1. 写周报");
+        assert_eq!(
+            today_task_menu_label(1, "这是一个非常非常非常长的任务标题需要截断"),
+            "2. 这是一个非常非常非常长的任务标..."
         );
     }
 }

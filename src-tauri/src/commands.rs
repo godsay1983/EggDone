@@ -1677,6 +1677,22 @@ mod tests {
             next_repeat_due_date("2026-06-12", "weekdays").unwrap(),
             "2026-06-15"
         );
+        assert_eq!(
+            next_repeat_due_date("2026-12-31", "daily").unwrap(),
+            "2027-01-01"
+        );
+        assert_eq!(
+            next_repeat_due_date("2026-12-25", "weekly").unwrap(),
+            "2027-01-01"
+        );
+        assert_eq!(
+            next_repeat_due_date("2026-10-30", "weekdays").unwrap(),
+            "2026-11-02"
+        );
+        assert_eq!(
+            next_repeat_due_date("2028-02-29", "monthly").unwrap(),
+            "2028-03-29"
+        );
     }
 
     #[test]

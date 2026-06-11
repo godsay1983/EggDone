@@ -143,12 +143,18 @@ pub(crate) fn merge_documents(
             .or_insert_with(|| todo.clone());
     }
 
+    let todos = collapse_duplicate_active_repeat_instances(
+        merged.into_values().collect(),
+        generated_at,
+        &local.device_id,
+    );
+
     Ok(SyncDocument {
         format_version: SYNC_FORMAT_VERSION,
         device_id: local.device_id.clone(),
         generated_at,
         groups: merged_groups.into_values().collect(),
-        todos: merged.into_values().collect(),
+        todos,
     })
 }
 
@@ -387,6 +393,53 @@ fn compare_groups(left: &SyncGroup, right: &SyncGroup) -> Ordering {
         })
 }
 
+fn collapse_duplicate_active_repeat_instances(
+    mut todos: Vec<SyncTodo>,
+    generated_at: i64,
+    updated_by: &str,
+) -> Vec<SyncTodo> {
+    let mut active_by_repeat = BTreeMap::<(String, String, String), usize>::new();
+
+    for index in 0..todos.len() {
+        let Some(key) = active_repeat_instance_key(&todos[index]) else {
+            continue;
+        };
+
+        let Some(&winner_index) = active_by_repeat.get(&key) else {
+            active_by_repeat.insert(key, index);
+            continue;
+        };
+
+        if compare_todos(&todos[index], &todos[winner_index]).is_gt() {
+            mark_repeat_duplicate_deleted(&mut todos[winner_index], generated_at, updated_by);
+            active_by_repeat.insert(key, index);
+        } else {
+            mark_repeat_duplicate_deleted(&mut todos[index], generated_at, updated_by);
+        }
+    }
+
+    todos
+}
+
+fn active_repeat_instance_key(todo: &SyncTodo) -> Option<(String, String, String)> {
+    if todo.completed || todo.deleted_at.is_some() {
+        return None;
+    }
+
+    Some((
+        todo.repeat_series_uuid.clone()?,
+        todo.due_date.clone()?,
+        todo.repeat_rule.clone()?,
+    ))
+}
+
+fn mark_repeat_duplicate_deleted(todo: &mut SyncTodo, generated_at: i64, updated_by: &str) {
+    let deleted_at = generated_at.max(todo.updated_at);
+    todo.deleted_at = Some(deleted_at);
+    todo.updated_at = deleted_at;
+    todo.updated_by = updated_by.to_string();
+}
+
 fn canonical_tie_break(
     todo: &SyncTodo,
 ) -> (
@@ -525,6 +578,8 @@ mod tests {
     const DEVICE_A: &str = "00000000-0000-4000-8000-00000000000a";
     const DEVICE_B: &str = "00000000-0000-4000-8000-00000000000b";
     const TODO_ID: &str = "00000000-0000-4000-8000-000000000001";
+    const NEXT_A_ID: &str = "00000000-0000-4000-8000-000000000101";
+    const NEXT_B_ID: &str = "00000000-0000-4000-8000-000000000102";
 
     fn document(device_id: &str, todos: Vec<SyncTodo>) -> SyncDocument {
         SyncDocument {
@@ -636,6 +691,48 @@ mod tests {
     }
 
     #[test]
+    fn deduplicates_next_repeat_instance_from_simultaneous_completion() {
+        let series_uuid = TODO_ID.to_string();
+        let mut local_completed = repeating_todo(TODO_ID, "2026-06-10", 100, DEVICE_A);
+        local_completed.completed = true;
+        local_completed.completed_at = Some(100);
+        let local_next = repeating_todo(NEXT_A_ID, "2026-06-11", 100, DEVICE_A);
+
+        let mut remote_completed = repeating_todo(TODO_ID, "2026-06-10", 100, DEVICE_B);
+        remote_completed.completed = true;
+        remote_completed.completed_at = Some(100);
+        let remote_next = repeating_todo(NEXT_B_ID, "2026-06-11", 100, DEVICE_B);
+
+        let merged = merge_documents(
+            &document(DEVICE_A, vec![local_completed, local_next]),
+            &document(DEVICE_B, vec![remote_completed, remote_next]),
+            120,
+        )
+        .unwrap();
+
+        let next_instances = merged
+            .todos
+            .iter()
+            .filter(|todo| {
+                todo.repeat_series_uuid.as_deref() == Some(series_uuid.as_str())
+                    && todo.due_date.as_deref() == Some("2026-06-11")
+            })
+            .collect::<Vec<_>>();
+        let visible_next_instances = next_instances
+            .iter()
+            .filter(|todo| !todo.completed && todo.deleted_at.is_none())
+            .count();
+        let deleted_duplicates = next_instances
+            .iter()
+            .filter(|todo| todo.deleted_at == Some(120))
+            .count();
+
+        assert_eq!(next_instances.len(), 2);
+        assert_eq!(visible_next_instances, 1);
+        assert_eq!(deleted_duplicates, 1);
+    }
+
+    #[test]
     fn persists_remote_updates_and_soft_deletes_by_uuid() {
         let mut connection = Connection::open_in_memory().unwrap();
         configure_connection(&connection).unwrap();
@@ -741,5 +838,23 @@ mod tests {
         let mut value = todo("todo", 10, updated_by);
         value.sort_order = sort_order;
         value
+    }
+
+    fn repeating_todo(uuid: &str, due_date: &str, updated_at: i64, updated_by: &str) -> SyncTodo {
+        let mut value = todo("repeat", updated_at, updated_by);
+        value.uuid = uuid.to_string();
+        value.due_date = Some(due_date.to_string());
+        value.repeat_rule = Some("daily".to_string());
+        value.repeat_next_due_date = Some(next_day(due_date));
+        value.repeat_series_uuid = Some(TODO_ID.to_string());
+        value
+    }
+
+    fn next_day(date: &str) -> String {
+        match date {
+            "2026-06-10" => "2026-06-11".to_string(),
+            "2026-06-11" => "2026-06-12".to_string(),
+            _ => panic!("unexpected test date"),
+        }
     }
 }

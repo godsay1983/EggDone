@@ -22,6 +22,7 @@ EggDone 是一个轻量级、跨平台、托盘常驻的 Todo 桌面应用。应
 - 支持“全部 / 今天”视图切换，今天视图包含今日到期和逾期未完成任务
 - 可在设置中选择启动默认视图：记住上次、全部或今天
 - 托盘提示显示未完成数量和今天/逾期任务数量
+- 托盘右键菜单可预览最多 3 条今天/逾期未完成任务
 - 拖动排序、清除已完成、软删除及 5 秒撤销
 - 支持简单键盘导航：上下选择任务、空格完成、Enter 编辑
 - 支持批量选择任务后完成、移动分组和删除
@@ -138,7 +139,7 @@ pnpm release:check
 
 `groups` 表保存单层分组，包含 UUID、名称、颜色、排序和软删除字段。`schema_migrations` 表记录已执行的数据库版本，`app_metadata` 保存本机 `device_id`，`sync_settings` 只保存 Endpoint、Region、Bucket、Object Key 等非敏感配置，`reminder_deliveries` 记录本机已触发提醒以避免重复通知。Access Key 和 Secret Key 保存到操作系统凭据库，不写入 SQLite。开发时可以删除数据库以重置数据，具体根目录由 Tauri 的 `app_data_dir` 按平台决定。
 
-项目已包含版本化同步文档和本地合并核心：按 Todo UUID 合并，优先采用较新的 `updated_at`；时间相同时优先保留删除记录，再通过 `updated_by` 稳定决胜。设置页可配置 AWS S3 或自定义 S3 Endpoint，支持 MinIO 常用的 Path Style 和 HTTP。HTTP 必须显式确认明文传输风险。
+项目已包含版本化同步文档和本地合并核心：按 Todo UUID 合并，优先采用较新的 `updated_at`；时间相同时优先保留删除记录，再通过 `updated_by` 稳定决胜。两台设备离线同时完成同一重复任务时，同一重复系列、同一到期日只保留一个未完成的下一实例，重复生成的实例会被软删除。设置页可配置 AWS S3 或自定义 S3 Endpoint，支持 MinIO 常用的 Path Style 和 HTTP。HTTP 必须显式确认明文传输风险。
 
 “测试连接”会向配置的 Bucket 和 Object Key 发起签名请求，验证 Endpoint、凭据和访问权限；返回 404 时会提示同步文件尚未创建，此时仍需确认 Bucket 已提前创建。
 
