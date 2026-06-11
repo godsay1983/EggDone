@@ -1,4 +1,4 @@
-import { derived, writable } from "svelte/store";
+import { derived, get, writable } from "svelte/store";
 
 import { todoApi } from "$lib/api/todoApi";
 import type { TodoScheduleInput } from "$lib/api/todoApi";
@@ -20,7 +20,8 @@ const initialState: TodoState = {
 };
 
 export function createTodoStore(api = todoApi, onChanged = scheduleAutoSync) {
-  const { subscribe, update } = writable(initialState);
+  const store = writable(initialState);
+  const { subscribe, update } = store;
 
   return {
     subscribe,
@@ -220,6 +221,54 @@ export function createTodoStore(api = todoApi, onChanged = scheduleAutoSync) {
       onChanged();
     },
 
+    async completeMany(ids: number[]) {
+      const targets = todosByIds(get(store).items, ids).filter(
+        (item) => !item.completed,
+      );
+      if (targets.length === 0) return [];
+
+      const updatedTodos: Todo[] = [];
+      const createdTodos: Todo[] = [];
+      for (const todo of targets) {
+        const result = await api.setCompleted(todo.id, true);
+        updatedTodos.push(result.updated_todo);
+        if (result.created_todo) createdTodos.push(result.created_todo);
+      }
+
+      const updatedById = new Map(updatedTodos.map((todo) => [todo.id, todo]));
+      update((state) => ({
+        ...state,
+        items: [
+          ...state.items.map((item) => updatedById.get(item.id) ?? item),
+          ...createdTodos,
+        ].sort(sortTodos),
+        error: null,
+      }));
+      onChanged();
+      return updatedTodos;
+    },
+
+    async moveManyToGroup(ids: number[], groupUuid: string | null) {
+      const targets = todosByIds(get(store).items, ids).filter(
+        (item) => item.group_uuid !== groupUuid,
+      );
+      if (targets.length === 0) return [];
+
+      const updatedTodos: Todo[] = [];
+      for (const todo of targets) {
+        updatedTodos.push(await api.setGroup(todo.id, groupUuid));
+      }
+
+      const updatedById = new Map(updatedTodos.map((todo) => [todo.id, todo]));
+      update((state) => ({
+        ...state,
+        items: state.items.map((item) => updatedById.get(item.id) ?? item),
+        error: null,
+      }));
+      onChanged();
+      return updatedTodos;
+    },
+
     async reorder(orderedIds: number[]) {
       let previousItems: Todo[] = [];
       update((state) => {
@@ -264,6 +313,25 @@ export function createTodoStore(api = todoApi, onChanged = scheduleAutoSync) {
       return result.deleted_todos;
     },
 
+    async removeMany(ids: number[]) {
+      const targets = todosByIds(get(store).items, ids);
+      if (targets.length === 0) return [];
+
+      const deletedTodos: Todo[] = [];
+      for (const todo of targets) {
+        const result = await api.delete(todo.id, "single");
+        deletedTodos.push(...result.deleted_todos);
+      }
+      const deletedIds = new Set(deletedTodos.map((todo) => todo.id));
+      update((state) => ({
+        ...state,
+        items: state.items.filter((item) => !deletedIds.has(item.id)),
+        error: null,
+      }));
+      onChanged();
+      return deletedTodos;
+    },
+
     async restore(id: number) {
       const restoredTodo = await api.restore(id);
       update((state) => ({
@@ -303,6 +371,13 @@ function sortTodos(left: Todo, right: Todo) {
 
 function sortGroups(left: TodoGroup, right: TodoGroup) {
   return left.sort_order - right.sort_order || left.created_at - right.created_at;
+}
+
+function todosByIds(items: Todo[], ids: number[]) {
+  const todoById = new Map(items.map((item) => [item.id, item]));
+  return ids
+    .map((id) => todoById.get(id))
+    .filter((todo): todo is Todo => todo !== undefined);
 }
 
 function getErrorMessage(error: unknown) {

@@ -528,6 +528,8 @@ footer {
 }
 
 .summary {
+  position: relative;
+  z-index: 20;
   justify-content: space-between;
   padding: 17px 3px 9px;
   color: #716451;
@@ -537,8 +539,10 @@ footer {
 
 .summary-actions {
   display: flex;
+  position: relative;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  flex: 0 0 auto;
 }
 
 .view-switch {
@@ -581,6 +585,36 @@ footer {
   cursor: pointer;
 }
 
+.summary-menu-button {
+  min-width: 34px;
+}
+
+.summary-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 35;
+  display: grid;
+  min-width: 112px;
+  padding: 5px;
+  border: 1px solid #eadfcf;
+  border-radius: 12px;
+  background: #fffdf8;
+  box-shadow: 0 14px 34px rgb(78 60 31 / 18%);
+}
+
+.summary-menu button {
+  padding: 7px 9px;
+  border-radius: 8px;
+  font-size: 10px;
+  text-align: left;
+}
+
+.summary-menu button.confirming {
+  color: #9b5548;
+  background: #f7e4df;
+}
+
 .summary-actions button:hover {
   color: #765d2b;
   background: #f1eadc;
@@ -600,6 +634,98 @@ footer {
   color: #aa9c87;
   font-size: 11px;
   font-weight: 500;
+}
+
+.batch-toolbar {
+  display: grid;
+  grid-template-columns: auto repeat(5, minmax(0, 1fr));
+  align-items: center;
+  gap: 5px;
+  margin: 0 1px 9px;
+  padding: 7px;
+  border: 1px solid #efe4d2;
+  border-radius: 13px;
+  color: #786a56;
+  background: rgb(255 250 238 / 76%);
+  font-size: 10px;
+}
+
+.batch-toolbar > span {
+  min-width: 42px;
+  padding: 0 2px;
+  color: #8d7f69;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.batch-toolbar button {
+  min-width: 0;
+  padding: 5px 6px;
+  border: 0;
+  border-radius: 8px;
+  color: #6f6048;
+  background: #f0eadf;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.batch-toolbar button:hover {
+  color: #5f4c1e;
+  background: #f6c94c;
+}
+
+.batch-toolbar button.danger {
+  color: #a36759;
+  background: #f8ebe7;
+}
+
+.batch-toolbar button.danger:hover {
+  background: #f8d9d1;
+}
+
+.batch-toolbar button:disabled,
+.batch-toolbar select:disabled {
+  cursor: default;
+  opacity: 0.48;
+}
+
+.batch-toolbar label {
+  display: block;
+  align-items: center;
+  min-width: 0;
+  position: relative;
+}
+
+.batch-toolbar label.placeholder::before {
+  content: "移动";
+  position: absolute;
+  top: 50%;
+  left: 7px;
+  z-index: 1;
+  color: #675b48;
+  font-size: 10px;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.batch-toolbar select {
+  width: 100%;
+  min-width: 0;
+  padding: 5px 20px 5px 6px;
+  border: 1px solid #e1d5c2;
+  border-radius: 8px;
+  outline: 0;
+  color: #675b48;
+  background: #fffdf8;
+  font-size: 10px;
+}
+
+.batch-toolbar label.placeholder select {
+  color: transparent;
+}
+
+.batch-toolbar select:focus {
+  border-color: #d9ad31;
 }
 
 .todo-list {
@@ -1049,6 +1175,38 @@ body:has(.todo-item.dragging) * {
     border-color 140ms ease,
     background-color 140ms ease,
     transform 140ms ease;
+}
+
+.batch-select {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border: 1.5px solid #d7cbb7;
+  border-radius: 6px;
+  background: #fffdf8;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    transform 140ms ease;
+}
+
+.batch-select.checked {
+  border-color: #d9ad31;
+  background: #f6c94c;
+  transform: scale(0.96);
+}
+
+.batch-select svg {
+  width: 13px;
+  fill: none;
+  stroke: #5f4c1e;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.2;
 }
 
 .checkbox.checked {
@@ -2336,6 +2494,60 @@ html[data-theme="dark"] .summary-actions button.active {
   background: #37322b;
 }
 
+html[data-theme="dark"] .summary-menu {
+  border-color: #494238;
+  background: #292621;
+  box-shadow: 0 16px 38px rgb(0 0 0 / 42%);
+}
+
+html[data-theme="dark"] .summary-menu button.confirming {
+  color: #e19a88;
+  background: #49312c;
+}
+
+html[data-theme="dark"] .batch-toolbar {
+  border-color: #403a31;
+  color: #cfc4b3;
+  background: rgb(44 41 35 / 70%);
+}
+
+html[data-theme="dark"] .batch-toolbar > span {
+  color: #c7bcab;
+}
+
+html[data-theme="dark"] .batch-toolbar button {
+  color: #cfc4b3;
+  background: #454038;
+}
+
+html[data-theme="dark"] .batch-toolbar button:hover {
+  color: #352c17;
+  background: #d8ae3c;
+}
+
+html[data-theme="dark"] .batch-toolbar button.danger {
+  color: #e19a88;
+  background: #49312c;
+}
+
+html[data-theme="dark"] .batch-toolbar button.danger:hover {
+  background: #5a382f;
+}
+
+html[data-theme="dark"] .batch-toolbar select {
+  border-color: #534b3f;
+  color: #f1e9dc;
+  background: #211f1b;
+}
+
+html[data-theme="dark"] .batch-toolbar label.placeholder::before {
+  color: #f1e9dc;
+}
+
+html[data-theme="dark"] .batch-toolbar select:focus {
+  border-color: #aa8735;
+}
+
 html[data-theme="dark"] .todo-list {
   scrollbar-color: #4c453a transparent;
 }
@@ -2509,6 +2721,20 @@ html[data-theme="dark"] .edit-area small {
 html[data-theme="dark"] .checkbox {
   border-color: #625949;
   background: #25221e;
+}
+
+html[data-theme="dark"] .batch-select {
+  border-color: #625949;
+  background: #25221e;
+}
+
+html[data-theme="dark"] .batch-select.checked {
+  border-color: #aa8735;
+  background: #d8ae3c;
+}
+
+html[data-theme="dark"] .batch-select svg {
+  stroke: #352c17;
 }
 
 html[data-theme="dark"] .checkbox.checked {

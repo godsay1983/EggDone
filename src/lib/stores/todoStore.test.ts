@@ -196,6 +196,32 @@ describe("todo store", () => {
     expect(get(store).items.map((todo) => todo.id)).toEqual([1]);
   });
 
+  it("applies batch todo operations", async () => {
+    const group = makeGroup(1, "工作");
+    const api = createApi([
+      makeTodo(1),
+      makeTodo(2),
+      makeTodo(3, { completed: true, completed_at: 100 }),
+    ]);
+    const onChanged = vi.fn();
+    const store = createTodoStore(api, onChanged);
+
+    await store.load();
+    await store.completeMany([1, 3]);
+    expect(get(store).items.find((todo) => todo.id === 1)?.completed).toBe(true);
+    expect(api.setCompleted).toHaveBeenCalledTimes(1);
+
+    await store.moveManyToGroup([1, 2], group.uuid);
+    expect(get(store).items.filter((todo) => todo.group_uuid === group.uuid).length).toBe(2);
+
+    const deleted = await store.removeMany([1, 2]);
+    expect(deleted.map((todo) => todo.id)).toEqual([1, 2]);
+    expect(get(store).items.map((todo) => todo.id)).toEqual([3]);
+    expect(api.delete).toHaveBeenCalledWith(1, "single");
+    expect(api.delete).toHaveBeenCalledWith(2, "single");
+    expect(onChanged).toHaveBeenCalledTimes(3);
+  });
+
   it("adds the generated next instance when completing a repeating todo", async () => {
     const current = makeTodo(1, {
       due_date: "2026-06-10",

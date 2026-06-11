@@ -39,6 +39,9 @@
   ) => Promise<void>;
   export let onMove: (todo: Todo, direction: -1 | 1) => Promise<void>;
   export let onDragStart: (todo: Todo, event: PointerEvent) => void;
+  export let batchMode = false;
+  export let batchSelected = false;
+  export let onBatchSelect: (todo: Todo, selected: boolean) => void;
   export let canMoveUp = false;
   export let canMoveDown = false;
   export let isDragging = false;
@@ -329,6 +332,26 @@
   in:fly={{ y: -6, duration: animationDuration }}
   out:fly={{ x: 12, duration: animationDuration }}
 >
+  {#if batchMode}
+    <button
+      class:checked={batchSelected}
+      class="batch-select"
+      type="button"
+      aria-label={batchSelected ? `取消选择：${todo.title}` : `选择：${todo.title}`}
+      aria-pressed={batchSelected}
+      onclick={(event) => {
+        event.stopPropagation();
+        onBatchSelect(todo, !batchSelected);
+      }}
+    >
+      {#if batchSelected}
+        <svg viewBox="0 0 20 20" aria-hidden="true">
+          <path d="m4 10 4 4 8-9" />
+        </svg>
+      {/if}
+    </button>
+  {/if}
+
   <button
     class="drag-handle"
     type="button"

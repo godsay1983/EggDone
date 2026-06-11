@@ -67,6 +67,7 @@
   let confirmingClear = false;
   let clearTimer: ReturnType<typeof setTimeout> | null = null;
   let showSearch = false;
+  let summaryMenuOpen = false;
   let searchQuery = "";
   let showCompleted = true;
   let listView: TodoListView = "all";
@@ -81,9 +82,14 @@
   let confirmingGroupDelete = false;
   let groupDeleteTimer: ReturnType<typeof setTimeout> | null = null;
   let searchInput: HTMLInputElement;
+  let summaryActionsElement: HTMLElement;
   let selectedTodoId: number | null = null;
   let editRequestTodoId: number | null = null;
   let editRequestSeq = 0;
+  let batchMode = false;
+  let batchSelectedIds = new Set<number>();
+  let batchBusy = false;
+  let batchMoveTarget = "";
   $: searchActive = searchQuery.trim().length > 0;
   $: reorderDisabled = searchActive || listView === "today";
   $: todayCount = $todos.items.filter((todo) => isDueTodayOrOverdue(todo)).length;
@@ -99,11 +105,27 @@
     groupUuid: activeGroupUuid,
   });
   $: renderedTodos = applyPreviewOrder(filteredTodos, previewOrderIds);
+  $: batchSelectedTodos = renderedTodos.filter((todo) =>
+    batchSelectedIds.has(todo.id),
+  );
+  $: batchIncompleteSelectedCount = batchSelectedTodos.filter(
+    (todo) => !todo.completed,
+  ).length;
+  $: batchSelectionCount = batchSelectedTodos.length;
   $: if (
     selectedTodoId !== null &&
     !renderedTodos.some((todo) => todo.id === selectedTodoId)
   ) {
     selectedTodoId = renderedTodos[0]?.id ?? null;
+  }
+  $: if (batchSelectedIds.size > 0) {
+    const visibleIds = new Set(renderedTodos.map((todo) => todo.id));
+    const nextIds = new Set(
+      [...batchSelectedIds].filter((id) => visibleIds.has(id)),
+    );
+    if (nextIds.size !== batchSelectedIds.size) {
+      batchSelectedIds = nextIds;
+    }
   }
   $: quickAddResult = parseQuickAdd(
     title,
@@ -144,6 +166,16 @@
       : 170;
 
     void todos.load();
+    function handlePointerDown(event: PointerEvent) {
+      if (
+        summaryMenuOpen &&
+        event.target instanceof Node &&
+        !summaryActionsElement?.contains(event.target)
+      ) {
+        summaryMenuOpen = false;
+      }
+    }
+    window.addEventListener("pointerdown", handlePointerDown, true);
     if (isTauri()) {
       void initializeAutoSync();
       void initializeDesktopSettings()
@@ -181,6 +213,7 @@
     }
 
     return () => {
+      window.removeEventListener("pointerdown", handlePointerDown, true);
       unlisteners.forEach((unlisten) => unlisten());
       if (undoTimer) clearTimeout(undoTimer);
       if (clearTimer) clearTimeout(clearTimer);
@@ -197,6 +230,7 @@
 
   async function toggleSearch() {
     showSearch = !showSearch;
+    summaryMenuOpen = false;
     if (!showSearch) {
       searchQuery = "";
       cancelDrag();
@@ -220,14 +254,18 @@
 
   function toggleCompletedVisibility() {
     showCompleted = !showCompleted;
+    summaryMenuOpen = false;
     localStorage.setItem("eggdone-show-completed", String(showCompleted));
+    clearBatchSelection();
     cancelDrag();
   }
 
   function setListView(view: TodoListView) {
     listView = view;
+    summaryMenuOpen = false;
     localStorage.setItem(LAST_LIST_VIEW_KEY, view);
     selectedTodoId = null;
+    clearBatchSelection();
     cancelDrag();
   }
 
@@ -245,6 +283,7 @@
     managingGroup = false;
     confirmingGroupDelete = false;
     selectedTodoId = null;
+    clearBatchSelection();
     cancelDrag();
   }
 
@@ -457,6 +496,39 @@
     );
   }
 
+  function toggleBatchMode() {
+    batchMode = !batchMode;
+    summaryMenuOpen = false;
+    clearBatchSelection();
+    if (batchMode) {
+      showAbout = false;
+      showDataManager = false;
+      showSettings = false;
+    }
+  }
+
+  function clearBatchSelection() {
+    batchSelectedIds = new Set();
+  }
+
+  function toggleBatchTodo(todo: Todo, selected: boolean) {
+    const nextIds = new Set(batchSelectedIds);
+    if (selected) {
+      nextIds.add(todo.id);
+    } else {
+      nextIds.delete(todo.id);
+    }
+    batchSelectedIds = nextIds;
+  }
+
+  function selectAllRenderedTodos() {
+    batchSelectedIds = new Set(renderedTodos.map((todo) => todo.id));
+  }
+
+  function selectedBatchIds() {
+    return batchSelectedTodos.map((todo) => todo.id);
+  }
+
   async function createGroup() {
     const nextName = groupName.trim();
     if (!nextName || groupSaving) return;
@@ -640,6 +712,7 @@
   }
 
   async function clearCompleted() {
+    summaryMenuOpen = false;
     confirmingClear = false;
     if (clearTimer) {
       clearTimeout(clearTimer);
@@ -652,7 +725,52 @@
     }
   }
 
+  async function completeSelectedTodos() {
+    if (batchBusy || batchIncompleteSelectedCount === 0) return;
+    batchBusy = true;
+    try {
+      await todos.completeMany(selectedBatchIds());
+      clearBatchSelection();
+    } catch (error) {
+      todos.reportError(error);
+    } finally {
+      batchBusy = false;
+    }
+  }
+
+  async function moveSelectedTodos(groupUuid: string | null) {
+    if (batchBusy || batchSelectionCount === 0) return;
+    batchBusy = true;
+    try {
+      await todos.moveManyToGroup(selectedBatchIds(), groupUuid);
+      clearBatchSelection();
+    } catch (error) {
+      todos.reportError(error);
+    } finally {
+      batchBusy = false;
+    }
+  }
+
+  async function deleteSelectedTodos() {
+    if (batchBusy || batchSelectionCount === 0) return;
+    batchBusy = true;
+    try {
+      undoTodos = await todos.removeMany(selectedBatchIds());
+      clearBatchSelection();
+      if (undoTimer) clearTimeout(undoTimer);
+      undoTimer = setTimeout(() => {
+        undoTodos = [];
+        undoTimer = null;
+      }, 5000);
+    } catch (error) {
+      todos.reportError(error);
+    } finally {
+      batchBusy = false;
+    }
+  }
+
   function startDrag(todo: Todo, event: PointerEvent) {
+    if (batchMode) return;
     if (reorderDisabled && !canDragTodoToGroup(todo)) return;
     cancelDrag();
     draggedTodo = todo;
@@ -1170,38 +1288,116 @@
         今天{todayCount > 0 ? ` ${todayCount}` : ""}
       </button>
     </div>
-    <div class="summary-actions">
-      <button
-        class:active={showSearch}
-        type="button"
-        aria-label={showSearch ? "关闭搜索" : "搜索任务"}
-        title={showSearch ? "关闭搜索" : "搜索任务"}
-        onclick={() => void toggleSearch()}
-      >
-        搜索
-      </button>
-      {#if $completedCount > 0 && listView === "all"}
-        <button
-          class:active={!showCompleted}
-          type="button"
-          aria-pressed={!showCompleted}
-          onclick={toggleCompletedVisibility}
-        >
-          {showCompleted ? "隐藏已完成" : "显示已完成"}
-        </button>
-      {/if}
-      {#if $completedCount > 0}
-        <button
-          class:confirming={confirmingClear}
-          type="button"
-          onclick={requestClearCompleted}
-        >
-          {confirmingClear ? "确认清除？" : "清除已完成"}
-        </button>
-      {/if}
+    <div bind:this={summaryActionsElement} class="summary-actions">
       <span class="count">{$remainingCount} 项未完成</span>
+      <button
+        class:active={summaryMenuOpen || showSearch || batchMode}
+        class="summary-menu-button"
+        type="button"
+        aria-label="打开更多操作"
+        aria-haspopup="menu"
+        aria-expanded={summaryMenuOpen}
+        onclick={() => (summaryMenuOpen = !summaryMenuOpen)}
+      >
+        更多
+      </button>
+      {#if summaryMenuOpen}
+        <div class="summary-menu" role="menu">
+          <button
+            class:active={showSearch}
+            type="button"
+            role="menuitem"
+            onclick={() => void toggleSearch()}
+          >
+            {showSearch ? "关闭搜索" : "搜索任务"}
+          </button>
+          {#if $completedCount > 0 && listView === "all"}
+            <button
+              class:active={!showCompleted}
+              type="button"
+              role="menuitem"
+              onclick={toggleCompletedVisibility}
+            >
+              {showCompleted ? "隐藏已完成" : "显示已完成"}
+            </button>
+          {/if}
+          {#if $completedCount > 0}
+            <button
+              class:confirming={confirmingClear}
+              type="button"
+              role="menuitem"
+              onclick={requestClearCompleted}
+            >
+              {confirmingClear ? "确认清除？" : "清除已完成"}
+            </button>
+          {/if}
+          {#if renderedTodos.length > 0}
+            <button
+              class:active={batchMode}
+              type="button"
+              role="menuitem"
+              onclick={toggleBatchMode}
+            >
+              {batchMode ? "退出批量" : "批量操作"}
+            </button>
+          {/if}
+        </div>
+      {/if}
     </div>
   </section>
+
+  {#if batchMode && renderedTodos.length > 0}
+    <section class="batch-toolbar" aria-label="批量操作">
+      <span>{batchSelectionCount > 0 ? `已选 ${batchSelectionCount}` : "选择任务"}</span>
+      <button
+        type="button"
+        disabled={batchBusy || batchSelectionCount === renderedTodos.length}
+        onclick={selectAllRenderedTodos}
+      >
+        全选
+      </button>
+      <button
+        type="button"
+        disabled={batchBusy || batchSelectionCount === 0}
+        onclick={clearBatchSelection}
+      >
+        清空
+      </button>
+      <button
+        type="button"
+        disabled={batchBusy || batchIncompleteSelectedCount === 0}
+        onclick={() => void completeSelectedTodos()}
+      >
+        完成
+      </button>
+      <label class:placeholder={batchMoveTarget === ""} aria-label="批量移动到分组">
+        <select
+          bind:value={batchMoveTarget}
+          disabled={batchBusy || batchSelectionCount === 0}
+          onchange={(event) => {
+            const value = event.currentTarget.value;
+            if (!value) return;
+            batchMoveTarget = "";
+            void moveSelectedTodos(value === "ungrouped" ? null : value);
+          }}
+        >
+          <option value="" disabled hidden></option>
+          <option value="ungrouped">未分组</option>
+          {#each $todos.groups as group (group.uuid)}
+            <option value={group.uuid}>{group.name}</option>
+          {/each}
+        </select>
+      </label>
+      <button
+        class="danger"
+        type="button"
+        disabled={batchBusy || batchSelectionCount === 0}
+        onclick={() => void deleteSelectedTodos()}
+      >
+        删除
+      </button>
+    </section>
+  {/if}
 
   <section class="todo-list" aria-live="polite">
     {#if $todos.loading}
@@ -1259,11 +1455,14 @@
             onDelete={deleteTodo}
             onMove={moveTodo}
             onDragStart={startDrag}
+            batchMode={batchMode}
+            batchSelected={batchSelectedIds.has(todo.id)}
+            onBatchSelect={toggleBatchTodo}
             canMoveUp={groupIndex > 0}
             canMoveDown={groupIndex < group.length - 1}
             isDragging={draggedTodo?.id === todo.id}
             isDragTarget={draggedTodo?.id === todo.id}
-            dragDisabled={reorderDisabled && !canDragTodoToGroup(todo)}
+            dragDisabled={batchMode || (reorderDisabled && !canDragTodoToGroup(todo))}
             reorderDisabled={reorderDisabled}
             editRequest={
               editRequestTodoId === todo.id ? editRequestSeq : 0
