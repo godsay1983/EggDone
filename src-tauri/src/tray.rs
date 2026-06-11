@@ -277,7 +277,7 @@ pub(crate) fn update_task_badge(app: &AppHandle) {
                 END
             )
         FROM todos
-        WHERE deleted_at IS NULL
+        WHERE deleted_at IS NULL AND archived_at IS NULL
         ",
         [],
         |row| {
@@ -318,7 +318,7 @@ fn today_task_titles(
         "
         SELECT title
         FROM todos
-        WHERE deleted_at IS NULL
+        WHERE deleted_at IS NULL AND archived_at IS NULL
             AND completed = 0
             AND (
                 due_date <= date('now', 'localtime')

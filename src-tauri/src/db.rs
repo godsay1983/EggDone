@@ -9,7 +9,7 @@ use rusqlite::{params, Connection, Transaction};
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
-const CURRENT_SCHEMA_VERSION: i64 = 11;
+const CURRENT_SCHEMA_VERSION: i64 = 12;
 const DEVICE_ID_KEY: &str = "device_id";
 
 pub struct Database {
@@ -74,6 +74,7 @@ pub(crate) fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {
     apply_migration(connection, 9, add_todo_repeats)?;
     apply_migration(connection, 10, add_repeat_series_uuid)?;
     apply_migration(connection, 11, add_todo_note)?;
+    apply_migration(connection, 12, add_todo_archive)?;
 
     debug_assert_eq!(schema_version(connection)?, CURRENT_SCHEMA_VERSION);
     Ok(())
@@ -386,6 +387,17 @@ fn add_todo_note(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
     )
 }
 
+fn add_todo_archive(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
+    transaction.execute_batch(
+        "
+        ALTER TABLE todos
+            ADD COLUMN archived_at INTEGER;
+        CREATE INDEX idx_todos_archived_at
+            ON todos(archived_at, deleted_at, completed);
+        ",
+    )
+}
+
 pub(crate) fn device_id(connection: &Connection) -> rusqlite::Result<String> {
     connection.query_row(
         "SELECT value FROM app_metadata WHERE key = ?1",
@@ -445,6 +457,7 @@ mod tests {
             "repeat_next_due_date",
             "repeat_series_uuid",
             "note",
+            "archived_at",
         ] {
             assert!(columns.iter().any(|column| column == expected));
         }
@@ -923,5 +936,6 @@ mod tests {
             .collect::<Result<_, _>>()
             .unwrap();
         assert!(columns.iter().any(|column| column == "note"));
+        assert!(columns.iter().any(|column| column == "archived_at"));
     }
 }

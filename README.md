@@ -26,6 +26,7 @@ EggDone 是一个轻量级、跨平台、托盘常驻的 Todo 桌面应用。应
 - 拖动排序、清除已完成、软删除及 5 秒撤销
 - 支持简单键盘导航：上下选择任务、空格完成、Enter 编辑
 - 支持批量选择任务后完成、移动分组和删除
+- 支持归档已完成任务，减少日常列表长度且保留同步/导出记录
 - JSON 导入导出、UUID 合并和 SQLite 手动备份
 - 可配置 AWS S3、MinIO 和其他 S3 兼容存储
 - Access Key 和 Secret Key 保存到系统凭据库
@@ -130,6 +131,7 @@ pnpm release:check
 | `updated_by` | 最后修改该任务的设备 UUID |
 | `completed_at` | UTC 完成时间（毫秒时间戳，可空） |
 | `deleted_at` | UTC 软删除时间（毫秒时间戳，可空） |
+| `archived_at` | UTC 归档时间（毫秒时间戳，可空） |
 | `due_date` | 纯日期到期日，本地日历语义，格式 `YYYY-MM-DD`（可空） |
 | `due_at` | 具体到期时间，UTC 毫秒时间戳（可空） |
 | `reminder_at` | 提醒时间，UTC 毫秒时间戳（可空） |

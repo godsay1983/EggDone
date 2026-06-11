@@ -22,6 +22,7 @@ function makeTodo(overrides: Partial<Todo> = {}): Todo {
     updated_at: 1,
     completed_at: null,
     deleted_at: null,
+    archived_at: null,
     due_date: null,
     due_at: null,
     reminder_at: null,

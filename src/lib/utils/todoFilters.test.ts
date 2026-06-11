@@ -22,6 +22,7 @@ function makeTodo(
     updated_at: id,
     completed_at: completed ? id : null,
     deleted_at: null,
+    archived_at: null,
     due_date: null,
     due_at: null,
     reminder_at: null,

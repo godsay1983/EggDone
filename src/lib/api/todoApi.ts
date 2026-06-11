@@ -105,6 +105,10 @@ export const todoApi = {
     return invoke<number>("clear_completed_todos");
   },
 
+  archiveCompleted(): Promise<number> {
+    return invoke<number>("archive_completed_todos");
+  },
+
   hidePanel(): Promise<void> {
     return invoke<void>("hide_panel");
   },

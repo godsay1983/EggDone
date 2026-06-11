@@ -353,6 +353,17 @@ export function createTodoStore(api = todoApi, onChanged = scheduleAutoSync) {
       return clearedCount;
     },
 
+    async archiveCompleted() {
+      const archivedCount = await api.archiveCompleted();
+      update((state) => ({
+        ...state,
+        items: state.items.filter((item) => !item.completed),
+        error: null,
+      }));
+      if (archivedCount > 0) onChanged();
+      return archivedCount;
+    },
+
     reportError(error: unknown) {
       update((state) => ({ ...state, error: getErrorMessage(error) }));
     },

@@ -94,6 +94,7 @@ pub fn run() {
             commands::delete_todo,
             commands::restore_todo,
             commands::clear_completed_todos,
+            commands::archive_completed_todos,
             commands::hide_panel,
             commands::mark_panel_interaction,
             commands::toggle_panel_from_shortcut,

@@ -19,6 +19,7 @@ function makeTodo(id: number, overrides: Partial<Todo> = {}): Todo {
     updated_at: id,
     completed_at: null,
     deleted_at: null,
+    archived_at: null,
     due_date: null,
     due_at: null,
     reminder_at: null,
@@ -96,6 +97,7 @@ function createApi(initialItems: Todo[] = []) {
     })),
     restore: vi.fn(async (id) => makeTodo(id)),
     clearCompleted: vi.fn(async () => items.filter((todo) => todo.completed).length),
+    archiveCompleted: vi.fn(async () => items.filter((todo) => todo.completed).length),
     hidePanel: vi.fn(async () => undefined),
     markPanelInteraction: vi.fn(async () => undefined),
   };
@@ -194,6 +196,20 @@ describe("todo store", () => {
     await store.load();
     expect(await store.clearCompleted()).toBe(1);
     expect(get(store).items.map((todo) => todo.id)).toEqual([1]);
+  });
+
+  it("archives completed todos", async () => {
+    const api = createApi([
+      makeTodo(1),
+      makeTodo(2, { completed: true, completed_at: 100 }),
+    ]);
+    const onChanged = vi.fn();
+    const store = createTodoStore(api, onChanged);
+
+    await store.load();
+    expect(await store.archiveCompleted()).toBe(1);
+    expect(get(store).items.map((todo) => todo.id)).toEqual([1]);
+    expect(onChanged).toHaveBeenCalledTimes(1);
   });
 
   it("applies batch todo operations", async () => {

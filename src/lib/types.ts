@@ -11,6 +11,7 @@ export interface Todo {
   updated_at: number;
   completed_at: number | null;
   deleted_at: number | null;
+  archived_at: number | null;
   due_date: string | null;
   due_at: number | null;
   reminder_at: number | null;

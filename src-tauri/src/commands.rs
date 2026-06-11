@@ -29,6 +29,7 @@ pub struct Todo {
     updated_at: i64,
     completed_at: Option<i64>,
     deleted_at: Option<i64>,
+    archived_at: Option<i64>,
     due_date: Option<String>,
     due_at: Option<i64>,
     reminder_at: Option<i64>,
@@ -309,6 +310,19 @@ pub fn clear_completed_todos(
 }
 
 #[tauri::command]
+pub fn archive_completed_todos(
+    app: AppHandle,
+    database: State<'_, Database>,
+) -> Result<usize, String> {
+    let result = {
+        let connection = lock_database(&database)?;
+        archive_completed_todos_in_connection(&connection)
+    };
+    refresh_badge_after_success(&app, &result);
+    result
+}
+
+#[tauri::command]
 pub fn hide_panel(window: WebviewWindow) -> Result<(), String> {
     window.hide().map_err(|error| error.to_string())
 }
@@ -443,11 +457,11 @@ fn list_todos_from_connection(connection: &Connection) -> Result<Vec<Todo>, Stri
             "
             SELECT
                 id, uuid, title, note, group_uuid, completed, pinned, sort_order,
-                created_at, updated_at, completed_at, deleted_at,
+                created_at, updated_at, completed_at, deleted_at, archived_at,
                 due_date, due_at, reminder_at,
                 repeat_rule, repeat_next_due_date, repeat_series_uuid
             FROM todos
-            WHERE deleted_at IS NULL
+            WHERE deleted_at IS NULL AND archived_at IS NULL
             ORDER BY completed ASC, pinned DESC, sort_order ASC, created_at DESC, id DESC
             ",
         )
@@ -494,7 +508,7 @@ fn create_todo_in_connection(
             "
             SELECT COALESCE(MIN(sort_order), 1024) - 1024
             FROM todos
-            WHERE deleted_at IS NULL
+            WHERE deleted_at IS NULL AND archived_at IS NULL
             ",
             [],
             |row| row.get(0),
@@ -506,11 +520,11 @@ fn create_todo_in_connection(
             "
             INSERT INTO todos (
                 uuid, title, note, group_uuid, completed, sort_order,
-                created_at, updated_at, completed_at, deleted_at,
+                created_at, updated_at, completed_at, deleted_at, archived_at,
                 due_date, due_at, reminder_at,
                 repeat_rule, repeat_next_due_date, repeat_series_uuid, updated_by
             )
-            VALUES (?1, ?2, NULL, ?3, 0, ?4, ?5, ?5, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?6)
+            VALUES (?1, ?2, NULL, ?3, 0, ?4, ?5, ?5, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?6)
             ",
             params![uuid, title, group_uuid, sort_order, now, updated_by],
         )
@@ -646,7 +660,7 @@ fn delete_group_in_connection(
             "
             UPDATE todos
             SET group_uuid = NULL, updated_at = ?1, updated_by = ?2
-            WHERE group_uuid = ?3 AND deleted_at IS NULL
+            WHERE group_uuid = ?3 AND deleted_at IS NULL AND archived_at IS NULL
             ",
             params![now, updated_by, uuid],
         )
@@ -707,6 +721,7 @@ fn set_todo_completed_in_connection(
                 updated_at = ?2,
                 updated_by = ?3
             WHERE id = ?4 AND deleted_at IS NULL
+              AND archived_at IS NULL
             ",
             params![completed, now, updated_by, id],
         )
@@ -751,6 +766,7 @@ fn update_todo_title_in_connection(
             UPDATE todos
             SET title = ?1, updated_at = ?2, updated_by = ?3
             WHERE id = ?4 AND deleted_at IS NULL
+              AND archived_at IS NULL
             ",
             params![
                 title,
@@ -780,6 +796,7 @@ fn update_todo_note_in_connection(
             UPDATE todos
             SET note = ?1, updated_at = ?2, updated_by = ?3
             WHERE id = ?4 AND deleted_at IS NULL
+              AND archived_at IS NULL
             ",
             params![
                 note,
@@ -808,6 +825,7 @@ fn set_todo_pinned_in_connection(
             UPDATE todos
             SET pinned = ?1, updated_at = ?2, updated_by = ?3
             WHERE id = ?4 AND deleted_at IS NULL
+              AND archived_at IS NULL
             ",
             params![
                 pinned,
@@ -865,6 +883,7 @@ fn set_todo_schedule_in_connection(
                 repeat_series_uuid = ?6,
                 updated_at = ?7, updated_by = ?8
             WHERE id = ?9 AND deleted_at IS NULL
+              AND archived_at IS NULL
             ",
             params![
                 due_date,
@@ -899,6 +918,7 @@ fn set_todo_group_in_connection(
             UPDATE todos
             SET group_uuid = ?1, updated_at = ?2, updated_by = ?3
             WHERE id = ?4 AND deleted_at IS NULL
+              AND archived_at IS NULL
             ",
             params![
                 group_uuid,
@@ -934,6 +954,7 @@ fn reorder_todos_in_connection(
                 UPDATE todos
                 SET sort_order = ?1, updated_at = ?2, updated_by = ?3
                 WHERE id = ?4 AND deleted_at IS NULL
+                  AND archived_at IS NULL
                 ",
                 params![index as i64 * 1024, now, updated_by, id],
             )
@@ -953,7 +974,7 @@ fn soft_delete_todo_in_connection(
     repeat_scope: Option<&str>,
 ) -> Result<TodoDeletion, String> {
     let target = find_todo(connection, id)?
-        .filter(|todo| todo.deleted_at.is_none())
+        .filter(|todo| todo.deleted_at.is_none() && todo.archived_at.is_none())
         .ok_or_else(|| "任务不存在".to_string())?;
     let scope = match repeat_scope.unwrap_or("single") {
         "single" => "single",
@@ -974,6 +995,7 @@ fn soft_delete_todo_in_connection(
                 SELECT id
                 FROM todos
                 WHERE deleted_at IS NULL
+                    AND archived_at IS NULL
                     AND (repeat_series_uuid = ?1 OR uuid = ?1)
                 ORDER BY created_at ASC, id ASC
                 ",
@@ -1001,6 +1023,7 @@ fn soft_delete_todo_in_connection(
                 UPDATE todos
                 SET deleted_at = ?1, updated_at = ?1, updated_by = ?2
                 WHERE id = ?3 AND deleted_at IS NULL
+                  AND archived_at IS NULL
                 ",
                 params![now, updated_by, todo_id],
             )
@@ -1051,7 +1074,22 @@ fn clear_completed_todos_in_connection(connection: &Connection) -> Result<usize,
             "
             UPDATE todos
             SET deleted_at = ?1, updated_at = ?1, updated_by = ?2
-            WHERE completed = 1 AND deleted_at IS NULL
+            WHERE completed = 1 AND deleted_at IS NULL AND archived_at IS NULL
+            ",
+            params![now, updated_by],
+        )
+        .map_err(database_error)
+}
+
+fn archive_completed_todos_in_connection(connection: &Connection) -> Result<usize, String> {
+    let now = now_millis();
+    let updated_by = device_id(connection).map_err(database_error)?;
+    connection
+        .execute(
+            "
+            UPDATE todos
+            SET archived_at = ?1, updated_at = ?1, updated_by = ?2
+            WHERE completed = 1 AND deleted_at IS NULL AND archived_at IS NULL
             ",
             params![now, updated_by],
         )
@@ -1064,7 +1102,7 @@ fn find_todo(connection: &Connection, id: i64) -> Result<Option<Todo>, String> {
             "
             SELECT
                 id, uuid, title, note, group_uuid, completed, pinned, sort_order,
-                created_at, updated_at, completed_at, deleted_at,
+                created_at, updated_at, completed_at, deleted_at, archived_at,
                 due_date, due_at, reminder_at,
                 repeat_rule, repeat_next_due_date, repeat_series_uuid
             FROM todos
@@ -1091,12 +1129,13 @@ fn map_todo(row: &rusqlite::Row<'_>) -> rusqlite::Result<Todo> {
         updated_at: row.get(9)?,
         completed_at: row.get(10)?,
         deleted_at: row.get(11)?,
-        due_date: row.get(12)?,
-        due_at: row.get(13)?,
-        reminder_at: row.get(14)?,
-        repeat_rule: row.get(15)?,
-        repeat_next_due_date: row.get(16)?,
-        repeat_series_uuid: row.get(17)?,
+        archived_at: row.get(12)?,
+        due_date: row.get(13)?,
+        due_at: row.get(14)?,
+        reminder_at: row.get(15)?,
+        repeat_rule: row.get(16)?,
+        repeat_next_due_date: row.get(17)?,
+        repeat_series_uuid: row.get(18)?,
     })
 }
 
@@ -1274,7 +1313,7 @@ fn create_next_repeat_instance(
             "
             SELECT COALESCE(MIN(sort_order), 1024) - 1024
             FROM todos
-            WHERE deleted_at IS NULL
+            WHERE deleted_at IS NULL AND archived_at IS NULL
             ",
             [],
             |row| row.get(0),
@@ -1287,10 +1326,10 @@ fn create_next_repeat_instance(
             INSERT INTO todos (
                 uuid, title, note, group_uuid, completed, pinned, sort_order,
                 created_at, updated_at, completed_at, deleted_at,
-                due_date, due_at, reminder_at,
+                archived_at, due_date, due_at, reminder_at,
                 repeat_rule, repeat_next_due_date, repeat_series_uuid, updated_by
             )
-            VALUES (?1, ?2, ?3, ?4, 0, ?5, ?6, ?7, ?7, NULL, NULL, ?8, NULL, NULL, ?9, ?10, ?11, ?12)
+            VALUES (?1, ?2, ?3, ?4, 0, ?5, ?6, ?7, ?7, NULL, NULL, NULL, ?8, NULL, NULL, ?9, ?10, ?11, ?12)
             ",
             params![
                 uuid,
@@ -1601,6 +1640,30 @@ mod tests {
         assert_eq!(remaining.len(), 2);
         assert_eq!(remaining[0].due_date.as_deref(), Some("2026-06-11"));
         assert!(remaining.iter().any(|todo| todo.id == second.id));
+    }
+
+    #[test]
+    fn archives_completed_todos_without_deleting_them() {
+        let mut connection = connection();
+        let active = create_todo_in_connection(&connection, "active", None).unwrap();
+        let completed = create_todo_in_connection(&connection, "done", None).unwrap();
+        set_todo_completed_in_connection(&mut connection, completed.id, true).unwrap();
+
+        assert_eq!(
+            archive_completed_todos_in_connection(&connection).unwrap(),
+            1
+        );
+
+        let visible = list_todos_from_connection(&connection).unwrap();
+        assert_eq!(visible.len(), 1);
+        assert_eq!(visible[0].id, active.id);
+
+        let archived = find_todo(&connection, completed.id)
+            .unwrap()
+            .expect("archived todo");
+        assert!(archived.completed);
+        assert_eq!(archived.deleted_at, None);
+        assert!(archived.archived_at.is_some());
     }
 
     #[test]

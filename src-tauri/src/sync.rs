@@ -29,6 +29,8 @@ pub(crate) struct SyncTodo {
     pub completed_at: Option<i64>,
     pub deleted_at: Option<i64>,
     #[serde(default)]
+    pub archived_at: Option<i64>,
+    #[serde(default)]
     pub due_date: Option<String>,
     #[serde(default)]
     pub due_at: Option<i64>,
@@ -89,7 +91,7 @@ pub(crate) fn build_document(
         .prepare(
             "
             SELECT uuid, title, group_uuid, completed, pinned, sort_order, created_at, updated_at,
-                   completed_at, deleted_at, due_date, due_at, reminder_at,
+                   completed_at, deleted_at, archived_at, due_date, due_at, reminder_at,
                    repeat_rule, repeat_next_due_date, repeat_series_uuid, note, updated_by
             FROM todos
             ORDER BY uuid ASC
@@ -204,10 +206,10 @@ pub(crate) fn merge_remote_document(
                 "
                 INSERT INTO todos (
                     uuid, title, group_uuid, completed, pinned, sort_order, created_at, updated_at,
-                    completed_at, deleted_at, due_date, due_at, reminder_at,
+                    completed_at, deleted_at, archived_at, due_date, due_at, reminder_at,
                     repeat_rule, repeat_next_due_date, repeat_series_uuid, note, updated_by
                 )
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
                 ON CONFLICT(uuid) DO UPDATE SET
                     title = excluded.title,
                     group_uuid = excluded.group_uuid,
@@ -218,6 +220,7 @@ pub(crate) fn merge_remote_document(
                     updated_at = excluded.updated_at,
                     completed_at = excluded.completed_at,
                     deleted_at = excluded.deleted_at,
+                    archived_at = excluded.archived_at,
                     due_date = excluded.due_date,
                     due_at = excluded.due_at,
                     reminder_at = excluded.reminder_at,
@@ -238,6 +241,7 @@ pub(crate) fn merge_remote_document(
                     todo.updated_at,
                     todo.completed_at,
                     todo.deleted_at,
+                    todo.archived_at,
                     todo.due_date,
                     todo.due_at,
                     todo.reminder_at,
@@ -335,6 +339,7 @@ pub(crate) fn validate_document(document: &SyncDocument) -> Result<(), String> {
             || todo.updated_at < 0
             || todo.completed_at.is_some_and(|value| value < 0)
             || todo.deleted_at.is_some_and(|value| value < 0)
+            || todo.archived_at.is_some_and(|value| value < 0)
             || todo.due_at.is_some_and(|value| value < 0)
             || todo.reminder_at.is_some_and(|value| value < 0)
         {
@@ -366,6 +371,7 @@ fn compare_todos(left: &SyncTodo, right: &SyncTodo) -> Ordering {
     left.updated_at
         .cmp(&right.updated_at)
         .then_with(|| left.deleted_at.is_some().cmp(&right.deleted_at.is_some()))
+        .then_with(|| left.archived_at.is_some().cmp(&right.archived_at.is_some()))
         .then_with(|| left.updated_by.cmp(&right.updated_by))
         .then_with(|| left.repeat_series_uuid.cmp(&right.repeat_series_uuid))
         .then_with(|| left.note.cmp(&right.note))
@@ -422,7 +428,7 @@ fn collapse_duplicate_active_repeat_instances(
 }
 
 fn active_repeat_instance_key(todo: &SyncTodo) -> Option<(String, String, String)> {
-    if todo.completed || todo.deleted_at.is_some() {
+    if todo.completed || todo.deleted_at.is_some() || todo.archived_at.is_some() {
         return None;
     }
 
@@ -484,14 +490,15 @@ fn map_sync_todo(row: &rusqlite::Row<'_>) -> rusqlite::Result<SyncTodo> {
         updated_at: row.get(7)?,
         completed_at: row.get(8)?,
         deleted_at: row.get(9)?,
-        due_date: row.get(10)?,
-        due_at: row.get(11)?,
-        reminder_at: row.get(12)?,
-        repeat_rule: row.get(13)?,
-        repeat_next_due_date: row.get(14)?,
-        repeat_series_uuid: row.get(15)?,
-        note: row.get(16)?,
-        updated_by: row.get(17)?,
+        archived_at: row.get(10)?,
+        due_date: row.get(11)?,
+        due_at: row.get(12)?,
+        reminder_at: row.get(13)?,
+        repeat_rule: row.get(14)?,
+        repeat_next_due_date: row.get(15)?,
+        repeat_series_uuid: row.get(16)?,
+        note: row.get(17)?,
+        updated_by: row.get(18)?,
     })
 }
 
@@ -604,6 +611,7 @@ mod tests {
             updated_at,
             completed_at: None,
             deleted_at: None,
+            archived_at: None,
             due_date: None,
             due_at: None,
             reminder_at: None,
@@ -751,6 +759,7 @@ mod tests {
         remote_todo.pinned = true;
         remote_todo.note = Some("remote note".to_string());
         remote_todo.due_date = Some("2026-06-10".to_string());
+        remote_todo.archived_at = Some(11);
         remote_todo.deleted_at = Some(11);
         let merged =
             merge_remote_document(&mut connection, &document(DEVICE_B, vec![remote_todo]), 30)
@@ -761,6 +770,7 @@ mod tests {
         assert_eq!(persisted.todos[0].deleted_at, Some(11));
         assert!(persisted.todos[0].pinned);
         assert_eq!(persisted.todos[0].note.as_deref(), Some("remote note"));
+        assert_eq!(persisted.todos[0].archived_at, Some(11));
         assert_eq!(persisted.todos[0].due_date.as_deref(), Some("2026-06-10"));
         assert_eq!(persisted.todos[0].updated_by, DEVICE_B);
     }
@@ -830,6 +840,7 @@ mod tests {
         assert!(!document.todos[0].pinned);
         assert_eq!(document.todos[0].note, None);
         assert!(document.groups.is_empty());
+        assert_eq!(document.todos[0].archived_at, None);
         assert_eq!(document.todos[0].due_date, None);
         validate_document(&document).unwrap();
     }

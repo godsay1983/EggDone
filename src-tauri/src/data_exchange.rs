@@ -35,6 +35,8 @@ struct TransferTodo {
     completed_at: Option<i64>,
     deleted_at: Option<i64>,
     #[serde(default)]
+    archived_at: Option<i64>,
+    #[serde(default)]
     due_date: Option<String>,
     #[serde(default)]
     due_at: Option<i64>,
@@ -307,6 +309,7 @@ fn validate_import(import: &TodoExport) -> Result<(), String> {
             || todo.updated_at < 0
             || todo.completed_at.is_some_and(|value| value < 0)
             || todo.deleted_at.is_some_and(|value| value < 0)
+            || todo.archived_at.is_some_and(|value| value < 0)
             || todo.due_at.is_some_and(|value| value < 0)
             || todo.reminder_at.is_some_and(|value| value < 0)
         {
@@ -357,7 +360,7 @@ fn read_all_todos(connection: &Connection) -> Result<Vec<TransferTodo>, String> 
         .prepare(
             "
             SELECT uuid, title, group_uuid, completed, pinned, sort_order, created_at, updated_at,
-                   completed_at, deleted_at, due_date, due_at, reminder_at,
+                   completed_at, deleted_at, archived_at, due_date, due_at, reminder_at,
                    repeat_rule, repeat_next_due_date, repeat_series_uuid, note
             FROM todos
             ORDER BY completed ASC, pinned DESC, sort_order ASC, created_at DESC, id DESC
@@ -535,10 +538,10 @@ fn insert_todo(
             "
             INSERT INTO todos (
                 uuid, title, group_uuid, completed, pinned, sort_order, created_at, updated_at,
-                completed_at, deleted_at, due_date, due_at, reminder_at,
+                completed_at, deleted_at, archived_at, due_date, due_at, reminder_at,
                 repeat_rule, repeat_next_due_date, repeat_series_uuid, note, updated_by
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
             ",
             params![
                 todo.uuid,
@@ -551,6 +554,7 @@ fn insert_todo(
                 todo.updated_at,
                 todo.completed_at,
                 todo.deleted_at,
+                todo.archived_at,
                 todo.due_date,
                 todo.due_at,
                 todo.reminder_at,
@@ -576,10 +580,10 @@ fn update_todo(
             UPDATE todos
             SET title = ?1, completed = ?2, pinned = ?3, sort_order = ?4,
                 created_at = ?5, updated_at = ?6, completed_at = ?7,
-                deleted_at = ?8, due_date = ?9, due_at = ?10, reminder_at = ?11,
-                repeat_rule = ?12, repeat_next_due_date = ?13,
-                repeat_series_uuid = ?14, note = ?15, group_uuid = ?16, updated_by = ?17
-            WHERE uuid = ?18
+                deleted_at = ?8, archived_at = ?9, due_date = ?10, due_at = ?11, reminder_at = ?12,
+                repeat_rule = ?13, repeat_next_due_date = ?14,
+                repeat_series_uuid = ?15, note = ?16, group_uuid = ?17, updated_by = ?18
+            WHERE uuid = ?19
             ",
             params![
                 todo.title.trim(),
@@ -590,6 +594,7 @@ fn update_todo(
                 todo.updated_at,
                 todo.completed_at,
                 todo.deleted_at,
+                todo.archived_at,
                 todo.due_date,
                 todo.due_at,
                 todo.reminder_at,
@@ -618,13 +623,14 @@ fn map_transfer_todo(row: &rusqlite::Row<'_>) -> rusqlite::Result<TransferTodo> 
         updated_at: row.get(7)?,
         completed_at: row.get(8)?,
         deleted_at: row.get(9)?,
-        due_date: row.get(10)?,
-        due_at: row.get(11)?,
-        reminder_at: row.get(12)?,
-        repeat_rule: row.get(13)?,
-        repeat_next_due_date: row.get(14)?,
-        repeat_series_uuid: row.get(15)?,
-        note: row.get(16)?,
+        archived_at: row.get(10)?,
+        due_date: row.get(11)?,
+        due_at: row.get(12)?,
+        reminder_at: row.get(13)?,
+        repeat_rule: row.get(14)?,
+        repeat_next_due_date: row.get(15)?,
+        repeat_series_uuid: row.get(16)?,
+        note: row.get(17)?,
     })
 }
 
@@ -736,6 +742,7 @@ mod tests {
             updated_at,
             completed_at: None,
             deleted_at: None,
+            archived_at: None,
             due_date: None,
             due_at: None,
             reminder_at: None,
@@ -763,6 +770,7 @@ mod tests {
         let mut active = todo("00000000-0000-4000-8000-000000000001", "active", 2);
         active.pinned = true;
         active.note = Some("exported note".to_string());
+        active.archived_at = Some(4);
         active.due_date = Some("2026-06-10".to_string());
         active.repeat_rule = Some("daily".to_string());
         active.repeat_next_due_date = Some("2026-06-11".to_string());
@@ -867,6 +875,7 @@ mod tests {
         assert!(import.groups.is_empty());
         assert!(!import.todos[0].pinned);
         assert_eq!(import.todos[0].note, None);
+        assert_eq!(import.todos[0].archived_at, None);
         assert_eq!(import.todos[0].due_date, None);
         validate_import(&import).unwrap();
     }

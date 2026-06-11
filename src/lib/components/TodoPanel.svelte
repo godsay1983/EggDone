@@ -725,6 +725,15 @@
     }
   }
 
+  async function archiveCompleted() {
+    summaryMenuOpen = false;
+    try {
+      await todos.archiveCompleted();
+    } catch (error) {
+      todos.reportError(error);
+    }
+  }
+
   async function completeSelectedTodos() {
     if (batchBusy || batchIncompleteSelectedCount === 0) return;
     batchBusy = true;
@@ -1322,6 +1331,13 @@
             </button>
           {/if}
           {#if $completedCount > 0}
+            <button
+              type="button"
+              role="menuitem"
+              onclick={() => void archiveCompleted()}
+            >
+              归档已完成
+            </button>
             <button
               class:confirming={confirmingClear}
               type="button"

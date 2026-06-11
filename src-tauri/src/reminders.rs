@@ -81,6 +81,7 @@ fn due_reminders(connection: &Connection, now: i64) -> Result<Vec<DueReminder>, 
             FROM todos
             WHERE completed = 0
               AND deleted_at IS NULL
+              AND archived_at IS NULL
               AND reminder_at IS NOT NULL
               AND reminder_at <= ?1
               AND NOT EXISTS (
