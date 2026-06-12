@@ -16,7 +16,12 @@
     todos,
   } from "$lib/stores/todoStore";
   import { initializeAutoSync, syncStatus } from "$lib/sync/autoSync";
-  import type { RepeatDeleteScope, Todo, TodoGroup } from "$lib/types";
+  import type {
+    RepeatDeleteScope,
+    RepeatEditScope,
+    Todo,
+    TodoGroup,
+  } from "$lib/types";
   import { movePreviewByPointer } from "$lib/utils/reorderPreview";
   import { isDueTodayOrOverdue } from "$lib/utils/todoDates";
   import {
@@ -376,18 +381,26 @@
     }
   }
 
-  async function editTodo(id: number, nextTitle: string) {
+  async function editTodo(
+    id: number,
+    nextTitle: string,
+    repeatScope: RepeatEditScope = "single",
+  ) {
     try {
-      await todos.edit(id, nextTitle);
+      await todos.edit(id, nextTitle, repeatScope);
     } catch (error) {
       todos.reportError(error);
       throw error;
     }
   }
 
-  async function noteTodo(id: number, note: string | null) {
+  async function noteTodo(
+    id: number,
+    note: string | null,
+    repeatScope: RepeatEditScope = "single",
+  ) {
     try {
-      await todos.setNote(id, note);
+      await todos.setNote(id, note, repeatScope);
     } catch (error) {
       todos.reportError(error);
       throw error;
@@ -632,18 +645,26 @@
     }
   }
 
-  async function moveTodoToGroup(todo: Todo, groupUuid: string | null) {
+  async function moveTodoToGroup(
+    todo: Todo,
+    groupUuid: string | null,
+    repeatScope: RepeatEditScope = "single",
+  ) {
     try {
-      await todos.setGroup(todo, groupUuid);
+      await todos.setGroup(todo, groupUuid, repeatScope);
     } catch (error) {
       todos.reportError(error);
       throw error;
     }
   }
 
-  async function scheduleTodo(id: number, schedule: TodoScheduleInput) {
+  async function scheduleTodo(
+    id: number,
+    schedule: TodoScheduleInput,
+    repeatScope: RepeatEditScope = "single",
+  ) {
     try {
-      await todos.setSchedule(id, schedule);
+      await todos.setSchedule(id, schedule, repeatScope);
     } catch (error) {
       todos.reportError(error);
       throw error;

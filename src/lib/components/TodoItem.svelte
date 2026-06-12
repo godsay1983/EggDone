@@ -5,6 +5,7 @@
   import type { TodoScheduleInput } from "$lib/api/todoApi";
   import type {
     RepeatDeleteScope,
+    RepeatEditScope,
     RepeatRule,
     Todo,
     TodoGroup,
@@ -26,13 +27,29 @@
 
   export let todo: Todo;
   export let onToggle: (todo: Todo) => Promise<void>;
-  export let onEdit: (id: number, title: string) => Promise<void>;
-  export let onNote: (id: number, note: string | null) => Promise<void>;
+  export let onEdit: (
+    id: number,
+    title: string,
+    repeatScope?: RepeatEditScope,
+  ) => Promise<void>;
+  export let onNote: (
+    id: number,
+    note: string | null,
+    repeatScope?: RepeatEditScope,
+  ) => Promise<void>;
   export let onPin: (todo: Todo, pinned: boolean) => Promise<void>;
-  export let onSchedule: (id: number, schedule: TodoScheduleInput) => Promise<void>;
+  export let onSchedule: (
+    id: number,
+    schedule: TodoScheduleInput,
+    repeatScope?: RepeatEditScope,
+  ) => Promise<void>;
   export let onSnooze: (todo: Todo, reminderAt: number) => Promise<void>;
   export let groups: TodoGroup[] = [];
-  export let onGroupChange: (todo: Todo, groupUuid: string | null) => Promise<void>;
+  export let onGroupChange: (
+    todo: Todo,
+    groupUuid: string | null,
+    repeatScope?: RepeatEditScope,
+  ) => Promise<void>;
   export let onDelete: (
     id: number,
     repeatScope?: RepeatDeleteScope,
@@ -187,12 +204,16 @@
     scheduleSaving = true;
     scheduleError = "";
     try {
-      await onSchedule(todo.id, {
-        due_date: date,
-        due_at: null,
-        reminder_at: reminderAt,
-        repeat_rule: repeatRule,
-      });
+      await onSchedule(
+        todo.id,
+        {
+          due_date: date,
+          due_at: null,
+          reminder_at: reminderAt,
+          repeat_rule: repeatRule,
+        },
+        chooseRepeatEditScope("修改日期和重复规则"),
+      );
       scheduleOpen = false;
     } catch {
       scheduleError = "日期保存失败，请重试";
@@ -231,11 +252,24 @@
     return "";
   }
 
+  function chooseRepeatEditScope(action: string): RepeatEditScope {
+    if (todo.repeat_rule === null) return "single";
+    return window.confirm(
+      `这是重复任务。${action}要应用到后续任务吗？\n\n确定：后续任务\n取消：仅此任务`,
+    )
+      ? "future"
+      : "single";
+  }
+
   async function moveToGroup(value: string) {
     if (groupSaving) return;
     groupSaving = true;
     try {
-      await onGroupChange(todo, value === "ungrouped" ? null : value);
+      await onGroupChange(
+        todo,
+        value === "ungrouped" ? null : value,
+        chooseRepeatEditScope("移动分组"),
+      );
       actionsOpen = false;
     } finally {
       groupSaving = false;
@@ -258,7 +292,7 @@
     saving = true;
     editError = "";
     try {
-      await onEdit(todo.id, nextTitle);
+      await onEdit(todo.id, nextTitle, chooseRepeatEditScope("修改标题"));
       editing = false;
     } catch {
       editError = "保存失败，请重试";
@@ -283,7 +317,7 @@
     noteSaving = true;
     noteError = "";
     try {
-      await onNote(todo.id, normalizedNote);
+      await onNote(todo.id, normalizedNote, chooseRepeatEditScope("修改备注"));
       noteOpen = false;
     } catch {
       noteError = "备注保存失败，请重试";

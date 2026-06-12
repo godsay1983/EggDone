@@ -3,7 +3,12 @@ import { derived, get, writable } from "svelte/store";
 import { todoApi } from "$lib/api/todoApi";
 import type { TodoScheduleInput } from "$lib/api/todoApi";
 import { scheduleAutoSync } from "$lib/sync/autoSync";
-import type { RepeatDeleteScope, Todo, TodoGroup } from "$lib/types";
+import type {
+  RepeatDeleteScope,
+  RepeatEditScope,
+  Todo,
+  TodoGroup,
+} from "$lib/types";
 
 export interface TodoState {
   items: Todo[];
@@ -78,25 +83,29 @@ export function createTodoStore(api = todoApi, onChanged = scheduleAutoSync) {
       onChanged();
     },
 
-    async edit(id: number, title: string) {
-      const updatedTodo = await api.updateTitle(id, title);
+    async edit(
+      id: number,
+      title: string,
+      repeatScope: RepeatEditScope = "single",
+    ) {
+      const result = await api.updateTitle(id, title, repeatScope);
       update((state) => ({
         ...state,
-        items: state.items.map((item) =>
-          item.id === updatedTodo.id ? updatedTodo : item,
-        ),
+        items: replaceUpdatedTodos(state.items, result.updated_todos),
         error: null,
       }));
       onChanged();
     },
 
-    async setNote(id: number, note: string | null) {
-      const updatedTodo = await api.updateNote(id, note);
+    async setNote(
+      id: number,
+      note: string | null,
+      repeatScope: RepeatEditScope = "single",
+    ) {
+      const result = await api.updateNote(id, note, repeatScope);
       update((state) => ({
         ...state,
-        items: state.items.map((item) =>
-          item.id === updatedTodo.id ? updatedTodo : item,
-        ),
+        items: replaceUpdatedTodos(state.items, result.updated_todos),
         error: null,
       }));
       onChanged();
@@ -197,25 +206,29 @@ export function createTodoStore(api = todoApi, onChanged = scheduleAutoSync) {
       }
     },
 
-    async setSchedule(id: number, schedule: TodoScheduleInput) {
-      const updatedTodo = await api.setSchedule(id, schedule);
+    async setSchedule(
+      id: number,
+      schedule: TodoScheduleInput,
+      repeatScope: RepeatEditScope = "single",
+    ) {
+      const result = await api.setSchedule(id, schedule, repeatScope);
       update((state) => ({
         ...state,
-        items: state.items.map((item) =>
-          item.id === updatedTodo.id ? updatedTodo : item,
-        ),
+        items: replaceUpdatedTodos(state.items, result.updated_todos),
         error: null,
       }));
       onChanged();
     },
 
-    async setGroup(todo: Todo, groupUuid: string | null) {
-      const updatedTodo = await api.setGroup(todo.id, groupUuid);
+    async setGroup(
+      todo: Todo,
+      groupUuid: string | null,
+      repeatScope: RepeatEditScope = "single",
+    ) {
+      const result = await api.setGroup(todo.id, groupUuid, repeatScope);
       update((state) => ({
         ...state,
-        items: state.items.map((item) =>
-          item.id === updatedTodo.id ? updatedTodo : item,
-        ),
+        items: replaceUpdatedTodos(state.items, result.updated_todos),
         error: null,
       }));
       onChanged();
@@ -256,7 +269,8 @@ export function createTodoStore(api = todoApi, onChanged = scheduleAutoSync) {
 
       const updatedTodos: Todo[] = [];
       for (const todo of targets) {
-        updatedTodos.push(await api.setGroup(todo.id, groupUuid));
+        const result = await api.setGroup(todo.id, groupUuid, "single");
+        updatedTodos.push(...result.updated_todos);
       }
 
       const updatedById = new Map(updatedTodos.map((todo) => [todo.id, todo]));
@@ -389,6 +403,11 @@ function todosByIds(items: Todo[], ids: number[]) {
   return ids
     .map((id) => todoById.get(id))
     .filter((todo): todo is Todo => todo !== undefined);
+}
+
+function replaceUpdatedTodos(items: Todo[], updatedTodos: Todo[]) {
+  const updatedById = new Map(updatedTodos.map((todo) => [todo.id, todo]));
+  return items.map((item) => updatedById.get(item.id) ?? item);
 }
 
 function getErrorMessage(error: unknown) {

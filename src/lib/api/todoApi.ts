@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 import type {
   RepeatDeleteScope,
+  RepeatEditScope,
   RepeatRule,
   Todo,
   TodoGroup,
@@ -21,6 +22,10 @@ export interface TodoCompletionResult {
 
 export interface TodoDeletionResult {
   deleted_todos: Todo[];
+}
+
+export interface TodoEditResult {
+  updated_todos: Todo[];
 }
 
 export const todoApi = {
@@ -60,30 +65,55 @@ export const todoApi = {
     return invoke<TodoCompletionResult>("set_todo_completed", { id, completed });
   },
 
-  updateTitle(id: number, title: string): Promise<Todo> {
-    return invoke<Todo>("update_todo_title", { id, title });
+  updateTitle(
+    id: number,
+    title: string,
+    repeatScope: RepeatEditScope = "single",
+  ): Promise<TodoEditResult> {
+    return invoke<TodoEditResult>("update_todo_title", {
+      id,
+      title,
+      repeatScope,
+    });
   },
 
-  updateNote(id: number, note: string | null): Promise<Todo> {
-    return invoke<Todo>("update_todo_note", { id, note });
+  updateNote(
+    id: number,
+    note: string | null,
+    repeatScope: RepeatEditScope = "single",
+  ): Promise<TodoEditResult> {
+    return invoke<TodoEditResult>("update_todo_note", { id, note, repeatScope });
   },
 
   setPinned(id: number, pinned: boolean): Promise<Todo> {
     return invoke<Todo>("set_todo_pinned", { id, pinned });
   },
 
-  setSchedule(id: number, schedule: TodoScheduleInput): Promise<Todo> {
-    return invoke<Todo>("set_todo_schedule", {
+  setSchedule(
+    id: number,
+    schedule: TodoScheduleInput,
+    repeatScope: RepeatEditScope = "single",
+  ): Promise<TodoEditResult> {
+    return invoke<TodoEditResult>("set_todo_schedule", {
       id,
       dueDate: schedule.due_date,
       dueAt: schedule.due_at,
       reminderAt: schedule.reminder_at,
       repeatRule: schedule.repeat_rule,
+      repeatScope,
     });
   },
 
-  setGroup(id: number, groupUuid: string | null): Promise<Todo> {
-    return invoke<Todo>("set_todo_group", { id, groupUuid });
+  setGroup(
+    id: number,
+    groupUuid: string | null,
+    repeatScope: RepeatEditScope = "single",
+  ): Promise<TodoEditResult> {
+    return invoke<TodoEditResult>("set_todo_group", {
+      id,
+      groupUuid,
+      repeatScope,
+    });
   },
 
   reorder(orderedIds: number[]): Promise<Todo[]> {

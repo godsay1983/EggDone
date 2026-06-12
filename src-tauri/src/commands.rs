@@ -50,6 +50,11 @@ pub struct TodoDeletion {
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
+pub struct TodoEdit {
+    updated_todos: Vec<Todo>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct TodoGroup {
     id: i64,
     uuid: String,
@@ -59,6 +64,12 @@ pub struct TodoGroup {
     created_at: i64,
     updated_at: i64,
     deleted_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RepeatEditScope {
+    Single,
+    Future,
 }
 
 #[tauri::command]
@@ -179,12 +190,13 @@ pub fn set_todo_completed(
 pub fn update_todo_title(
     id: i64,
     title: String,
+    repeat_scope: Option<String>,
     app: AppHandle,
     database: State<'_, Database>,
-) -> Result<Todo, String> {
+) -> Result<TodoEdit, String> {
     let result = {
-        let connection = lock_database(&database)?;
-        update_todo_title_in_connection(&connection, id, &title)
+        let mut connection = lock_database(&database)?;
+        update_todo_title_in_connection(&mut connection, id, &title, repeat_scope.as_deref())
     };
     refresh_badge_after_success(&app, &result);
     result
@@ -194,12 +206,13 @@ pub fn update_todo_title(
 pub fn update_todo_note(
     id: i64,
     note: Option<String>,
+    repeat_scope: Option<String>,
     app: AppHandle,
     database: State<'_, Database>,
-) -> Result<Todo, String> {
+) -> Result<TodoEdit, String> {
     let result = {
-        let connection = lock_database(&database)?;
-        update_todo_note_in_connection(&connection, id, note)
+        let mut connection = lock_database(&database)?;
+        update_todo_note_in_connection(&mut connection, id, note, repeat_scope.as_deref())
     };
     refresh_badge_after_success(&app, &result);
     result
@@ -227,12 +240,21 @@ pub fn set_todo_schedule(
     due_at: Option<i64>,
     reminder_at: Option<i64>,
     repeat_rule: Option<String>,
+    repeat_scope: Option<String>,
     app: AppHandle,
     database: State<'_, Database>,
-) -> Result<Todo, String> {
+) -> Result<TodoEdit, String> {
     let result = {
-        let connection = lock_database(&database)?;
-        set_todo_schedule_in_connection(&connection, id, due_date, due_at, reminder_at, repeat_rule)
+        let mut connection = lock_database(&database)?;
+        set_todo_schedule_in_connection(
+            &mut connection,
+            id,
+            due_date,
+            due_at,
+            reminder_at,
+            repeat_rule,
+            repeat_scope.as_deref(),
+        )
     };
     refresh_badge_after_success(&app, &result);
     result
@@ -242,12 +264,13 @@ pub fn set_todo_schedule(
 pub fn set_todo_group(
     id: i64,
     group_uuid: Option<String>,
+    repeat_scope: Option<String>,
     app: AppHandle,
     database: State<'_, Database>,
-) -> Result<Todo, String> {
+) -> Result<TodoEdit, String> {
     let result = {
-        let connection = lock_database(&database)?;
-        set_todo_group_in_connection(&connection, id, group_uuid)
+        let mut connection = lock_database(&database)?;
+        set_todo_group_in_connection(&mut connection, id, group_uuid, repeat_scope.as_deref())
     };
     refresh_badge_after_success(&app, &result);
     result
@@ -751,67 +774,88 @@ fn set_todo_completed_in_connection(
 }
 
 fn update_todo_title_in_connection(
-    connection: &Connection,
+    connection: &mut Connection,
     id: i64,
     title: &str,
-) -> Result<Todo, String> {
+    repeat_scope: Option<&str>,
+) -> Result<TodoEdit, String> {
     let title = title.trim();
     if title.is_empty() {
         return Err("任务内容不能为空".to_string());
     }
+    let target = find_todo(connection, id)?
+        .filter(|todo| todo.deleted_at.is_none() && todo.archived_at.is_none())
+        .ok_or_else(|| "任务不存在".to_string())?;
+    let scope = normalize_repeat_edit_scope(repeat_scope)?;
+    let ids = repeat_edit_ids(connection, &target, scope)?;
+    let now = now_millis();
+    let updated_by = device_id(connection).map_err(database_error)?;
 
-    let changed = connection
-        .execute(
-            "
+    let transaction = connection.transaction().map_err(database_error)?;
+    let mut changed = 0;
+    for todo_id in &ids {
+        changed += transaction
+            .execute(
+                "
             UPDATE todos
             SET title = ?1, updated_at = ?2, updated_by = ?3
             WHERE id = ?4 AND deleted_at IS NULL
               AND archived_at IS NULL
             ",
-            params![
-                title,
-                now_millis(),
-                device_id(connection).map_err(database_error)?,
-                id
-            ],
-        )
-        .map_err(database_error)?;
+                params![title, now, updated_by, todo_id],
+            )
+            .map_err(database_error)?;
+    }
+    transaction.commit().map_err(database_error)?;
 
     if changed == 0 {
         return Err("任务不存在".to_string());
     }
 
-    find_todo(connection, id)?.ok_or_else(|| "编辑后未能读取任务".to_string())
+    Ok(TodoEdit {
+        updated_todos: find_todos_by_ids(connection, &ids)?,
+    })
 }
 
 fn update_todo_note_in_connection(
-    connection: &Connection,
+    connection: &mut Connection,
     id: i64,
     note: Option<String>,
-) -> Result<Todo, String> {
+    repeat_scope: Option<&str>,
+) -> Result<TodoEdit, String> {
     let note = normalize_todo_note(note)?;
-    let changed = connection
-        .execute(
-            "
+    let target = find_todo(connection, id)?
+        .filter(|todo| todo.deleted_at.is_none() && todo.archived_at.is_none())
+        .ok_or_else(|| "任务不存在".to_string())?;
+    let scope = normalize_repeat_edit_scope(repeat_scope)?;
+    let ids = repeat_edit_ids(connection, &target, scope)?;
+    let now = now_millis();
+    let updated_by = device_id(connection).map_err(database_error)?;
+
+    let transaction = connection.transaction().map_err(database_error)?;
+    let mut changed = 0;
+    for todo_id in &ids {
+        changed += transaction
+            .execute(
+                "
             UPDATE todos
             SET note = ?1, updated_at = ?2, updated_by = ?3
             WHERE id = ?4 AND deleted_at IS NULL
               AND archived_at IS NULL
             ",
-            params![
-                note,
-                now_millis(),
-                device_id(connection).map_err(database_error)?,
-                id
-            ],
-        )
-        .map_err(database_error)?;
+                params![note, now, updated_by, todo_id],
+            )
+            .map_err(database_error)?;
+    }
+    transaction.commit().map_err(database_error)?;
 
     if changed == 0 {
         return Err("任务不存在".to_string());
     }
 
-    find_todo(connection, id)?.ok_or_else(|| "备注保存后未能读取任务".to_string())
+    Ok(TodoEdit {
+        updated_todos: find_todos_by_ids(connection, &ids)?,
+    })
 }
 
 fn set_todo_pinned_in_connection(
@@ -844,13 +888,14 @@ fn set_todo_pinned_in_connection(
 }
 
 fn set_todo_schedule_in_connection(
-    connection: &Connection,
+    connection: &mut Connection,
     id: i64,
     due_date: Option<String>,
     due_at: Option<i64>,
     reminder_at: Option<i64>,
     repeat_rule: Option<String>,
-) -> Result<Todo, String> {
+    repeat_scope: Option<&str>,
+) -> Result<TodoEdit, String> {
     let due_date = normalize_due_date(due_date)?;
     let repeat_rule = normalize_repeat_rule(repeat_rule)?;
     if due_at.is_some_and(|value| value < 0) || reminder_at.is_some_and(|value| value < 0) {
@@ -865,18 +910,30 @@ fn set_todo_schedule_in_connection(
     if repeat_rule.is_some() && due_at.is_some() {
         return Err("重复任务暂只支持日期级到期".to_string());
     }
-    let current = find_todo(connection, id)?.ok_or_else(|| "任务不存在".to_string())?;
+    let current = find_todo(connection, id)?
+        .filter(|todo| todo.deleted_at.is_none() && todo.archived_at.is_none())
+        .ok_or_else(|| "任务不存在".to_string())?;
+    let scope = normalize_repeat_edit_scope(repeat_scope)?;
+    let ids = repeat_edit_ids(connection, &current, scope)?;
     let repeat_next_due_date = match (&due_date, &repeat_rule) {
         (Some(date), Some(rule)) => Some(next_repeat_due_date(date, rule)?),
         _ => None,
     };
-    let repeat_series_uuid = repeat_rule
-        .as_ref()
-        .map(|_| current.repeat_series_uuid.unwrap_or(current.uuid));
+    let repeat_series_uuid = repeat_rule.as_ref().map(|_| {
+        current
+            .repeat_series_uuid
+            .clone()
+            .unwrap_or(current.uuid.clone())
+    });
+    let now = now_millis();
+    let updated_by = device_id(connection).map_err(database_error)?;
 
-    let changed = connection
-        .execute(
-            "
+    let transaction = connection.transaction().map_err(database_error)?;
+    let mut changed = 0;
+    for todo_id in &ids {
+        changed += transaction
+            .execute(
+                "
             UPDATE todos
             SET due_date = ?1, due_at = ?2, reminder_at = ?3,
                 repeat_rule = ?4, repeat_next_due_date = ?5,
@@ -885,55 +942,70 @@ fn set_todo_schedule_in_connection(
             WHERE id = ?9 AND deleted_at IS NULL
               AND archived_at IS NULL
             ",
-            params![
-                due_date,
-                due_at,
-                reminder_at,
-                repeat_rule,
-                repeat_next_due_date,
-                repeat_series_uuid,
-                now_millis(),
-                device_id(connection).map_err(database_error)?,
-                id
-            ],
-        )
-        .map_err(database_error)?;
+                params![
+                    due_date,
+                    due_at,
+                    reminder_at,
+                    repeat_rule,
+                    repeat_next_due_date,
+                    repeat_series_uuid,
+                    now,
+                    updated_by,
+                    todo_id
+                ],
+            )
+            .map_err(database_error)?;
+    }
+    transaction.commit().map_err(database_error)?;
 
     if changed == 0 {
         return Err("任务不存在".to_string());
     }
 
-    find_todo(connection, id)?.ok_or_else(|| "设置日期后未能读取任务".to_string())
+    Ok(TodoEdit {
+        updated_todos: find_todos_by_ids(connection, &ids)?,
+    })
 }
 
 fn set_todo_group_in_connection(
-    connection: &Connection,
+    connection: &mut Connection,
     id: i64,
     group_uuid: Option<String>,
-) -> Result<Todo, String> {
+    repeat_scope: Option<&str>,
+) -> Result<TodoEdit, String> {
     let group_uuid = normalize_group_uuid(connection, group_uuid)?;
-    let changed = connection
-        .execute(
-            "
+    let target = find_todo(connection, id)?
+        .filter(|todo| todo.deleted_at.is_none() && todo.archived_at.is_none())
+        .ok_or_else(|| "任务不存在".to_string())?;
+    let scope = normalize_repeat_edit_scope(repeat_scope)?;
+    let ids = repeat_edit_ids(connection, &target, scope)?;
+    let now = now_millis();
+    let updated_by = device_id(connection).map_err(database_error)?;
+
+    let transaction = connection.transaction().map_err(database_error)?;
+    let mut changed = 0;
+    for todo_id in &ids {
+        changed += transaction
+            .execute(
+                "
             UPDATE todos
             SET group_uuid = ?1, updated_at = ?2, updated_by = ?3
             WHERE id = ?4 AND deleted_at IS NULL
               AND archived_at IS NULL
             ",
-            params![
-                group_uuid,
-                now_millis(),
-                device_id(connection).map_err(database_error)?,
-                id
-            ],
-        )
-        .map_err(database_error)?;
+                params![group_uuid, now, updated_by, todo_id],
+            )
+            .map_err(database_error)?;
+    }
+    transaction.commit().map_err(database_error)?;
 
     if changed == 0 {
         return Err("任务不存在".to_string());
     }
 
-    find_todo(connection, id)?.ok_or_else(|| "移动分组后未能读取任务".to_string())
+    Ok(TodoEdit {
+        updated_todos: find_todos_by_ids(connection, &ids)?,
+    })
 }
 
 fn reorder_todos_in_connection(
@@ -1115,6 +1187,69 @@ fn find_todo(connection: &Connection, id: i64) -> Result<Option<Todo>, String> {
         .map_err(database_error)
 }
 
+fn find_todos_by_ids(connection: &Connection, ids: &[i64]) -> Result<Vec<Todo>, String> {
+    ids.iter()
+        .map(|id| find_todo(connection, *id)?.ok_or_else(|| "更新后未能读取任务".to_string()))
+        .collect()
+}
+
+fn repeat_edit_ids(
+    connection: &Connection,
+    target: &Todo,
+    scope: RepeatEditScope,
+) -> Result<Vec<i64>, String> {
+    if scope == RepeatEditScope::Single {
+        return Ok(vec![target.id]);
+    }
+
+    let Some(boundary_due_date) = target.due_date.as_deref() else {
+        return Ok(vec![target.id]);
+    };
+    let Some(series_uuid) = target.repeat_series_uuid.as_deref().or_else(|| {
+        if target.repeat_rule.is_some() {
+            Some(target.uuid.as_str())
+        } else {
+            None
+        }
+    }) else {
+        return Ok(vec![target.id]);
+    };
+
+    let mut statement = connection
+        .prepare(
+            "
+            SELECT DISTINCT id
+            FROM todos
+            WHERE deleted_at IS NULL
+              AND archived_at IS NULL
+              AND (
+                id = ?1
+                OR (
+                  completed = 0
+                  AND due_date IS NOT NULL
+                  AND due_date >= ?2
+                  AND (repeat_series_uuid = ?3 OR uuid = ?3)
+                )
+              )
+            ORDER BY due_date ASC, created_at ASC, id ASC
+            ",
+        )
+        .map_err(database_error)?;
+    let ids = statement
+        .query_map(params![target.id, boundary_due_date, series_uuid], |row| {
+            row.get::<_, i64>(0)
+        })
+        .map_err(database_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(database_error)?;
+
+    if ids.is_empty() {
+        Ok(vec![target.id])
+    } else {
+        Ok(ids)
+    }
+}
+
 fn map_todo(row: &rusqlite::Row<'_>) -> rusqlite::Result<Todo> {
     Ok(Todo {
         id: row.get(0)?,
@@ -1287,6 +1422,14 @@ fn normalize_repeat_rule(repeat_rule: Option<String>) -> Result<Option<String>, 
     match trimmed {
         "daily" | "weekly" | "monthly" | "weekdays" => Ok(Some(trimmed.to_string())),
         _ => Err("重复规则无效".to_string()),
+    }
+}
+
+fn normalize_repeat_edit_scope(repeat_scope: Option<&str>) -> Result<RepeatEditScope, String> {
+    match repeat_scope.unwrap_or("single") {
+        "single" => Ok(RepeatEditScope::Single),
+        "future" => Ok(RepeatEditScope::Future),
+        _ => Err("编辑范围无效".to_string()),
     }
 }
 
@@ -1487,6 +1630,11 @@ mod tests {
         connection
     }
 
+    fn only_updated(mut edit: TodoEdit) -> Todo {
+        assert_eq!(edit.updated_todos.len(), 1);
+        edit.updated_todos.remove(0)
+    }
+
     #[test]
     fn todo_lifecycle_uses_sync_ready_fields() {
         let mut connection = connection();
@@ -1534,22 +1682,35 @@ mod tests {
 
     #[test]
     fn updates_todo_note_with_normalization() {
-        let connection = connection();
+        let mut connection = connection();
         let created = create_todo_in_connection(&connection, "task", None).unwrap();
 
-        let with_note =
-            update_todo_note_in_connection(&connection, created.id, Some("  detail  ".to_string()))
-                .unwrap();
+        let with_note = only_updated(
+            update_todo_note_in_connection(
+                &mut connection,
+                created.id,
+                Some("  detail  ".to_string()),
+                None,
+            )
+            .unwrap(),
+        );
         assert_eq!(with_note.note.as_deref(), Some("detail"));
 
-        let cleared =
-            update_todo_note_in_connection(&connection, created.id, Some("   ".to_string()))
-                .unwrap();
+        let cleared = only_updated(
+            update_todo_note_in_connection(
+                &mut connection,
+                created.id,
+                Some("   ".to_string()),
+                None,
+            )
+            .unwrap(),
+        );
         assert_eq!(cleared.note, None);
 
         let long_note = "x".repeat(TODO_NOTE_MAX_CHARS + 1);
         let error =
-            update_todo_note_in_connection(&connection, created.id, Some(long_note)).unwrap_err();
+            update_todo_note_in_connection(&mut connection, created.id, Some(long_note), None)
+                .unwrap_err();
         assert!(error.contains("备注不能超过"));
     }
 
@@ -1571,9 +1732,11 @@ mod tests {
         let first = create_todo_in_connection(&connection, "first", None).unwrap();
         let second = create_todo_in_connection(&connection, "second", None).unwrap();
 
-        let edited = update_todo_title_in_connection(&connection, first.id, "  edited  ").unwrap();
+        let edited = only_updated(
+            update_todo_title_in_connection(&mut connection, first.id, "  edited  ", None).unwrap(),
+        );
         assert_eq!(edited.title, "edited");
-        assert!(update_todo_title_in_connection(&connection, first.id, " ").is_err());
+        assert!(update_todo_title_in_connection(&mut connection, first.id, " ", None).is_err());
 
         let pinned = set_todo_pinned_in_connection(&connection, first.id, true).unwrap();
         assert!(pinned.pinned);
@@ -1582,43 +1745,51 @@ mod tests {
             first.id
         );
 
-        let scheduled = set_todo_schedule_in_connection(
-            &connection,
-            first.id,
-            Some("2026-06-10".to_string()),
-            None,
-            None,
-            None,
-        )
-        .unwrap();
+        let scheduled = only_updated(
+            set_todo_schedule_in_connection(
+                &mut connection,
+                first.id,
+                Some("2026-06-10".to_string()),
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap(),
+        );
         assert_eq!(scheduled.due_date.as_deref(), Some("2026-06-10"));
         assert!(set_todo_schedule_in_connection(
-            &connection,
+            &mut connection,
             first.id,
             Some("2026/06/10".to_string()),
             None,
             None,
+            None,
             None
         )
         .is_err());
         assert!(set_todo_schedule_in_connection(
-            &connection,
+            &mut connection,
             first.id,
             Some("2026-02-31".to_string()),
+            None,
             None,
             None,
             None
         )
         .is_err());
-        let repeating = set_todo_schedule_in_connection(
-            &connection,
-            first.id,
-            Some("2026-06-10".to_string()),
-            None,
-            None,
-            Some("daily".to_string()),
-        )
-        .unwrap();
+        let repeating = only_updated(
+            set_todo_schedule_in_connection(
+                &mut connection,
+                first.id,
+                Some("2026-06-10".to_string()),
+                None,
+                None,
+                Some("daily".to_string()),
+                None,
+            )
+            .unwrap(),
+        );
         assert_eq!(repeating.repeat_rule.as_deref(), Some("daily"));
         assert_eq!(
             repeating.repeat_next_due_date.as_deref(),
@@ -1670,15 +1841,18 @@ mod tests {
     fn completing_repeating_todo_creates_only_the_next_instance() {
         let mut connection = connection();
         let created = create_todo_in_connection(&connection, "repeat", None).unwrap();
-        let repeating = set_todo_schedule_in_connection(
-            &connection,
-            created.id,
-            Some("2026-06-12".to_string()),
-            None,
-            None,
-            Some("weekdays".to_string()),
-        )
-        .unwrap();
+        let repeating = only_updated(
+            set_todo_schedule_in_connection(
+                &mut connection,
+                created.id,
+                Some("2026-06-12".to_string()),
+                None,
+                None,
+                Some("weekdays".to_string()),
+                None,
+            )
+            .unwrap(),
+        );
         assert_eq!(
             repeating.repeat_next_due_date.as_deref(),
             Some("2026-06-15")
@@ -1703,15 +1877,18 @@ mod tests {
     fn deleting_repeating_series_soft_deletes_all_instances() {
         let mut connection = connection();
         let created = create_todo_in_connection(&connection, "repeat", None).unwrap();
-        let repeating = set_todo_schedule_in_connection(
-            &connection,
-            created.id,
-            Some("2026-06-10".to_string()),
-            None,
-            None,
-            Some("daily".to_string()),
-        )
-        .unwrap();
+        let repeating = only_updated(
+            set_todo_schedule_in_connection(
+                &mut connection,
+                created.id,
+                Some("2026-06-10".to_string()),
+                None,
+                None,
+                Some("daily".to_string()),
+                None,
+            )
+            .unwrap(),
+        );
         let next = set_todo_completed_in_connection(&mut connection, repeating.id, true)
             .unwrap()
             .created_todo
@@ -1724,6 +1901,45 @@ mod tests {
         assert_eq!(deleted.len(), 2);
         assert!(deleted.iter().all(|todo| todo.deleted_at.is_some()));
         assert!(list_todos_from_connection(&connection).unwrap().is_empty());
+    }
+
+    #[test]
+    fn editing_future_repeating_todos_updates_active_future_instances() {
+        let mut connection = connection();
+        let created = create_todo_in_connection(&connection, "repeat", None).unwrap();
+        let repeating = only_updated(
+            set_todo_schedule_in_connection(
+                &mut connection,
+                created.id,
+                Some("2026-06-10".to_string()),
+                None,
+                None,
+                Some("daily".to_string()),
+                None,
+            )
+            .unwrap(),
+        );
+        let next = set_todo_completed_in_connection(&mut connection, repeating.id, true)
+            .unwrap()
+            .created_todo
+            .expect("next repeat instance");
+
+        let edited = update_todo_title_in_connection(
+            &mut connection,
+            repeating.id,
+            "future title",
+            Some("future"),
+        )
+        .unwrap();
+
+        assert_eq!(edited.updated_todos.len(), 2);
+        let titles = list_todos_from_connection(&connection)
+            .unwrap()
+            .into_iter()
+            .filter(|todo| todo.id == repeating.id || todo.id == next.id)
+            .map(|todo| todo.title)
+            .collect::<Vec<_>>();
+        assert_eq!(titles, vec!["future title", "future title"]);
     }
 
     #[test]
@@ -1760,7 +1976,7 @@ mod tests {
 
     #[test]
     fn creates_groups_and_moves_todos_between_them() {
-        let connection = connection();
+        let mut connection = connection();
         let group = create_group_in_connection(&connection, "  工作  ").unwrap();
         assert_eq!(group.name, "工作");
         assert!(Uuid::parse_str(&group.uuid).is_ok());
@@ -1769,7 +1985,9 @@ mod tests {
             create_todo_in_connection(&connection, "grouped", Some(group.uuid.clone())).unwrap();
         assert_eq!(created.group_uuid.as_deref(), Some(group.uuid.as_str()));
 
-        let ungrouped = set_todo_group_in_connection(&connection, created.id, None).unwrap();
+        let ungrouped = only_updated(
+            set_todo_group_in_connection(&mut connection, created.id, None, None).unwrap(),
+        );
         assert_eq!(ungrouped.group_uuid, None);
 
         assert!(create_todo_in_connection(

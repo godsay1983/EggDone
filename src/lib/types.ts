@@ -22,6 +22,7 @@ export interface Todo {
 
 export type RepeatRule = "daily" | "weekly" | "monthly" | "weekdays";
 export type RepeatDeleteScope = "single" | "series";
+export type RepeatEditScope = "single" | "future";
 
 export interface TodoGroup {
   id: number;

@@ -82,11 +82,19 @@ function createApi(initialItems: Todo[] = []) {
       }),
       created_todo: null,
     })),
-    updateTitle: vi.fn(async (id, title) => makeTodo(id, { title })),
-    updateNote: vi.fn(async (id, note) => makeTodo(id, { note })),
+    updateTitle: vi.fn(async (id, title) => ({
+      updated_todos: [makeTodo(id, { title })],
+    })),
+    updateNote: vi.fn(async (id, note) => ({
+      updated_todos: [makeTodo(id, { note })],
+    })),
     setPinned: vi.fn(async (id, pinned) => makeTodo(id, { pinned })),
-    setSchedule: vi.fn(async (id, schedule) => makeTodo(id, schedule)),
-    setGroup: vi.fn(async (id, groupUuid) => makeTodo(id, { group_uuid: groupUuid })),
+    setSchedule: vi.fn(async (id, schedule) => ({
+      updated_todos: [makeTodo(id, schedule)],
+    })),
+    setGroup: vi.fn(async (id, groupUuid) => ({
+      updated_todos: [makeTodo(id, { group_uuid: groupUuid })],
+    })),
     reorder: vi.fn(async (orderedIds: number[]) =>
       orderedIds.map((id: number, index: number) =>
         makeTodo(id, { sort_order: index * 1024 }),
@@ -295,6 +303,35 @@ describe("todo store", () => {
     expect(deleted.map((todo) => todo.id)).toEqual([1, 2]);
     expect(get(store).items.map((todo) => todo.id)).toEqual([3]);
     expect(api.delete).toHaveBeenCalledWith(2, "series");
+  });
+
+  it("applies future repeat edit results returned by the backend", async () => {
+    const current = makeTodo(1, {
+      title: "old",
+      repeat_rule: "daily",
+      repeat_next_due_date: "2026-06-11",
+      repeat_series_uuid: "00000000-0000-4000-8000-000000000001",
+    });
+    const next = makeTodo(2, {
+      title: "old",
+      repeat_rule: "daily",
+      repeat_next_due_date: "2026-06-12",
+      repeat_series_uuid: "00000000-0000-4000-8000-000000000001",
+    });
+    const api = createApi([current, next]);
+    vi.mocked(api.updateTitle).mockResolvedValueOnce({
+      updated_todos: [
+        { ...current, title: "new" },
+        { ...next, title: "new" },
+      ],
+    });
+    const store = createTodoStore(api, vi.fn());
+
+    await store.load();
+    await store.edit(current.id, "new", "future");
+
+    expect(get(store).items.map((todo) => todo.title)).toEqual(["new", "new"]);
+    expect(api.updateTitle).toHaveBeenCalledWith(current.id, "new", "future");
   });
 
   it("orders pinned todos before normal todos within each completion group", async () => {
