@@ -43,6 +43,7 @@
   type Theme = "light" | "dark";
   type GroupColor = "yellow" | "green" | "blue" | "peach" | "lavender" | "gray";
   type GroupDropTarget = string | null;
+  type FocusTodoPayload = { uuid: string };
 
   const groupColorOptions: Array<{ value: GroupColor; label: string }> = [
     { value: "yellow", label: "蛋黄" },
@@ -206,6 +207,9 @@
         setListView("today");
         requestAnimationFrame(() => inputElement?.focus());
       }).then((unlisten) => unlisteners.push(unlisten));
+      void listen<FocusTodoPayload>("focus-todo", (event) => {
+        void focusTodoByUuid(event.payload.uuid);
+      }).then((unlisten) => unlisteners.push(unlisten));
       void listen("single-instance", () => {
         showAbout = false;
         showDataManager = false;
@@ -290,6 +294,38 @@
     selectedTodoId = null;
     clearBatchSelection();
     cancelDrag();
+  }
+
+  async function focusTodoByUuid(uuid: string) {
+    showAbout = false;
+    showDataManager = false;
+    showSettings = false;
+    showSearch = false;
+    searchQuery = "";
+    showCompleted = true;
+    localStorage.setItem("eggdone-show-completed", "true");
+    setListView("all");
+    setSelectedGroup("all");
+
+    await tick();
+    let todo = $todos.items.find((item) => item.uuid === uuid);
+    if (!todo) {
+      await todos.refresh();
+      await tick();
+      todo = $todos.items.find((item) => item.uuid === uuid);
+    }
+    if (!todo) {
+      inputElement?.focus();
+      return;
+    }
+
+    selectedTodoId = todo.id;
+    requestAnimationFrame(() => {
+      document
+        .querySelector<HTMLElement>(`[data-todo-id="${todo.id}"]`)
+        ?.scrollIntoView({ block: "center" });
+      inputElement?.focus();
+    });
   }
 
   function groupFilterValue(group: string) {
