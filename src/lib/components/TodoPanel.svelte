@@ -92,6 +92,15 @@
   let groupDeleting = false;
   let confirmingGroupDelete = false;
   let groupDeleteTimer: ReturnType<typeof setTimeout> | null = null;
+  let groupScrollElement: HTMLElement;
+  let groupScrollOverflowing = false;
+  let groupScrollCanMoveLeft = false;
+  let groupScrollCanMoveRight = false;
+  let groupScrollPointerId: number | null = null;
+  let groupScrollStartX = 0;
+  let groupScrollStartLeft = 0;
+  let groupScrollDragging = false;
+  let suppressGroupClick = false;
   let searchInput: HTMLInputElement;
   let summaryActionsElement: HTMLElement;
   let selectedTodoId: number | null = null;
@@ -153,6 +162,14 @@
   onMount(() => {
     const unlisteners: UnlistenFn[] = [];
     let mounted = true;
+    const groupResizeObserver = new ResizeObserver(updateGroupScrollState);
+    const groupMutationObserver = new MutationObserver(() => {
+      updateGroupScrollState();
+      requestAnimationFrame(() => revealSelectedGroup(selectedGroup, false));
+    });
+    groupResizeObserver.observe(groupScrollElement);
+    groupMutationObserver.observe(groupScrollElement, { childList: true });
+    updateGroupScrollState();
     const savedTheme = localStorage.getItem("eggdone-theme");
     showCompleted =
       localStorage.getItem("eggdone-show-completed") !== "false";
@@ -246,6 +263,8 @@
       if (undoTimer) clearTimeout(undoTimer);
       if (clearTimer) clearTimeout(clearTimer);
       if (groupDeleteTimer) clearTimeout(groupDeleteTimer);
+      groupResizeObserver.disconnect();
+      groupMutationObserver.disconnect();
       removeDragListeners();
     };
   });
@@ -313,6 +332,100 @@
     selectedTodoId = null;
     clearBatchSelection();
     cancelDrag();
+    requestAnimationFrame(() => revealSelectedGroup(group));
+  }
+
+  function selectGroupFromScroll(group: string) {
+    if (suppressGroupClick) return;
+    setSelectedGroup(group);
+  }
+
+  function revealSelectedGroup(group: string, smooth = true) {
+    if (!groupScrollElement) return;
+    const buttons = groupScrollElement.querySelectorAll<HTMLButtonElement>(
+      "[data-group-filter]",
+    );
+    const selectedButton = [...buttons].find(
+      (button) => button.dataset.groupFilter === group,
+    );
+    selectedButton?.scrollIntoView({
+      behavior: smooth ? "smooth" : "auto",
+      block: "nearest",
+      inline: "nearest",
+    });
+  }
+
+  function updateGroupScrollState() {
+    if (!groupScrollElement) return;
+    const maxScrollLeft =
+      groupScrollElement.scrollWidth - groupScrollElement.clientWidth;
+    groupScrollOverflowing = maxScrollLeft > 2;
+    groupScrollCanMoveLeft = groupScrollElement.scrollLeft > 2;
+    groupScrollCanMoveRight =
+      groupScrollElement.scrollLeft < maxScrollLeft - 2;
+  }
+
+  function scrollGroups(direction: -1 | 1) {
+    groupScrollElement.scrollBy({
+      left: direction * Math.max(120, groupScrollElement.clientWidth * 0.7),
+      behavior: "smooth",
+    });
+  }
+
+  function handleGroupScrollWheel(event: WheelEvent) {
+    if (!groupScrollOverflowing) return;
+    const delta =
+      Math.abs(event.deltaX) > Math.abs(event.deltaY)
+        ? event.deltaX
+        : event.deltaY;
+    if (delta === 0) return;
+    event.preventDefault();
+    groupScrollElement.scrollLeft += delta;
+  }
+
+  function handleGroupScrollPointerDown(event: PointerEvent) {
+    if (event.button !== 0 || !groupScrollOverflowing) return;
+    groupScrollPointerId = event.pointerId;
+    groupScrollStartX = event.clientX;
+    groupScrollStartLeft = groupScrollElement.scrollLeft;
+    groupScrollDragging = false;
+    suppressGroupClick = false;
+  }
+
+  function handleGroupScrollPointerMove(event: PointerEvent) {
+    if (event.pointerId !== groupScrollPointerId) return;
+    const distance = event.clientX - groupScrollStartX;
+    if (!groupScrollDragging && Math.abs(distance) < 5) return;
+    if (!groupScrollDragging) {
+      groupScrollElement.setPointerCapture(event.pointerId);
+    }
+    groupScrollDragging = true;
+    suppressGroupClick = true;
+    event.preventDefault();
+    groupScrollElement.scrollLeft = groupScrollStartLeft - distance;
+  }
+
+  function handleGroupScrollPointerLeave(event: PointerEvent) {
+    if (
+      event.pointerId === groupScrollPointerId &&
+      !groupScrollDragging
+    ) {
+      groupScrollPointerId = null;
+    }
+  }
+
+  function handleGroupScrollPointerUp(event: PointerEvent) {
+    if (event.pointerId !== groupScrollPointerId) return;
+    if (groupScrollElement.hasPointerCapture(event.pointerId)) {
+      groupScrollElement.releasePointerCapture(event.pointerId);
+    }
+    groupScrollPointerId = null;
+    groupScrollDragging = false;
+    if (suppressGroupClick) {
+      setTimeout(() => {
+        suppressGroupClick = false;
+      }, 0);
+    }
   }
 
   async function focusTodoByUuid(uuid: string) {
@@ -1147,21 +1260,49 @@
   {/if}
 
   <section class="group-filter" aria-label="任务分组">
-    <div class="group-scroll">
+    {#if groupScrollOverflowing}
+      <button
+        class="group-scroll-control"
+        type="button"
+        aria-label="向左浏览分组"
+        title="向左浏览分组"
+        disabled={!groupScrollCanMoveLeft}
+        onclick={() => scrollGroups(-1)}
+      >
+        ‹
+      </button>
+    {/if}
+    <div
+      bind:this={groupScrollElement}
+      class="group-scroll"
+      class:overflowing={groupScrollOverflowing}
+      class:dragging={groupScrollDragging}
+      role="group"
+      aria-label="可横向浏览的任务分组"
+      onscroll={updateGroupScrollState}
+      onwheel={handleGroupScrollWheel}
+      onpointerdown={handleGroupScrollPointerDown}
+      onpointermove={handleGroupScrollPointerMove}
+      onpointerup={handleGroupScrollPointerUp}
+      onpointercancel={handleGroupScrollPointerUp}
+      onpointerleave={handleGroupScrollPointerLeave}
+    >
       <button
         class:active={selectedGroup === "all"}
+        data-group-filter="all"
         type="button"
-        onclick={() => setSelectedGroup("all")}
+        onclick={() => selectGroupFromScroll("all")}
       >
         全部
       </button>
       <button
         class:active={selectedGroup === "ungrouped"}
         class:drag-over={dragGroupTarget === null}
+        data-group-filter="ungrouped"
         data-group-drop-target="ungrouped"
         type="button"
         title="拖到这里移动到未分组"
-        onclick={() => setSelectedGroup("ungrouped")}
+        onclick={() => selectGroupFromScroll("ungrouped")}
       >
         未分组
       </button>
@@ -1171,16 +1312,29 @@
           class:active={selectedGroup === group.uuid}
           class:drag-over={dragGroupTarget === group.uuid}
           data-group-color={groupColorValue(group.color)}
+          data-group-filter={group.uuid}
           data-group-drop-target={group.uuid}
           type="button"
           title={`拖到这里移动到${group.name}`}
-          onclick={() => setSelectedGroup(group.uuid)}
+          onclick={() => selectGroupFromScroll(group.uuid)}
         >
           <span class="group-dot" aria-hidden="true"></span>
           {group.name}
         </button>
       {/each}
     </div>
+    {#if groupScrollOverflowing}
+      <button
+        class="group-scroll-control"
+        type="button"
+        aria-label="向右浏览分组"
+        title="向右浏览分组"
+        disabled={!groupScrollCanMoveRight}
+        onclick={() => scrollGroups(1)}
+      >
+        ›
+      </button>
+    {/if}
     {#if creatingGroup}
       <form
         class="group-create"

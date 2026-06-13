@@ -297,11 +297,49 @@ footer {
   flex: 1;
   gap: 5px;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-behavior: smooth;
   scrollbar-width: none;
+  touch-action: pan-x;
 }
 
 .group-scroll::-webkit-scrollbar {
   display: none;
+}
+
+.group-scroll.overflowing {
+  cursor: grab;
+}
+
+.group-scroll.dragging {
+  cursor: grabbing;
+  scroll-behavior: auto;
+  user-select: none;
+}
+
+.group-scroll-control {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: #7f6d52;
+  background: #efe7d8;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.group-scroll-control:hover:not(:disabled) {
+  color: #5f4d34;
+  background: #e5dac7;
+}
+
+.group-scroll-control:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .group-scroll button,
@@ -2341,6 +2379,7 @@ html[data-theme="dark"] .todo-search button:hover {
 }
 
 html[data-theme="dark"] .group-scroll button,
+html[data-theme="dark"] .group-scroll-control,
 html[data-theme="dark"] .group-add,
 html[data-theme="dark"] .group-manage-toggle,
 html[data-theme="dark"] .group-create button,
@@ -2350,6 +2389,7 @@ html[data-theme="dark"] .group-manager button {
 }
 
 html[data-theme="dark"] .group-scroll button:hover,
+html[data-theme="dark"] .group-scroll-control:hover:not(:disabled),
 html[data-theme="dark"] .group-add:hover,
 html[data-theme="dark"] .group-manage-toggle:hover,
 html[data-theme="dark"] .group-create button:hover,
