@@ -391,7 +391,11 @@ function sortTodos(left: Todo, right: Todo) {
   if (left.pinned !== right.pinned) {
     return Number(right.pinned) - Number(left.pinned);
   }
-  return left.sort_order - right.sort_order;
+  return (
+    left.sort_order - right.sort_order ||
+    right.created_at - left.created_at ||
+    right.uuid.localeCompare(left.uuid)
+  );
 }
 
 function sortGroups(left: TodoGroup, right: TodoGroup) {

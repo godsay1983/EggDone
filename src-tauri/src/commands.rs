@@ -501,7 +501,7 @@ fn list_todos_from_connection(connection: &Connection) -> Result<Vec<Todo>, Stri
                 repeat_rule, repeat_next_due_date, repeat_series_uuid
             FROM todos
             WHERE deleted_at IS NULL AND archived_at IS NULL
-            ORDER BY completed ASC, pinned DESC, sort_order ASC, created_at DESC, id DESC
+            ORDER BY completed ASC, pinned DESC, sort_order ASC, created_at DESC, uuid DESC
             ",
         )
         .map_err(database_error)?;

@@ -363,7 +363,7 @@ fn read_all_todos(connection: &Connection) -> Result<Vec<TransferTodo>, String> 
                    completed_at, deleted_at, archived_at, due_date, due_at, reminder_at,
                    repeat_rule, repeat_next_due_date, repeat_series_uuid, note
             FROM todos
-            ORDER BY completed ASC, pinned DESC, sort_order ASC, created_at DESC, id DESC
+            ORDER BY completed ASC, pinned DESC, sort_order ASC, created_at DESC, uuid DESC
             ",
         )
         .map_err(database_error)?;
