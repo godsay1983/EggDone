@@ -28,6 +28,12 @@ export interface ManualSyncResult {
   message: string;
   todoCount: number;
   conflictRetried: boolean;
+  remoteEtag: string | null;
+}
+
+export interface RemoteSyncState {
+  objectExists: boolean;
+  etag: string | null;
 }
 
 export function getSyncSettings(): Promise<SyncSettings> {
@@ -50,4 +56,8 @@ export function testSyncConnection(): Promise<ConnectionTestResult> {
 
 export function syncNow(): Promise<ManualSyncResult> {
   return invoke("sync_now");
+}
+
+export function getRemoteSyncState(): Promise<RemoteSyncState> {
+  return invoke("get_remote_sync_state");
 }

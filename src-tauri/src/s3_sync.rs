@@ -65,10 +65,18 @@ pub struct RemoteSyncObject {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct RemoteSyncState {
+    pub object_exists: bool,
+    pub etag: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ManualSyncResult {
     pub message: String,
     pub todo_count: usize,
     pub conflict_retried: bool,
+    pub remote_etag: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -252,6 +260,32 @@ pub async fn download_remote(prepared: &PreparedManualSync) -> Result<RemoteSync
         }),
         401 | 403 => Err("下载失败：凭据无效或没有对象读取权限".to_string()),
         status => Err(format!("下载同步文件失败，S3 服务返回状态码 {status}")),
+    }
+}
+
+pub async fn get_remote_state(prepared: &PreparedManualSync) -> Result<RemoteSyncState, String> {
+    let (headers, status) = prepared
+        .bucket
+        .head_object(&prepared.object_key)
+        .await
+        .map_err(|error| format!("检查远端同步文件失败：{error}"))?;
+
+    match status {
+        200..=299 => {
+            let etag = headers
+                .e_tag
+                .ok_or_else(|| "远端同步文件缺少 ETag".to_string())?;
+            Ok(RemoteSyncState {
+                object_exists: true,
+                etag: Some(etag),
+            })
+        }
+        404 => Ok(RemoteSyncState {
+            object_exists: false,
+            etag: None,
+        }),
+        401 | 403 => Err("连接失败：凭据无效或没有 Bucket 访问权限".to_string()),
+        _ => Err(format!("检查远端同步文件失败，S3 服务返回状态码 {status}")),
     }
 }
 

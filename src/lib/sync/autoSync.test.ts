@@ -6,11 +6,13 @@ import {
   configureAutoSync,
   runManualSync,
   scheduleAutoSync,
+  setAutoSyncForeground,
   syncStatus,
 } from "./autoSync";
 
 vi.mock("$lib/api/syncApi", () => ({
   getSyncSettings: vi.fn(),
+  getRemoteSyncState: vi.fn(),
   syncNow: vi.fn(),
 }));
 
@@ -28,6 +30,7 @@ const enabledSettings = {
 afterEach(() => {
   vi.useRealTimers();
   vi.clearAllMocks();
+  setAutoSyncForeground(false);
   configureAutoSync({ ...enabledSettings, enabled: false });
 });
 
@@ -39,6 +42,7 @@ describe("auto sync", () => {
       message: "同步完成",
       todoCount: 1,
       conflictRetried: false,
+      remoteEtag: "\"etag-1\"",
     });
 
     scheduleAutoSync();
@@ -59,6 +63,7 @@ describe("auto sync", () => {
         message: "同步完成",
         todoCount: 2,
         conflictRetried: false,
+        remoteEtag: "\"etag-2\"",
       });
 
     const resultPromise = runManualSync();
@@ -78,5 +83,29 @@ describe("auto sync", () => {
     await expect(runManualSync()).rejects.toThrow("远端文件持续发生变化");
     expect(syncApi.syncNow).toHaveBeenCalledTimes(1);
     expect(get(syncStatus).kind).toBe("conflict");
+  });
+
+  it("checks ETag on focus and every minute without downloading unchanged data", async () => {
+    vi.useFakeTimers();
+    configureAutoSync(enabledSettings);
+    vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue({
+      objectExists: true,
+      etag: "\"etag-remote\"",
+    });
+    vi.mocked(syncApi.syncNow).mockResolvedValue({
+      message: "同步完成",
+      todoCount: 1,
+      conflictRetried: false,
+      remoteEtag: "\"etag-remote\"",
+    });
+
+    setAutoSyncForeground(true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(syncApi.getRemoteSyncState).toHaveBeenCalledTimes(1);
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(syncApi.getRemoteSyncState).toHaveBeenCalledTimes(2);
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(1);
   });
 });

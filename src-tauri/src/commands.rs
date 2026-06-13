@@ -410,6 +410,17 @@ pub async fn test_sync_connection(
 }
 
 #[tauri::command]
+pub async fn get_remote_sync_state(
+    database: State<'_, Database>,
+) -> Result<s3_sync::RemoteSyncState, String> {
+    let prepared = {
+        let connection = lock_database(&database)?;
+        s3_sync::prepare_manual_sync(&connection)?
+    };
+    s3_sync::get_remote_state(&prepared).await
+}
+
+#[tauri::command]
 pub async fn sync_now(
     app: AppHandle,
     database: State<'_, Database>,
@@ -437,6 +448,10 @@ pub async fn sync_now(
 
         match s3_sync::upload_document(&prepared, &merged, &remote).await? {
             UploadOutcome::Success => {
+                let remote_etag = s3_sync::get_remote_state(&prepared)
+                    .await
+                    .ok()
+                    .and_then(|state| state.etag);
                 return Ok(ManualSyncResult {
                     message: if attempt == 0 {
                         "同步完成".to_string()
@@ -445,6 +460,7 @@ pub async fn sync_now(
                     },
                     todo_count: merged.todos.len(),
                     conflict_retried: attempt > 0,
+                    remote_etag,
                 });
             }
             UploadOutcome::Conflict if attempt == 0 => {

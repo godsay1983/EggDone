@@ -1,6 +1,7 @@
 import { writable } from "svelte/store";
 
 import {
+  getRemoteSyncState,
   getSyncSettings,
   syncNow,
   type ManualSyncResult,
@@ -23,6 +24,7 @@ export interface SyncStatus {
 
 const AUTO_SYNC_DELAY_MS = 4_000;
 const RETRY_DELAYS_MS = [1_500, 3_000];
+const FOREGROUND_POLL_INTERVAL_MS = 60_000;
 
 export const syncStatus = writable<SyncStatus>({
   kind: "idle",
@@ -35,6 +37,11 @@ let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let running: Promise<ManualSyncResult> | null = null;
 let pendingAfterRun = false;
 let initialized = false;
+let foreground = false;
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+let remoteCheckRunning = false;
+let remoteStateInitialized = false;
+let knownRemoteEtag: string | null = null;
 
 export async function initializeAutoSync() {
   if (initialized) return;
@@ -42,9 +49,6 @@ export async function initializeAutoSync() {
   try {
     const settings = await getSyncSettings();
     configureAutoSync(settings);
-    if (enabled) {
-      void runAutomaticSync();
-    }
   } catch (reason) {
     setFailureStatus(reason);
   }
@@ -52,14 +56,32 @@ export async function initializeAutoSync() {
 
 export function configureAutoSync(settings: SyncSettings) {
   enabled = settings.enabled && settings.credentialsConfigured;
+  remoteStateInitialized = false;
+  knownRemoteEtag = null;
   if (!enabled) {
     clearDebounce();
+    stopForegroundPolling();
     pendingAfterRun = false;
     syncStatus.set({
       kind: "idle",
       message: settings.enabled ? "同步凭据未配置" : "同步未启用",
       updatedAt: null,
     });
+  } else if (foreground) {
+    startForegroundPolling();
+    void checkRemoteAndSync();
+  }
+}
+
+export function setAutoSyncForeground(value: boolean) {
+  foreground = value;
+  if (!foreground) {
+    stopForegroundPolling();
+    return;
+  }
+  if (enabled) {
+    startForegroundPolling();
+    void checkRemoteAndSync();
   }
 }
 
@@ -122,6 +144,8 @@ async function performSyncWithRetry(): Promise<ManualSyncResult> {
         message: result.conflictRetried ? "冲突已合并，同步完成" : "同步完成",
         updatedAt: Date.now(),
       });
+      knownRemoteEtag = result.remoteEtag;
+      remoteStateInitialized = result.remoteEtag !== null;
       return result;
     } catch (reason) {
       lastError = reason;
@@ -133,6 +157,46 @@ async function performSyncWithRetry(): Promise<ManualSyncResult> {
     }
   }
   throw lastError;
+}
+
+async function checkRemoteAndSync() {
+  if (!enabled || !foreground || remoteCheckRunning) return;
+  if (running) {
+    pendingAfterRun = true;
+    return;
+  }
+
+  remoteCheckRunning = true;
+  try {
+    const remote = await getRemoteSyncState();
+    const changed =
+      !remoteStateInitialized ||
+      remote.objectExists !== (knownRemoteEtag !== null) ||
+      remote.etag !== knownRemoteEtag;
+    remoteStateInitialized = true;
+    knownRemoteEtag = remote.etag;
+    if (changed) {
+      await runAutomaticSync();
+    }
+  } catch (reason) {
+    setFailureStatus(reason);
+  } finally {
+    remoteCheckRunning = false;
+  }
+}
+
+function startForegroundPolling() {
+  if (pollTimer || !enabled || !foreground) return;
+  pollTimer = setInterval(() => {
+    void checkRemoteAndSync();
+  }, FOREGROUND_POLL_INTERVAL_MS);
+}
+
+function stopForegroundPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
 }
 
 function setFailureStatus(reason: unknown) {

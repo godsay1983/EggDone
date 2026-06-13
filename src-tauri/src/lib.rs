@@ -104,6 +104,7 @@ pub fn run() {
             commands::save_sync_settings,
             commands::delete_sync_credentials,
             commands::test_sync_connection,
+            commands::get_remote_sync_state,
             commands::sync_now,
             data_exchange::export_todos,
             data_exchange::preview_todo_import,

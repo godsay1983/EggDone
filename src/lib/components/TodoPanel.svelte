@@ -1,6 +1,7 @@
 <script lang="ts">
   import { isTauri } from "@tauri-apps/api/core";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+  import { getCurrentWindow } from "@tauri-apps/api/window";
   import { flip } from "svelte/animate";
   import { onMount, tick } from "svelte";
 
@@ -15,7 +16,11 @@
     remainingCount,
     todos,
   } from "$lib/stores/todoStore";
-  import { initializeAutoSync, syncStatus } from "$lib/sync/autoSync";
+  import {
+    initializeAutoSync,
+    setAutoSyncForeground,
+    syncStatus,
+  } from "$lib/sync/autoSync";
   import type {
     RepeatDeleteScope,
     RepeatEditScope,
@@ -147,6 +152,7 @@
 
   onMount(() => {
     const unlisteners: UnlistenFn[] = [];
+    let mounted = true;
     const savedTheme = localStorage.getItem("eggdone-theme");
     showCompleted =
       localStorage.getItem("eggdone-show-completed") !== "false";
@@ -183,7 +189,18 @@
     }
     window.addEventListener("pointerdown", handlePointerDown, true);
     if (isTauri()) {
-      void initializeAutoSync();
+      void initializeAutoSync().then(async () => {
+        const appWindow = getCurrentWindow();
+        setAutoSyncForeground(await appWindow.isFocused());
+        const unlistenFocus = await appWindow.onFocusChanged(({ payload }) => {
+          setAutoSyncForeground(payload);
+        });
+        if (mounted) {
+          unlisteners.push(unlistenFocus);
+        } else {
+          unlistenFocus();
+        }
+      });
       void initializeDesktopSettings()
         .then((settings) => (desktopSettings = settings))
         .catch((error) => todos.reportError(error));
@@ -222,6 +239,8 @@
     }
 
     return () => {
+      mounted = false;
+      setAutoSyncForeground(false);
       window.removeEventListener("pointerdown", handlePointerDown, true);
       unlisteners.forEach((unlisten) => unlisten());
       if (undoTimer) clearTimeout(undoTimer);
