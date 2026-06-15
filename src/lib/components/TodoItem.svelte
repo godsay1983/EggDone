@@ -17,6 +17,7 @@
   } from "$lib/utils/todoDates";
   import {
     defaultCustomReminderDateTime,
+    dateTimeLocalToTimestamp,
     inferReminderChoice,
     laterTodayReminderAt,
     reminderAtForDate,
@@ -79,6 +80,7 @@
   let noteSaving = false;
   let noteError = "";
   let customDate = "";
+  let customDueTime = "18:00";
   let customReminderDateTime = "";
   let reminderChoice: ReminderChoice = "none";
   let repeatChoice: RepeatRule | "none" = "none";
@@ -93,6 +95,7 @@
   $: notePreview = todo.note?.trim() ?? "";
   $: canSaveSchedule =
     Boolean(customDate) &&
+    dateTimeLocalToTimestamp(`${customDate}T${customDueTime}`) !== null &&
     (reminderChoice !== "custom" || Boolean(customReminderDateTime));
   $: if (editRequest > 0 && !editing) {
     void beginEdit();
@@ -163,8 +166,11 @@
     noteOpen = false;
     scheduleOpen = !scheduleOpen;
     scheduleError = "";
-    customDate = todo.due_date ?? localDateString(0);
-    reminderChoice = inferReminderChoice(todo.due_date, todo.reminder_at);
+    const dueDateTime =
+      todo.due_at !== null ? timestampToDateTimeLocal(todo.due_at) : null;
+    customDate = todo.due_date ?? dueDateTime?.slice(0, 10) ?? localDateString(0);
+    customDueTime = dueDateTime?.slice(11, 16) ?? "18:00";
+    reminderChoice = inferReminderChoice(customDate, todo.reminder_at);
     repeatChoice = todo.repeat_rule ?? "none";
     customReminderDateTime =
       todo.reminder_at !== null
@@ -190,8 +196,16 @@
     noteInput?.focus();
   }
 
-  async function setDateOnly(date: string | null) {
+  async function setSchedule(date: string | null) {
     if (scheduleSaving) return;
+    const dueAt =
+      date === null
+        ? null
+        : dateTimeLocalToTimestamp(`${date}T${customDueTime}`);
+    if (date !== null && dueAt === null) {
+      scheduleError = "请选择有效的到期时间";
+      return;
+    }
     const repeatRule = date && repeatChoice !== "none" ? repeatChoice : null;
     const reminderAt = date
       ? reminderAtForDate(date, reminderChoice, customReminderDateTime)
@@ -207,16 +221,16 @@
       await onSchedule(
         todo.id,
         {
-          due_date: date,
-          due_at: null,
+          due_date: null,
+          due_at: dueAt,
           reminder_at: reminderAt,
           repeat_rule: repeatRule,
         },
-        chooseRepeatEditScope("修改日期和重复规则"),
+        chooseRepeatEditScope("修改到期时间和重复规则"),
       );
       scheduleOpen = false;
     } catch {
-      scheduleError = "日期保存失败，请重试";
+      scheduleError = "到期时间保存失败，请重试";
     } finally {
       scheduleSaving = false;
     }
@@ -473,7 +487,7 @@
               class:today={dueTone === "today"}
               class="due-badge"
               type="button"
-              title="修改到期日期"
+              title="修改到期时间"
               onclick={toggleSchedule}
             >
               {dueTone === "overdue" ? "逾期 " : ""}{dueLabel}
@@ -502,15 +516,15 @@
         </div>
       {/if}
       {#if scheduleOpen}
-        <div class="schedule-popover" role="dialog" aria-label="设置到期日期">
-          <strong>到期日期</strong>
+        <div class="schedule-popover" role="dialog" aria-label="设置到期时间">
+          <strong>到期时间</strong>
           <div class="schedule-actions">
-            <button type="button" disabled={scheduleSaving} onclick={() => void setDateOnly(localDateString(0))}>今天</button>
-            <button type="button" disabled={scheduleSaving} onclick={() => void setDateOnly(localDateString(1))}>明天</button>
-            <button type="button" disabled={scheduleSaving} onclick={() => void setDateOnly(localDateString(7))}>下周</button>
+            <button type="button" disabled={scheduleSaving} onclick={() => void setSchedule(localDateString(0))}>今天</button>
+            <button type="button" disabled={scheduleSaving} onclick={() => void setSchedule(localDateString(1))}>明天</button>
+            <button type="button" disabled={scheduleSaving} onclick={() => void setSchedule(localDateString(7))}>下周</button>
           </div>
           <label>
-            <span>自定义</span>
+            <span>日期</span>
             <input
               type="date"
               bind:value={customDate}
@@ -518,6 +532,26 @@
               onchange={handleCustomDateChange}
             />
           </label>
+          <label>
+            <span>时间</span>
+            <input
+              type="time"
+              bind:value={customDueTime}
+              disabled={scheduleSaving}
+            />
+          </label>
+          <div class="schedule-time-actions" aria-label="常用到期时间">
+            {#each ["09:00", "12:00", "18:00", "21:00"] as time}
+              <button
+                class:active={customDueTime === time}
+                type="button"
+                disabled={scheduleSaving}
+                onclick={() => (customDueTime = time)}
+              >
+                {time}
+              </button>
+            {/each}
+          </div>
           <label>
             <span>提醒</span>
             <select
@@ -552,8 +586,8 @@
             </select>
           </label>
           <div class="schedule-footer">
-            <button type="button" disabled={scheduleSaving} onclick={() => void setDateOnly(null)}>清除</button>
-            <button type="button" disabled={scheduleSaving || !canSaveSchedule} onclick={() => void setDateOnly(customDate)}>保存</button>
+            <button type="button" disabled={scheduleSaving} onclick={() => void setSchedule(null)}>清除</button>
+            <button type="button" disabled={scheduleSaving || !canSaveSchedule} onclick={() => void setSchedule(customDate)}>保存</button>
           </div>
           {#if scheduleError}<small>{scheduleError}</small>{/if}
         </div>
@@ -622,7 +656,7 @@
           {todo.note ? "编辑备注" : "添加备注"}
         </button>
         <button type="button" role="menuitem" onclick={toggleSchedule}>
-          设置日期
+          设置到期时间
         </button>
         {#if groups.length > 0}
           <label class="group-move">

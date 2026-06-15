@@ -21,12 +21,12 @@ export function formatDueLabel(todo: Todo, now = new Date()) {
   }
 
   if (todo.due_at !== null) {
-    return new Intl.DateTimeFormat("zh-CN", {
-      month: "numeric",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(new Date(todo.due_at));
+    const due = new Date(todo.due_at);
+    const dueDate = localDateString(0, due);
+    const time = `${padDatePart(due.getHours())}:${padDatePart(due.getMinutes())}`;
+    if (dueDate === localDateString(0, now)) return `今天 ${time}`;
+    if (dueDate === localDateString(1, now)) return `明天 ${time}`;
+    return `${padDatePart(due.getMonth() + 1)}/${padDatePart(due.getDate())} ${time}`;
   }
 
   return "";
@@ -53,4 +53,8 @@ export function getDueTone(todo: Todo, now = new Date()): DueTone {
 export function isDueTodayOrOverdue(todo: Todo, now = new Date()) {
   if (todo.completed) return false;
   return getDueTone(todo, now) === "today" || getDueTone(todo, now) === "overdue";
+}
+
+function padDatePart(value: number) {
+  return String(value).padStart(2, "0");
 }

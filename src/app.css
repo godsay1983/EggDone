@@ -939,7 +939,7 @@ footer {
   top: calc(100% + 7px);
   left: 0;
   z-index: 6;
-  width: 218px;
+  width: 238px;
   padding: 10px;
   border: 1px solid #eadfcf;
   border-radius: 13px;
@@ -955,12 +955,14 @@ footer {
 }
 
 .schedule-actions,
+.schedule-time-actions,
 .schedule-footer {
   display: flex;
   gap: 6px;
 }
 
 .schedule-actions button,
+.schedule-time-actions button,
 .schedule-footer button {
   padding: 5px 8px;
   border: 0;
@@ -972,9 +974,25 @@ footer {
 }
 
 .schedule-actions button:hover,
+.schedule-time-actions button:hover,
 .schedule-footer button:hover {
   color: #5f4c1e;
   background: #f6c94c;
+}
+
+.schedule-time-actions {
+  margin: -2px 0 8px;
+}
+
+.schedule-time-actions button {
+  flex: 1;
+  padding-inline: 4px;
+}
+
+.schedule-time-actions button.active {
+  color: #5f4c1e;
+  background: #f6c94c;
+  font-weight: 700;
 }
 
 .schedule-popover label {
@@ -2670,12 +2688,15 @@ html[data-theme="dark"] .schedule-popover strong {
 }
 
 html[data-theme="dark"] .schedule-actions button,
+html[data-theme="dark"] .schedule-time-actions button,
 html[data-theme="dark"] .schedule-footer button {
   color: #cfc4b3;
   background: #454038;
 }
 
 html[data-theme="dark"] .schedule-actions button:hover,
+html[data-theme="dark"] .schedule-time-actions button:hover,
+html[data-theme="dark"] .schedule-time-actions button.active,
 html[data-theme="dark"] .schedule-footer button:hover,
 html[data-theme="dark"] .schedule-footer button:last-child {
   color: #352c17;

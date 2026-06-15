@@ -4,6 +4,7 @@ mod db;
 mod panel_position;
 mod reminders;
 mod s3_sync;
+mod schedule;
 mod sync;
 mod tray;
 

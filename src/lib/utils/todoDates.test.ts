@@ -51,6 +51,18 @@ describe("todo date helpers", () => {
     expect(formatDueLabel(makeTodo({ due_date: "2026-06-12" }), now)).toBe(
       "06/12",
     );
+    expect(
+      formatDueLabel(
+        makeTodo({ due_at: new Date(2026, 5, 9, 18, 0).getTime() }),
+        now,
+      ),
+    ).toBe("今天 18:00");
+    expect(
+      formatDueLabel(
+        makeTodo({ due_at: new Date(2026, 5, 10, 9, 30).getTime() }),
+        now,
+      ),
+    ).toBe("明天 09:30");
   });
 
   it("detects overdue and today tasks", () => {

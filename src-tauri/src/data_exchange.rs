@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use rusqlite::{backup::Backup, params, Connection};
+use rusqlite::{backup::Backup, params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State};
 use tauri_plugin_dialog::{DialogExt, FilePath};
@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 use crate::{
     db::{device_id, now_millis, Database},
+    schedule::{local_date_from_timestamp, timestamp_for_local_date},
     tray::PanelState,
 };
 
@@ -371,7 +372,10 @@ fn read_all_todos(connection: &Connection) -> Result<Vec<TransferTodo>, String> 
         .query_map([], map_transfer_todo)
         .map_err(database_error)?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(database_error)?;
+        .map_err(database_error)?
+        .into_iter()
+        .map(canonicalize_repeat_schedule)
+        .collect::<Result<Vec<_>, _>>()?;
     Ok(todos)
 }
 
@@ -533,6 +537,7 @@ fn insert_todo(
     todo: &TransferTodo,
     updated_by: &str,
 ) -> Result<(), String> {
+    let (due_date, due_at) = schedule_for_local_storage(todo, None)?;
     connection
         .execute(
             "
@@ -555,8 +560,8 @@ fn insert_todo(
                 todo.completed_at,
                 todo.deleted_at,
                 todo.archived_at,
-                todo.due_date,
-                todo.due_at,
+                due_date,
+                due_at,
                 todo.reminder_at,
                 todo.repeat_rule,
                 todo.repeat_next_due_date,
@@ -574,6 +579,16 @@ fn update_todo(
     todo: &TransferTodo,
     updated_by: &str,
 ) -> Result<(), String> {
+    let existing_due_at = connection
+        .query_row(
+            "SELECT due_at FROM todos WHERE uuid = ?1",
+            params![todo.uuid],
+            |row| row.get::<_, Option<i64>>(0),
+        )
+        .optional()
+        .map_err(database_error)?
+        .flatten();
+    let (due_date, due_at) = schedule_for_local_storage(todo, existing_due_at)?;
     connection
         .execute(
             "
@@ -595,8 +610,8 @@ fn update_todo(
                 todo.completed_at,
                 todo.deleted_at,
                 todo.archived_at,
-                todo.due_date,
-                todo.due_at,
+                due_date,
+                due_at,
                 todo.reminder_at,
                 todo.repeat_rule,
                 todo.repeat_next_due_date,
@@ -632,6 +647,32 @@ fn map_transfer_todo(row: &rusqlite::Row<'_>) -> rusqlite::Result<TransferTodo> 
         repeat_series_uuid: row.get(16)?,
         note: row.get(17)?,
     })
+}
+
+fn canonicalize_repeat_schedule(mut todo: TransferTodo) -> Result<TransferTodo, String> {
+    if todo.repeat_rule.is_some() && todo.due_date.is_none() {
+        let timestamp = todo
+            .due_at
+            .ok_or_else(|| "重复任务缺少到期时间".to_string())?;
+        todo.due_date = Some(local_date_from_timestamp(timestamp)?);
+        todo.due_at = None;
+    }
+    Ok(todo)
+}
+
+fn schedule_for_local_storage(
+    todo: &TransferTodo,
+    existing_due_at: Option<i64>,
+) -> Result<(Option<String>, Option<i64>), String> {
+    if todo.repeat_rule.is_none() {
+        return Ok((todo.due_date.clone(), todo.due_at));
+    }
+
+    let date = todo
+        .due_date
+        .as_deref()
+        .ok_or_else(|| "导入的重复任务缺少到期日期".to_string())?;
+    Ok((None, Some(timestamp_for_local_date(date, existing_due_at)?)))
 }
 
 fn validate_repeat_fields(
@@ -798,6 +839,18 @@ mod tests {
         let result = merge_transfer(&mut destination, &exported.groups, &exported.todos).unwrap();
 
         assert_eq!(result.added, 2);
+        let (stored_due_date, stored_due_at): (Option<String>, Option<i64>) = destination
+            .query_row(
+                "SELECT due_date, due_at FROM todos WHERE uuid = ?1",
+                params![active.uuid],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(stored_due_date, None);
+        assert_eq!(
+            stored_due_at,
+            Some(timestamp_for_local_date("2026-06-10", None).unwrap())
+        );
         assert_eq!(read_all_groups(&destination).unwrap(), vec![work]);
         assert_eq!(read_all_todos(&destination).unwrap(), vec![active, deleted]);
     }

@@ -9,6 +9,7 @@ use crate::{
         self, ConnectionTestResult, ManualSyncResult, SaveSyncSettings, SyncRuntime, SyncSettings,
         UploadOutcome,
     },
+    schedule::{local_date_from_timestamp, timestamp_for_local_date},
     sync::{self, SyncDocument},
     tray::{self, PanelState},
 };
@@ -920,18 +921,20 @@ fn set_todo_schedule_in_connection(
     if due_date.is_some() && due_at.is_some() {
         return Err("纯日期任务不能同时设置具体到期时间".to_string());
     }
-    if repeat_rule.is_some() && due_date.is_none() {
-        return Err("重复任务需要先设置到期日期".to_string());
-    }
-    if repeat_rule.is_some() && due_at.is_some() {
-        return Err("重复任务暂只支持日期级到期".to_string());
+    if repeat_rule.is_some() && due_date.is_none() && due_at.is_none() {
+        return Err("重复任务需要先设置到期时间".to_string());
     }
     let current = find_todo(connection, id)?
         .filter(|todo| todo.deleted_at.is_none() && todo.archived_at.is_none())
         .ok_or_else(|| "任务不存在".to_string())?;
     let scope = normalize_repeat_edit_scope(repeat_scope)?;
     let ids = repeat_edit_ids(connection, &current, scope)?;
-    let repeat_next_due_date = match (&due_date, &repeat_rule) {
+    let repeat_due_date = match (&repeat_rule, &due_date, due_at) {
+        (Some(_), Some(date), _) => Some(date.clone()),
+        (Some(_), None, Some(timestamp)) => Some(local_date_from_timestamp(timestamp)?),
+        _ => None,
+    };
+    let repeat_next_due_date = match (&repeat_due_date, &repeat_rule) {
         (Some(date), Some(rule)) => Some(next_repeat_due_date(date, rule)?),
         _ => None,
     };
@@ -1218,8 +1221,10 @@ fn repeat_edit_ids(
         return Ok(vec![target.id]);
     }
 
-    let Some(boundary_due_date) = target.due_date.as_deref() else {
-        return Ok(vec![target.id]);
+    let boundary_due_date = match (target.due_date.as_deref(), target.due_at) {
+        (Some(date), _) => date.to_string(),
+        (None, Some(timestamp)) => local_date_from_timestamp(timestamp)?,
+        (None, None) => return Ok(vec![target.id]),
     };
     let Some(series_uuid) = target.repeat_series_uuid.as_deref().or_else(|| {
         if target.repeat_rule.is_some() {
@@ -1242,12 +1247,17 @@ fn repeat_edit_ids(
                 id = ?1
                 OR (
                   completed = 0
-                  AND due_date IS NOT NULL
-                  AND due_date >= ?2
+                  AND COALESCE(
+                    due_date,
+                    strftime('%Y-%m-%d', due_at / 1000, 'unixepoch', 'localtime')
+                  ) >= ?2
                   AND (repeat_series_uuid = ?3 OR uuid = ?3)
                 )
               )
-            ORDER BY due_date ASC, created_at ASC, id ASC
+            ORDER BY COALESCE(
+              due_date,
+              strftime('%Y-%m-%d', due_at / 1000, 'unixepoch', 'localtime')
+            ) ASC, created_at ASC, id ASC
             ",
         )
         .map_err(database_error)?;
@@ -1462,6 +1472,14 @@ fn create_next_repeat_instance(
         return Ok(None);
     };
     let next_repeat_next_due_date = next_repeat_due_date(next_due_date, rule)?;
+    let (due_date, due_at) = if source.due_at.is_some() {
+        (
+            None,
+            Some(timestamp_for_local_date(next_due_date, source.due_at)?),
+        )
+    } else {
+        (Some(next_due_date), None)
+    };
     let repeat_series_uuid = source
         .repeat_series_uuid
         .as_deref()
@@ -1488,7 +1506,7 @@ fn create_next_repeat_instance(
                 archived_at, due_date, due_at, reminder_at,
                 repeat_rule, repeat_next_due_date, repeat_series_uuid, updated_by
             )
-            VALUES (?1, ?2, ?3, ?4, 0, ?5, ?6, ?7, ?7, NULL, NULL, NULL, ?8, NULL, NULL, ?9, ?10, ?11, ?12)
+            VALUES (?1, ?2, ?3, ?4, 0, ?5, ?6, ?7, ?7, NULL, NULL, NULL, ?8, ?9, NULL, ?10, ?11, ?12, ?13)
             ",
             params![
                 uuid,
@@ -1498,7 +1516,8 @@ fn create_next_repeat_instance(
                 source.pinned,
                 sort_order,
                 now,
-                next_due_date,
+                due_date,
+                due_at,
                 rule,
                 next_repeat_next_due_date,
                 repeat_series_uuid,
@@ -1887,6 +1906,43 @@ mod tests {
             Some(repeating.uuid.as_str())
         );
         assert_eq!(list_todos_from_connection(&connection).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn completing_timed_repeating_todo_preserves_due_time() {
+        let mut connection = connection();
+        let created = create_todo_in_connection(&connection, "timed repeat", None).unwrap();
+        let due_at = timestamp_for_local_date("2026-06-12", None).unwrap();
+        let repeating = only_updated(
+            set_todo_schedule_in_connection(
+                &mut connection,
+                created.id,
+                None,
+                Some(due_at),
+                None,
+                Some("weekdays".to_string()),
+                None,
+            )
+            .unwrap(),
+        );
+
+        assert_eq!(repeating.due_date, None);
+        assert_eq!(repeating.due_at, Some(due_at));
+        assert_eq!(
+            repeating.repeat_next_due_date.as_deref(),
+            Some("2026-06-15")
+        );
+
+        let next = set_todo_completed_in_connection(&mut connection, created.id, true)
+            .unwrap()
+            .created_todo
+            .expect("next timed repeat instance");
+        assert_eq!(next.due_date, None);
+        assert_eq!(
+            next.due_at,
+            Some(timestamp_for_local_date("2026-06-15", Some(due_at)).unwrap())
+        );
+        assert_eq!(next.repeat_next_due_date.as_deref(), Some("2026-06-16"));
     }
 
     #[test]

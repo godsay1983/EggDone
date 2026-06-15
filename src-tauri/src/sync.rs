@@ -3,11 +3,14 @@ use std::{
     collections::{BTreeMap, HashSet},
 };
 
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::db::device_id;
+use crate::{
+    db::device_id,
+    schedule::{local_date_from_timestamp, timestamp_for_local_date},
+};
 
 pub(crate) const SYNC_FORMAT_VERSION: u32 = 1;
 const TODO_NOTE_MAX_CHARS: usize = 1000;
@@ -102,7 +105,10 @@ pub(crate) fn build_document(
         .query_map([], map_sync_todo)
         .map_err(database_error)?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(database_error)?;
+        .map_err(database_error)?
+        .into_iter()
+        .map(canonicalize_repeat_schedule)
+        .collect::<Result<Vec<_>, _>>()?;
 
     Ok(SyncDocument {
         format_version: SYNC_FORMAT_VERSION,
@@ -201,6 +207,16 @@ pub(crate) fn merge_remote_document(
     }
 
     for todo in &merged.todos {
+        let existing_due_at = transaction
+            .query_row(
+                "SELECT due_at FROM todos WHERE uuid = ?1",
+                params![todo.uuid],
+                |row| row.get::<_, Option<i64>>(0),
+            )
+            .optional()
+            .map_err(database_error)?
+            .flatten();
+        let (due_date, due_at) = schedule_for_local_storage(todo, existing_due_at)?;
         transaction
             .execute(
                 "
@@ -242,8 +258,8 @@ pub(crate) fn merge_remote_document(
                     todo.completed_at,
                     todo.deleted_at,
                     todo.archived_at,
-                    todo.due_date,
-                    todo.due_at,
+                    due_date,
+                    due_at,
                     todo.reminder_at,
                     todo.repeat_rule,
                     todo.repeat_next_due_date,
@@ -502,6 +518,32 @@ fn map_sync_todo(row: &rusqlite::Row<'_>) -> rusqlite::Result<SyncTodo> {
     })
 }
 
+fn canonicalize_repeat_schedule(mut todo: SyncTodo) -> Result<SyncTodo, String> {
+    if todo.repeat_rule.is_some() && todo.due_date.is_none() {
+        let timestamp = todo
+            .due_at
+            .ok_or_else(|| "重复任务缺少到期时间".to_string())?;
+        todo.due_date = Some(local_date_from_timestamp(timestamp)?);
+        todo.due_at = None;
+    }
+    Ok(todo)
+}
+
+fn schedule_for_local_storage(
+    todo: &SyncTodo,
+    existing_due_at: Option<i64>,
+) -> Result<(Option<String>, Option<i64>), String> {
+    if todo.repeat_rule.is_none() {
+        return Ok((todo.due_date.clone(), todo.due_at));
+    }
+
+    let date = todo
+        .due_date
+        .as_deref()
+        .ok_or_else(|| "同步重复任务缺少到期日期".to_string())?;
+    Ok((None, Some(timestamp_for_local_date(date, existing_due_at)?)))
+}
+
 fn validate_repeat_fields(
     repeat_rule: Option<&str>,
     repeat_next_due_date: Option<&str>,
@@ -635,6 +677,33 @@ mod tests {
         assert!(first.groups.is_empty());
         assert_eq!(first.device_id, second.device_id);
         assert!(Uuid::parse_str(&first.device_id).is_ok());
+    }
+
+    #[test]
+    fn stores_synced_repeating_dates_as_local_due_times() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        configure_connection(&connection).unwrap();
+        migrate(&mut connection).unwrap();
+        let repeating = repeating_todo(TODO_ID, "2026-06-10", 10, DEVICE_B);
+
+        merge_remote_document(&mut connection, &document(DEVICE_B, vec![repeating]), 20).unwrap();
+
+        let (due_date, due_at): (Option<String>, Option<i64>) = connection
+            .query_row(
+                "SELECT due_date, due_at FROM todos WHERE uuid = ?1",
+                params![TODO_ID],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(due_date, None);
+        assert_eq!(
+            due_at,
+            Some(timestamp_for_local_date("2026-06-10", None).unwrap())
+        );
+
+        let exported = build_document(&connection, 21).unwrap();
+        assert_eq!(exported.todos[0].due_date.as_deref(), Some("2026-06-10"));
+        assert_eq!(exported.todos[0].due_at, None);
     }
 
     #[test]
