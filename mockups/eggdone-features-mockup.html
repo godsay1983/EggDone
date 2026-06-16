@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EggDone 新功能 UI Mockup · 番茄钟 / 四象限 / 日历</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --cream:#FBF5E9;
+  --cream-2:#F4EAD6;
+  --card:#FFFFFF;
+  --yolk:#FFC83D;
+  --yolk-deep:#F5A623;
+  --yolk-soft:#FFE6A8;
+  --ink:#3D3528;
+  --muted:#A79E8C;
+  --line:#EFE6D3;
+  --q-red:#FF6F61;
+  --q-yolk:#FFC83D;
+  --q-blue:#5FB0C9;
+  --q-gray:#C9C2B2;
+  --overdue:#FF6F61;
+  --mint:#9BD3B0;
+  --shadow:0 18px 40px -18px rgba(120,90,30,.35);
+  --shadow-sm:0 8px 20px -10px rgba(120,90,30,.30);
+  --r-lg:26px;
+  --r-md:18px;
+  --r-sm:12px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:"Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;
+  color:var(--ink);
+  background:
+    radial-gradient(1200px 600px at 12% -8%, #FFF6DF 0%, transparent 55%),
+    radial-gradient(900px 500px at 100% 0%, #FDEFD2 0%, transparent 50%),
+    var(--cream);
+  background-attachment:fixed;
+  padding:48px 28px 90px;
+  -webkit-font-smoothing:antialiased;
+}
+.font-d{font-family:"Baloo 2","Noto Sans SC",sans-serif;}
+.wrap{max-width:1320px;margin:0 auto;}
+
+/* ---- page header ---- */
+.page-head{display:flex;align-items:center;gap:22px;margin-bottom:14px;}
+.brand-egg{width:64px;height:74px;flex:none;filter:drop-shadow(0 8px 14px rgba(245,166,35,.35));}
+.page-head h1{font-family:"Baloo 2","Noto Sans SC",sans-serif;font-size:34px;font-weight:700;letter-spacing:.5px;}
+.page-head p{color:var(--muted);font-size:15px;margin-top:4px;}
+.tagchip{display:inline-block;background:var(--yolk-soft);color:var(--yolk-deep);font-weight:700;
+  padding:3px 12px;border-radius:999px;font-size:12.5px;margin-left:8px;vertical-align:middle;}
+
+/* ---- token legend ---- */
+.legend{display:flex;flex-wrap:wrap;gap:18px;margin:22px 0 6px;padding:16px 20px;background:rgba(255,255,255,.6);
+  border:1px solid var(--line);border-radius:var(--r-md);backdrop-filter:blur(4px);}
+.legend .lg{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink);}
+.dot{width:16px;height:16px;border-radius:6px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.05);}
+
+/* ---- section ---- */
+.section{margin-top:54px;}
+.section-title{display:flex;align-items:baseline;gap:14px;margin-bottom:6px;}
+.section-title h2{font-family:"Baloo 2","Noto Sans SC",sans-serif;font-size:24px;font-weight:700;}
+.section-title .sub{color:var(--muted);font-size:14px;}
+.section-rule{height:3px;width:54px;background:var(--yolk);border-radius:3px;margin:10px 0 26px;}
+.gallery{display:flex;flex-wrap:wrap;gap:38px;align-items:flex-start;}
+.screen{display:flex;flex-direction:column;gap:12px;}
+.screen .cap{font-size:13px;color:var(--muted);text-align:center;max-width:340px;}
+.screen .cap b{color:var(--ink);}
+
+/* ============ DEVICE FRAMES ============ */
+/* desktop tray panel */
+.panel{width:332px;height:540px;background:var(--card);border-radius:var(--r-lg);box-shadow:var(--shadow);
+  border:1px solid var(--line);overflow:hidden;display:flex;flex-direction:column;position:relative;}
+.panel.dark{--card:#2B2722;--cream:#211E1A;--ink:#F3EAD9;--line:#3A352E;--muted:#9C9488;}
+/* phone */
+.phone{width:300px;height:620px;background:var(--card);border-radius:42px;box-shadow:var(--shadow);
+  border:9px solid #2C2822;overflow:hidden;position:relative;display:flex;flex-direction:column;}
+.phone .notch{position:absolute;top:10px;left:50%;transform:translateX(-50%);width:96px;height:24px;background:#2C2822;border-radius:0 0 16px 16px;z-index:20;}
+.statusbar{height:34px;display:flex;align-items:center;justify-content:space-between;padding:0 22px;font-size:12px;color:var(--muted);font-weight:600;flex:none;}
+/* tablet */
+.tablet{width:680px;height:486px;background:var(--card);border-radius:30px;box-shadow:var(--shadow);
+  border:11px solid #2C2822;overflow:hidden;position:relative;display:flex;flex-direction:column;}
+
+/* ---- shared app chrome ---- */
+.appbar{display:flex;align-items:center;gap:10px;padding:14px 16px 8px;flex:none;}
+.appbar .title{font-family:"Baloo 2","Noto Sans SC",sans-serif;font-weight:700;font-size:18px;flex:1;}
+.icon-btn{width:34px;height:34px;border-radius:11px;border:1px solid var(--line);background:var(--card);
+  display:flex;align-items:center;justify-content:center;font-size:15px;color:var(--ink);cursor:pointer;}
+.focus-btn{display:flex;align-items:center;gap:6px;background:var(--yolk);color:#3D3528;font-weight:700;
+  border:none;border-radius:13px;padding:7px 13px;font-size:13.5px;cursor:pointer;box-shadow:0 6px 14px -6px var(--yolk-deep);}
+
+/* view switcher */
+.switch{display:flex;gap:4px;margin:2px 14px 10px;background:var(--cream-2);padding:4px;border-radius:13px;flex:none;}
+.switch button{flex:1;border:none;background:transparent;font-family:inherit;font-size:12.5px;font-weight:600;color:var(--muted);
+  padding:7px 4px;border-radius:10px;cursor:pointer;white-space:nowrap;}
+.switch button.on{background:var(--card);color:var(--ink);box-shadow:var(--shadow-sm);}
+
+/* group filter */
+.groups{display:flex;gap:7px;padding:0 14px 10px;overflow:hidden;flex:none;}
+.chip{font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:var(--cream-2);color:var(--muted);white-space:nowrap;}
+.chip.on{background:var(--ink);color:#fff;}
+.chip .gd{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:middle;}
+
+/* search */
+.search{margin:0 14px 10px;display:flex;align-items:center;gap:8px;background:var(--cream-2);border-radius:12px;padding:8px 12px;color:var(--muted);font-size:13px;flex:none;}
+
+/* todo list */
+.list{flex:1;overflow:auto;padding:2px 12px 14px;}
+.todo{display:flex;align-items:flex-start;gap:11px;background:var(--card);border:1px solid var(--line);
+  border-radius:var(--r-sm);padding:11px 12px;margin-bottom:9px;box-shadow:0 4px 10px -8px rgba(120,90,30,.3);}
+.cbx{width:20px;height:20px;border-radius:7px;border:2px solid var(--yolk-deep);flex:none;margin-top:1px;position:relative;}
+.cbx.done{background:var(--yolk);border-color:var(--yolk);}
+.cbx.done::after{content:"✓";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;font-weight:800;}
+.todo .body{flex:1;min-width:0;}
+.todo .t{font-size:14px;font-weight:500;line-height:1.35;}
+.todo.done .t{color:var(--muted);text-decoration:line-through;}
+.todo .meta{display:flex;gap:8px;margin-top:5px;flex-wrap:wrap;}
+.pill{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;}
+.pill.due{background:#EAF6F0;color:#3E9C73;}
+.pill.over{background:#FFE9E6;color:var(--overdue);}
+.pill.imp{background:#FFEFD0;color:var(--yolk-deep);}
+.pri-dot{width:9px;height:9px;border-radius:50%;flex:none;margin-top:6px;}
+.section-head{display:flex;align-items:center;gap:8px;margin:10px 2px 8px;font-size:12.5px;font-weight:700;color:var(--ink);}
+.section-head .cnt{color:var(--muted);font-weight:600;}
+.section-head .qd{width:11px;height:11px;border-radius:50%;}
+.divline{flex:1;height:1px;background:var(--line);}
+
+/* quadrant mini overview (desktop) */
+.q-overview{margin:0 14px 12px;display:grid;grid-template-columns:1fr 1fr;gap:8px;flex:none;}
+.q-cell{border-radius:13px;padding:11px 12px;color:#fff;display:flex;flex-direction:column;gap:2px;box-shadow:var(--shadow-sm);}
+.q-cell .qn{font-size:12px;font-weight:700;opacity:.95;}
+.q-cell .qc{font-family:"Baloo 2",sans-serif;font-size:22px;font-weight:700;line-height:1;}
+
+/* week strip */
+.weekstrip{display:flex;gap:4px;padding:0 14px 12px;flex:none;}
+.wd{flex:1;text-align:center;font-size:11px;color:var(--muted);padding:7px 0;border-radius:10px;font-weight:600;}
+.wd .dn{display:block;font-size:14px;color:var(--ink);font-weight:700;margin-top:2px;}
+.wd.today{background:var(--yolk);}
+.wd.today .dn,.wd.today{color:#3D3528;}
+.wd .has{display:block;width:5px;height:5px;border-radius:50%;background:var(--yolk-deep);margin:3px auto 0;}
+
+/* calendar month */
+.cal-head{display:flex;align-items:center;justify-content:space-between;padding:6px 18px 8px;flex:none;}
+.cal-head .m{font-family:"Baloo 2","Noto Sans SC",sans-serif;font-weight:700;font-size:17px;}
+.cal-dow{display:grid;grid-template-columns:repeat(7,1fr);padding:0 12px;flex:none;}
+.cal-dow span{text-align:center;font-size:11px;color:var(--muted);font-weight:600;padding-bottom:4px;}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;padding:0 12px;flex:none;}
+.cal-cell{aspect-ratio:1/1;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:13px;position:relative;color:var(--ink);}
+.cal-cell.mute{color:#D6CDBA;}
+.cal-cell.today{box-shadow:inset 0 0 0 2px var(--yolk);font-weight:700;}
+.cal-cell.sel{background:var(--yolk);color:#3D3528;font-weight:700;}
+.cal-cell .dts{display:flex;gap:2px;margin-top:3px;}
+.cal-cell .dts i{width:4px;height:4px;border-radius:50%;display:block;}
+.dayhint{margin:12px 14px 8px;font-size:12.5px;font-weight:700;color:var(--ink);display:flex;justify-content:space-between;align-items:center;}
+.dayhint .add{color:var(--yolk-deep);font-weight:700;font-size:12px;}
+
+/* focus / pomodoro */
+.focus-screen{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
+  background:radial-gradient(circle at 50% 32%, #FFF7E2 0%, var(--card) 70%);padding-top:6px;}
+.focus-screen.break{background:radial-gradient(circle at 50% 32%, #EAF6EE 0%, #fff 70%);}
+.ring-wrap{position:relative;width:210px;height:210px;margin:14px 0 4px;}
+.ring-wrap svg{transform:rotate(-90deg);}
+.ring-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;}
+.ring-center .tm{font-family:"Baloo 2",sans-serif;font-size:40px;font-weight:700;letter-spacing:1px;}
+.ring-center .st{font-size:12.5px;color:var(--muted);font-weight:600;}
+.focus-task{margin:8px 0 2px;font-size:13px;color:var(--ink);background:var(--cream-2);padding:7px 14px;border-radius:999px;font-weight:600;}
+.focus-actions{display:flex;gap:12px;margin-top:18px;}
+.fa{border:none;font-family:inherit;font-weight:700;cursor:pointer;border-radius:15px;}
+.fa.pri{background:var(--yolk);color:#3D3528;padding:13px 22px;font-size:15px;box-shadow:0 8px 18px -8px var(--yolk-deep);}
+.fa.sec{background:var(--cream-2);color:var(--ink);padding:13px 18px;font-size:14px;}
+.tomato-row{display:flex;gap:7px;margin-top:16px;align-items:center;color:var(--muted);font-size:12px;font-weight:600;}
+.tomato-row .pip{width:9px;height:9px;border-radius:50%;background:var(--line);}
+.tomato-row .pip.on{background:var(--yolk-deep);}
+
+/* live view capsule + lock card */
+.island-stage{background:#111;border-radius:24px;padding:26px 22px;display:flex;flex-direction:column;gap:20px;align-items:center;width:330px;box-shadow:var(--shadow);}
+.island-stage .lbl{color:#8a8a8a;font-size:11px;font-weight:600;align-self:flex-start;}
+.capsule{background:#000;color:#fff;border-radius:999px;display:flex;align-items:center;gap:9px;padding:9px 16px;font-weight:700;font-size:14px;box-shadow:0 0 0 2px #1d1d1d;}
+.capsule .mini-egg{width:18px;height:21px;}
+.capsule .tm{font-family:"Baloo 2",sans-serif;letter-spacing:.5px;}
+.island-expand{background:#000;color:#fff;border-radius:24px;padding:16px 18px;width:280px;}
+.island-expand .top{display:flex;align-items:center;gap:10px;}
+.island-expand .top .tt{font-size:13px;color:#cfcfcf;flex:1;}
+.island-expand .big{font-family:"Baloo 2",sans-serif;font-size:34px;font-weight:700;margin:6px 0 12px;}
+.island-expand .btns{display:flex;gap:10px;}
+.island-expand .btns button{flex:1;border:none;border-radius:13px;padding:10px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer;}
+.island-expand .btns .pause{background:#2c2c2e;color:#fff;}
+.island-expand .btns .stop{background:var(--yolk);color:#111;}
+.lockcard{background:linear-gradient(160deg,#1b1b1d,#000);color:#fff;border-radius:20px;padding:16px 18px;width:280px;}
+.lockcard .lr{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.lockcard .lr .nm{font-weight:700;font-size:14px;flex:1;}
+.lockcard .lr .tm{font-family:"Baloo 2",sans-serif;font-size:20px;}
+.lockbar{height:7px;border-radius:6px;background:#333;overflow:hidden;}
+.lockbar i{display:block;height:100%;width:62%;background:var(--yolk);border-radius:6px;}
+
+/* desktop floating timer */
+.floating{width:240px;background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:13px 15px;}
+.floating .fr{display:flex;align-items:center;gap:10px;}
+.floating .fr .tm{font-family:"Baloo 2",sans-serif;font-size:24px;font-weight:700;flex:1;}
+.floating .fr .mini-egg{width:24px;height:28px;}
+.floating .ftask{font-size:12px;color:var(--muted);margin-top:3px;}
+.floating .fbtns{display:flex;gap:7px;margin-top:11px;}
+.floating .fbtns button{flex:1;border:none;background:var(--cream-2);border-radius:10px;padding:7px;font-family:inherit;font-size:12px;font-weight:700;color:var(--ink);cursor:pointer;}
+.floating .fbtns button.pri{background:var(--yolk);}
+.floating.collapsed{width:auto;display:inline-flex;align-items:center;gap:9px;padding:9px 15px;border-radius:999px;}
+.floating.collapsed .tm{font-family:"Baloo 2",sans-serif;font-size:18px;font-weight:700;}
+
+/* tablet two-pane / quadrant grid */
+.tab-body{flex:1;display:flex;overflow:hidden;}
+.tab-side{width:200px;border-right:1px solid var(--line);padding:14px;flex:none;display:flex;flex-direction:column;gap:9px;background:var(--cream);}
+.tab-main{flex:1;padding:14px;overflow:auto;}
+.q-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:12px;height:100%;}
+.q-quad{border-radius:16px;padding:12px 13px;background:var(--card);border:1px solid var(--line);display:flex;flex-direction:column;overflow:hidden;}
+.q-quad .qh{display:flex;align-items:center;gap:8px;font-weight:700;font-size:13px;margin-bottom:9px;}
+.q-quad .qh .qdot{width:11px;height:11px;border-radius:50%;}
+.q-quad .qh .cn{margin-left:auto;color:var(--muted);font-weight:600;font-size:12px;}
+.q-quad .qlist{display:flex;flex-direction:column;gap:7px;overflow:auto;}
+.mini-todo{display:flex;align-items:center;gap:8px;font-size:12.5px;background:var(--cream);border-radius:9px;padding:7px 9px;}
+.mini-todo .mc{width:15px;height:15px;border-radius:5px;border:2px solid var(--yolk-deep);flex:none;}
+
+.note{margin-top:46px;padding:20px 24px;background:rgba(255,255,255,.65);border:1px dashed var(--yolk-deep);border-radius:var(--r-md);font-size:14px;line-height:1.7;color:var(--ink);}
+.note b{color:var(--yolk-deep);}
+.foot{margin-top:30px;text-align:center;color:var(--muted);font-size:12.5px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ===== HEADER ===== -->
+  <div class="page-head">
+    <svg class="brand-egg" viewBox="0 0 100 120">
+      <path d="M50 6 C26 6 12 44 12 72 C12 99 30 114 50 114 C70 114 88 99 88 72 C88 44 74 6 50 6 Z" fill="#fff" stroke="#EFE6D3" stroke-width="2"/>
+      <circle cx="50" cy="74" r="27" fill="#FFC83D"/>
+      <path d="M40 70 q4 4 8 0" stroke="#3D3528" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+      <path d="M52 70 q4 4 8 0" stroke="#3D3528" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+      <path d="M46 82 q4 3 8 0" stroke="#3D3528" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+    </svg>
+    <div>
+      <h1 class="font-d">EggDone 新功能 UI Mockup</h1>
+      <p>番茄钟（煮蛋专注）<span class="tagchip">工具</span> · 四象限 / 日历 / 全部·今天 <span class="tagchip">同页视图</span> · 桌面端 + 鸿蒙手机/平板 + 实况窗</p>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="lg"><span class="dot" style="background:var(--yolk)"></span>蛋黄 · 主色/今天</div>
+    <div class="lg"><span class="dot" style="background:var(--q-red)"></span>立刻做（重要·紧急）</div>
+    <div class="lg"><span class="dot" style="background:var(--q-yolk)"></span>安排做（重要·不紧急）</div>
+    <div class="lg"><span class="dot" style="background:var(--q-blue)"></span>顺手做（不重要·紧急）</div>
+    <div class="lg"><span class="dot" style="background:var(--q-gray)"></span>有空再说</div>
+    <div class="lg"><span class="dot" style="background:var(--overdue)"></span>逾期</div>
+  </div>
+
+  <!-- ============ DESKTOP ============ -->
+  <div class="section">
+    <div class="section-title"><h2 class="font-d">桌面端 · 托盘面板</h2><span class="sub">单一面板内切换视图，专注独立成悬浮窗</span></div>
+    <div class="section-rule"></div>
+    <div class="gallery">
+
+      <!-- panel: 全部/今天 -->
+      <div class="screen">
+        <div class="panel">
+          <div class="appbar">
+            <span class="title">EggDone</span>
+            <div class="icon-btn">⌕</div>
+            <button class="focus-btn">🥚 专注</button>
+          </div>
+          <div class="switch">
+            <button class="on">全部</button><button>今天</button><button>四象限</button><button>日历</button>
+          </div>
+          <div class="groups">
+            <span class="chip on">全部</span>
+            <span class="chip"><i class="gd" style="background:#5FB0C9"></i>工作</span>
+            <span class="chip"><i class="gd" style="background:#9BD3B0"></i>生活</span>
+            <span class="chip"><i class="gd" style="background:#FFB1A8"></i>学习</span>
+          </div>
+          <div class="search">⌕ 搜索任务…</div>
+          <div class="list">
+            <div class="todo"><span class="pri-dot" style="background:var(--q-red)"></span><div class="cbx"></div><div class="body"><div class="t">写本周设计方案</div><div class="meta"><span class="pill over">今天到期</span><span class="pill imp">重要</span></div></div></div>
+            <div class="todo"><span class="pri-dot" style="background:transparent"></span><div class="cbx"></div><div class="body"><div class="t">买鸡蛋和牛奶</div><div class="meta"><span class="pill due">明天</span></div></div></div>
+            <div class="todo"><span class="pri-dot" style="background:var(--q-yolk)"></span><div class="cbx"></div><div class="body"><div class="t">学习鸿蒙实况窗能力</div><div class="meta"><span class="pill imp">重要</span></div></div></div>
+            <div class="todo done"><span class="pri-dot" style="background:transparent"></span><div class="cbx done"></div><div class="body"><div class="t">回复客户邮件</div></div></div>
+            <div class="todo"><span class="pri-dot" style="background:transparent"></span><div class="cbx"></div><div class="body"><div class="t">预约下周体检</div></div></div>
+          </div>
+        </div>
+        <div class="cap"><b>全部 / 今天</b>：视图切换器 + 分组筛选 + 右上「专注」入口</div>
+      </div>
+
+      <!-- panel: 四象限 -->
+      <div class="screen">
+        <div class="panel">
+          <div class="appbar">
+            <span class="title">EggDone</span>
+            <div class="icon-btn">⌕</div>
+            <button class="focus-btn">🥚 专注</button>
+          </div>
+          <div class="switch">
+            <button>全部</button><button>今天</button><button class="on">四象限</button><button>日历</button>
+          </div>
+          <div class="q-overview">
+            <div class="q-cell" style="background:var(--q-red)"><span class="qn">立刻做</span><span class="qc">2</span></div>
+            <div class="q-cell" style="background:var(--q-yolk);color:#3D3528"><span class="qn">安排做</span><span class="qc">3</span></div>
+            <div class="q-cell" style="background:var(--q-blue)"><span class="qn">顺手做</span><span class="qc">1</span></div>
+            <div class="q-cell" style="background:var(--q-gray);color:#3D3528"><span class="qn">有空再说</span><span class="qc">4</span></div>
+          </div>
+          <div class="list">
+            <div class="section-head"><span class="qd" style="background:var(--q-red)"></span>立刻做 <span class="cnt">· 重要且紧急</span><span class="divline"></span></div>
+            <div class="todo"><div class="cbx"></div><div class="body"><div class="t">写本周设计方案</div><div class="meta"><span class="pill over">今天</span></div></div></div>
+            <div class="todo"><div class="cbx"></div><div class="body"><div class="t">回客户消息</div><div class="meta"><span class="pill over">逾期1天</span></div></div></div>
+            <div class="section-head"><span class="qd" style="background:var(--q-yolk)"></span>安排做 <span class="cnt">· 重要不紧急</span><span class="divline"></span></div>
+            <div class="todo"><div class="cbx"></div><div class="body"><div class="t">学习鸿蒙实况窗</div></div></div>
+          </div>
+        </div>
+        <div class="cap"><b>四象限</b>：顶部 2×2 概览（点格子筛选）+ 下方按象限分区</div>
+      </div>
+
+      <!-- panel: 日历/日程 -->
+      <div class="screen">
+        <div class="panel">
+          <div class="appbar">
+            <span class="title">EggDone</span>
+            <div class="icon-btn">📅</div>
+            <button class="focus-btn">🥚 专注</button>
+          </div>
+          <div class="switch">
+            <button>全部</button><button>今天</button><button>四象限</button><button class="on">日历</button>
+          </div>
+          <div class="weekstrip">
+            <div class="wd">一<span class="dn">14</span></div>
+            <div class="wd">二<span class="dn">15</span><span class="has"></span></div>
+            <div class="wd today">三<span class="dn">16</span></div>
+            <div class="wd">四<span class="dn">17</span></div>
+            <div class="wd">五<span class="dn">18</span><span class="has"></span></div>
+            <div class="wd">六<span class="dn">19</span></div>
+            <div class="wd">日<span class="dn">20</span></div>
+          </div>
+          <div class="list">
+            <div class="section-head"><span class="qd" style="background:var(--overdue)"></span>逾期 <span class="cnt">2</span><span class="divline"></span></div>
+            <div class="todo"><div class="cbx"></div><div class="body"><div class="t">回客户消息</div><div class="meta"><span class="pill over">昨天</span></div></div></div>
+            <div class="section-head"><span class="qd" style="background:var(--yolk)"></span>今天 6/16 周二 <span class="cnt">3</span><span class="divline"></span></div>
+            <div class="todo"><div class="cbx"></div><div class="body"><div class="t">写本周设计方案</div></div></div>
+            <div class="todo"><div class="cbx"></div><div class="body"><div class="t">买鸡蛋和牛奶</div></div></div>
+            <div class="section-head"><span class="qd" style="background:#C9C2B2"></span>明天 6/17 <span class="cnt">1</span><span class="divline"></span></div>
+            <div class="todo"><div class="cbx"></div><div class="body"><div class="t">部门周会</div><div class="meta"><span class="pill due">10:00</span></div></div></div>
+          </div>
+        </div>
+        <div class="cap"><b>日历 / 日程</b>：可收起的周条 + 按日期分桶列表（点 📅 弹迷你月历跳转）</div>
+      </div>
+
+      <!-- floating timer -->
+      <div class="screen">
+        <div style="height:60px"></div>
+        <div class="floating">
+          <div class="fr">
+            <svg class="mini-egg" viewBox="0 0 100 120"><path d="M50 6C26 6 12 44 12 72c0 27 18 42 38 42s38-15 38-42C88 44 74 6 50 6Z" fill="#FFF6DF"/><circle cx="50" cy="74" r="26" fill="#FFC83D"/><path d="M41 72q4 3 8 0M51 72q4 3 8 0" stroke="#3D3528" stroke-width="3" fill="none" stroke-linecap="round"/></svg>
+            <span class="tm">24:31</span>
+          </div>
+          <div class="ftask">专注 · 写本周设计方案</div>
+          <div class="fbtns"><button class="pri">⏸ 暂停</button><button>+5</button><button>⏭</button><button>⏹</button></div>
+        </div>
+        <div style="height:18px"></div>
+        <div class="floating collapsed">
+          <svg class="mini-egg" viewBox="0 0 100 120" style="width:20px;height:24px"><path d="M50 6C26 6 12 44 12 72c0 27 18 42 38 42s38-15 38-42C88 44 74 6 50 6Z" fill="#FFF6DF"/><circle cx="50" cy="74" r="26" fill="#FFC83D"/></svg>
+          <span class="tm">24:31</span><span style="color:var(--muted);font-size:13px;">⏸</span>
+        </div>
+        <div class="cap" style="margin-top:14px"><b>桌面悬浮计时窗</b>：与主面板分离、置顶、失焦不隐藏；可收起成胶囊拖到角落</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ HARMONY PHONE ============ -->
+  <div class="section">
+    <div class="section-title"><h2 class="font-d">鸿蒙手机端</h2><span class="sub">待办主页含视图切换，专注全屏 + 上灵动岛</span></div>
+    <div class="section-rule"></div>
+    <div class="gallery">
+
+      <!-- phone: 待办主页 今天 -->
+      <div class="screen">
+        <div class="phone">
+          <div class="notch"></div>
+          <div class="statusbar"><span>9:41</span><span>📶 🔋</span></div>
+          <div class="appbar">
+            <span class="title">蛋定 Todo</span>
+            <div class="icon-btn">⌕</div>
+            <button class="focus-btn">🥚 专注</button>
+          </div>
+          <div class="switch">
+            <button>全部</button><button class="on">今天</button><button>四象限</button><button>日历</button>
+          </div>
+          <div class="groups">
+            <span class="chip on">全部</span>
+            <span class="chip"><i class="gd" style="background:#5FB0C9"></i>工作</span>
+            <span class="chip"><i class="gd" style="background:#9BD3B0"></i>生活</span>
+          </div>
+          <div class="list">
+            <div class="section-head"><span class="qd" style="background:var(--overdue)"></span>逾期 <span class="cnt">1</span><span class="divline"></span></div>
+            <div class="todo"><div class="cbx"></div><div class="body"><div class="t">回客户消息</div><div class="meta"><span class="pill over">昨天</span></div></div></div>
+            <div class="section-head"><span class="qd" style="background:var(--yolk)"></span>今天 <span class="cnt">3</span><span class="divline"></span></div>
+            <div class="todo"><span class="pri-dot" style="background:var(--q-red)"></span><div class="cbx"></div><div class="body"><div class="t">写本周设计方案</div><div class="meta"><span class="pill imp">重要</span></div></div></div>
+            <div class="todo"><span class="pri-dot" style="background:transparent"></span><div class="cbx"></div><div class="body"><div class="t">买鸡蛋和牛奶</div></div></div>
+            <div class="todo done"><span class="pri-dot" style="background:transparent"></span><div class="cbx done"></div><div class="body"><div class="t">晨跑 3 公里</div></div></div>
+          </div>
+        </div>
+        <div class="cap"><b>待办主页</b>：顶部 segmented 切视图，右上「专注」入口（方案 A）</div>
+      </div>
+
+      <!-- phone: 四象限 -->
+      <div class="screen">
+        <div class="phone">
+          <div class="notch"></div>
+          <div class="statusbar"><span>9:41</span><span>📶 🔋</span></div>
+          <div class="appbar"><span class="title">蛋定 Todo</span><div class="icon-btn">⌕</div><button class="focus-btn">🥚 专注</button></div>
+          <div class="switch"><button>全部</button><button>今天</button><button class="on">四象限</button><button>日历</button></div>
+          <div class="list">
+            <div class="section-head"><span class="qd" style="background:var(--q-red)"></span>立刻做 <span class="cnt">· 重要 · 紧急 · 2</span><span class="divline"></span></div>
+            <div class="todo"><div class="cbx"></div><div class="body"><div class="t">写本周设计方案</div><div class="meta"><span class="pill over">今天</span></div></div></div>
+            <div class="todo"><div class="cbx"></div><div class="body"><div class="t">回客户消息</div><div class="meta"><span class="pill over">逾期</span></div></div></div>
+            <div class="section-head"><span class="qd" style="background:var(--q-yolk)"></span>安排做 <span class="cnt">· 重要 · 3</span><span class="divline"></span></div>
+            <div class="todo"><div class="cbx"></div><div class="body"><div class="t">学习鸿蒙实况窗</div></div></div>
+            <div class="todo"><div class="cbx"></div><div class="body"><div class="t">读《深度工作》</div></div></div>
+            <div class="section-head"><span class="qd" style="background:var(--q-blue)"></span>顺手做 <span class="cnt">1</span><span class="divline"></span></div>
+            <div class="section-head"><span class="qd" style="background:var(--q-gray)"></span>有空再说 <span class="cnt">4</span><span class="divline"></span></div>
+          </div>
+        </div>
+        <div class="cap"><b>四象限（手机）</b>：竖排可折叠分区；长按任务拖动改重要/紧急</div>
+      </div>
+
+      <!-- phone: 月视图 -->
+      <div class="screen">
+        <div class="phone">
+          <div class="notch"></div>
+          <div class="statusbar"><span>9:41</span><span>📶 🔋</span></div>
+          <div class="cal-head"><span style="color:var(--muted)">‹</span><span class="m">2026 年 6 月</span><span style="color:var(--yolk-deep);font-weight:700;font-size:13px">今天 ›</span></div>
+          <div class="cal-dow"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+          <div class="cal-grid">
+            <div class="cal-cell">1</div><div class="cal-cell">2</div><div class="cal-cell">3</div><div class="cal-cell">4</div>
+            <div class="cal-cell">5<span class="dts"><i style="background:#5FB0C9"></i></span></div><div class="cal-cell">6</div><div class="cal-cell">7</div>
+            <div class="cal-cell">8</div><div class="cal-cell">9</div><div class="cal-cell">10</div>
+            <div class="cal-cell">11<span class="dts"><i style="background:#9BD3B0"></i><i style="background:#FFC83D"></i></span></div>
+            <div class="cal-cell">12</div><div class="cal-cell">13</div><div class="cal-cell">14</div>
+            <div class="cal-cell">15</div>
+            <div class="cal-cell sel">16<span class="dts"><i style="background:#fff"></i><i style="background:#fff"></i></span></div>
+            <div class="cal-cell">17</div>
+            <div class="cal-cell">18<span class="dts"><i style="background:#FF6F61"></i></span></div>
+            <div class="cal-cell">19</div><div class="cal-cell">20</div><div class="cal-cell">21</div>
+            <div class="cal-cell">22</div><div class="cal-cell">23</div>
+            <div class="cal-cell">24<span class="dts"><i style="background:#FFC83D"></i></span></div>
+            <div class="cal-cell">25</div><div class="cal-cell">26</div><div class="cal-cell">27</div><div class="cal-cell">28</div>
+            <div class="cal-cell">29</div><div class="cal-cell">30</div>
+          </div>
+          <div class="dayhint">6 月 16 日 周二 · 3 项<span class="add">+ 新增</span></div>
+          <div class="list" style="padding-top:0">
+            <div class="todo"><span class="pri-dot" style="background:var(--q-red)"></span><div class="cbx"></div><div class="body"><div class="t">写本周设计方案</div></div></div>
+            <div class="todo"><span class="pri-dot" style="background:transparent"></span><div class="cbx"></div><div class="body"><div class="t">买鸡蛋和牛奶</div></div></div>
+          </div>
+        </div>
+        <div class="cap"><b>月视图（手机）</b>：日格小圆点=当天任务，今天蛋黄环、选中实心；点某天筛下方列表</div>
+      </div>
+
+      <!-- phone: 专注页 -->
+      <div class="screen">
+        <div class="phone">
+          <div class="notch"></div>
+          <div class="statusbar"><span>9:41</span><span>📶 🔋</span></div>
+          <div class="appbar"><div class="icon-btn">‹</div><span class="title" style="text-align:center">专注</span><div class="icon-btn">⚙</div></div>
+          <div class="focus-screen">
+            <div class="ring-wrap">
+              <svg width="210" height="210">
+                <circle cx="105" cy="105" r="92" fill="none" stroke="#F2E8D2" stroke-width="14"/>
+                <circle cx="105" cy="105" r="92" fill="none" stroke="#FFC83D" stroke-width="14" stroke-linecap="round" stroke-dasharray="578" stroke-dashoffset="174"/>
+              </svg>
+              <div class="ring-center">
+                <svg width="58" height="66" viewBox="0 0 100 120" style="margin-bottom:2px"><path d="M50 6C26 6 12 44 12 72c0 27 18 42 38 42s38-15 38-42C88 44 74 6 50 6Z" fill="#FFF6DF"/><circle cx="50" cy="76" r="24" fill="#FFC83D"/><path d="M40 73l6 4M60 73l-6 4" stroke="#3D3528" stroke-width="3" fill="none" stroke-linecap="round"/><path d="M45 86q5 3 10 0" stroke="#3D3528" stroke-width="2.6" fill="none" stroke-linecap="round"/></svg>
+                <div class="tm">24:31</div>
+                <div class="st">专注中 · 拖拖蛋陪你</div>
+              </div>
+            </div>
+            <div class="focus-task">🎯 写本周设计方案</div>
+            <div class="focus-actions">
+              <button class="fa sec">+5 分钟</button>
+              <button class="fa pri">⏸ 暂停</button>
+              <button class="fa sec">结束</button>
+            </div>
+            <div class="tomato-row">专注 25 · 休息 5　<span class="pip on"></span><span class="pip on"></span><span class="pip"></span><span class="pip"></span></div>
+          </div>
+        </div>
+        <div class="cap"><b>专注页（煮蛋计时）</b>：环形倒计时 + 拖拖蛋「认真脸」，操作只留暂停/+5/结束</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ LIVE VIEW / 灵动岛 ============ -->
+  <div class="section">
+    <div class="section-title"><h2 class="font-d">鸿蒙实况窗 · 灵动岛</h2><span class="sub">关闭程序后倒计时自动上岛，到点提醒</span></div>
+    <div class="section-rule"></div>
+    <div class="gallery">
+
+      <div class="screen">
+        <div class="island-stage">
+          <span class="lbl">灵动胶囊（最小态）</span>
+          <div class="capsule">
+            <svg class="mini-egg" viewBox="0 0 100 120"><path d="M50 6C26 6 12 44 12 72c0 27 18 42 38 42s38-15 38-42C88 44 74 6 50 6Z" fill="#FFF6DF"/><circle cx="50" cy="74" r="26" fill="#FFC83D"/></svg>
+            <span class="tm">24:31</span>
+          </div>
+          <span class="lbl">展开态（点胶囊弹出，岛上直接操作）</span>
+          <div class="island-expand">
+            <div class="top">
+              <svg class="mini-egg" viewBox="0 0 100 120" style="width:20px;height:24px"><path d="M50 6C26 6 12 44 12 72c0 27 18 42 38 42s38-15 38-42C88 44 74 6 50 6Z" fill="#FFF6DF"/><circle cx="50" cy="74" r="26" fill="#FFC83D"/></svg>
+              <span class="tt">专注中 · 写本周设计方案</span>
+            </div>
+            <div class="big">24:31</div>
+            <div class="btns"><button class="pause">暂停</button><button class="stop">结束</button></div>
+          </div>
+        </div>
+        <div class="cap"><b>灵动岛</b>：进程被关后由实况窗 + 长时任务续算，熄屏也走时</div>
+      </div>
+
+      <div class="screen">
+        <div class="island-stage" style="background:#0c0c0c">
+          <span class="lbl">锁屏卡片</span>
+          <div class="lockcard">
+            <div class="lr">
+              <svg class="mini-egg" viewBox="0 0 100 120" style="width:26px;height:30px"><path d="M50 6C26 6 12 44 12 72c0 27 18 42 38 42s38-15 38-42C88 44 74 6 50 6Z" fill="#FFF6DF"/><circle cx="50" cy="74" r="26" fill="#FFC83D"/></svg>
+              <span class="nm">EggDone 专注</span><span class="tm">24:31</span>
+            </div>
+            <div class="lockbar"><i></i></div>
+          </div>
+          <span class="lbl">到点提醒（系统通知）</span>
+          <div class="lockcard" style="background:linear-gradient(160deg,#241d10,#000)">
+            <div class="lr">
+              <svg class="mini-egg" viewBox="0 0 100 120" style="width:26px;height:30px"><path d="M50 6C26 6 12 44 12 72c0 27 18 42 38 42s38-15 38-42C88 44 74 6 50 6Z" fill="#fff"/><circle cx="50" cy="74" r="26" fill="#FFC83D"/><path d="M38 70q6 5 12 0M50 70q6 5 12 0" stroke="#3D3528" stroke-width="3" fill="none" stroke-linecap="round"/></svg>
+              <span class="nm">🔔 蛋煮好啦！<br><span style="font-weight:500;color:#bbb;font-size:12px">专注完成，休息 5 分钟</span></span>
+            </div>
+          </div>
+        </div>
+        <div class="cap"><b>锁屏 + 提醒</b>：复用 Notification Kit 与已做的响铃时长设置</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ HARMONY TABLET ============ -->
+  <div class="section">
+    <div class="section-title"><h2 class="font-d">鸿蒙平板端</h2><span class="sub">利用横向空间做真 2×2 网格与日历双栏</span></div>
+    <div class="section-rule"></div>
+    <div class="gallery">
+
+      <!-- tablet: 四象限 2x2 -->
+      <div class="screen">
+        <div class="tablet">
+          <div class="appbar"><span class="title">蛋定 Todo</span><div class="switch" style="margin:0;flex:none;width:280px"><button>全部</button><button>今天</button><button class="on">四象限</button><button>日历</button></div><div style="flex:1"></div><button class="focus-btn">🥚 专注</button></div>
+          <div style="flex:1;padding:14px;overflow:hidden">
+            <div class="q-grid">
+              <div class="q-quad"><div class="qh"><span class="qdot" style="background:var(--q-red)"></span>立刻做<span class="cn">2</span></div><div class="qlist"><div class="mini-todo"><span class="mc"></span>写本周设计方案</div><div class="mini-todo"><span class="mc"></span>回客户消息</div></div></div>
+              <div class="q-quad"><div class="qh"><span class="qdot" style="background:var(--q-yolk)"></span>安排做<span class="cn">3</span></div><div class="qlist"><div class="mini-todo"><span class="mc"></span>学习鸿蒙实况窗</div><div class="mini-todo"><span class="mc"></span>读《深度工作》</div><div class="mini-todo"><span class="mc"></span>体检预约</div></div></div>
+              <div class="q-quad"><div class="qh"><span class="qdot" style="background:var(--q-blue)"></span>顺手做<span class="cn">1</span></div><div class="qlist"><div class="mini-todo"><span class="mc"></span>交话费</div></div></div>
+              <div class="q-quad"><div class="qh"><span class="qdot" style="background:var(--q-gray)"></span>有空再说<span class="cn">4</span></div><div class="qlist"><div class="mini-todo"><span class="mc"></span>整理相册</div><div class="mini-todo"><span class="mc"></span>看那部电影</div></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="cap"><b>四象限（平板）</b>：真 2×2 网格，每格独立滚动；可跨格拖动改重要/紧急</div>
+      </div>
+
+      <!-- tablet: 日历双栏 -->
+      <div class="screen">
+        <div class="tablet">
+          <div class="appbar"><span class="title">蛋定 Todo</span><div class="switch" style="margin:0;flex:none;width:280px"><button>全部</button><button>今天</button><button>四象限</button><button class="on">日历</button></div><div style="flex:1"></div><button class="focus-btn">🥚 专注</button></div>
+          <div class="tab-body">
+            <div style="flex:1.5;padding:14px;overflow:auto;border-right:1px solid var(--line)">
+              <div class="cal-head" style="padding:0 4px 10px"><span style="color:var(--muted)">‹</span><span class="m">2026 年 6 月</span><span style="color:var(--yolk-deep);font-weight:700;font-size:13px">今天 ›</span></div>
+              <div class="cal-dow"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+              <div class="cal-grid">
+                <div class="cal-cell">1</div><div class="cal-cell">2</div><div class="cal-cell">3</div><div class="cal-cell">4</div><div class="cal-cell">5<span class="dts"><i style="background:#5FB0C9"></i></span></div><div class="cal-cell">6</div><div class="cal-cell">7</div>
+                <div class="cal-cell">8</div><div class="cal-cell">9</div><div class="cal-cell">10</div><div class="cal-cell">11<span class="dts"><i style="background:#9BD3B0"></i><i style="background:#FFC83D"></i></span></div><div class="cal-cell">12</div><div class="cal-cell">13</div><div class="cal-cell">14</div>
+                <div class="cal-cell">15</div><div class="cal-cell sel">16</div><div class="cal-cell">17</div><div class="cal-cell">18<span class="dts"><i style="background:#FF6F61"></i></span></div><div class="cal-cell">19</div><div class="cal-cell">20</div><div class="cal-cell">21</div>
+                <div class="cal-cell">22</div><div class="cal-cell">23</div><div class="cal-cell">24<span class="dts"><i style="background:#FFC83D"></i></span></div><div class="cal-cell">25</div><div class="cal-cell">26</div><div class="cal-cell">27</div><div class="cal-cell">28</div>
+                <div class="cal-cell">29</div><div class="cal-cell">30</div>
+              </div>
+            </div>
+            <div style="flex:1;padding:14px;overflow:auto">
+              <div class="dayhint" style="margin:0 0 10px">6 月 16 日 周二 · 3 项<span class="add">+ 新增</span></div>
+              <div class="todo"><span class="pri-dot" style="background:var(--q-red)"></span><div class="cbx"></div><div class="body"><div class="t">写本周设计方案</div><div class="meta"><span class="pill imp">重要</span></div></div></div>
+              <div class="todo"><span class="pri-dot" style="background:transparent"></span><div class="cbx"></div><div class="body"><div class="t">买鸡蛋和牛奶</div></div></div>
+              <div class="todo done"><span class="pri-dot" style="background:transparent"></span><div class="cbx done"></div><div class="body"><div class="t">晨跑 3 公里</div></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="cap"><b>日历（平板）</b>：左月历、右选中日列表；选中日「+新增」自动带到期日</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="note">
+    <b>关系回顾：</b> 全部 / 今天 / 四象限 / 日历 是同一批待办的不同「视图」，挤在一个主页用切换器切换；番茄钟是作用在待办上的「工具」，独立成全屏页 + 桌面悬浮窗 / 鸿蒙灵动岛。<br>
+    <b>数据：</b> 仅新增 <code>priority</code> 一个字段（四象限用），日历复用 <code>due_date</code>，番茄钟 v1 不落库。配色 / 字体均复用现有蛋黄 · 米白主题 token，「拖拖蛋」为原创形象。
+  </div>
+
+  <div class="foot">EggDone Mockup · 仅为 UI 设计预览，非生产代码 · 蛋黄 #FFC83D / 米白 #FBF5E9 / 圆角卡片</div>
+
+</div>
+</body>
+</html>
