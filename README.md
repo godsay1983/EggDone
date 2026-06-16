@@ -6,6 +6,14 @@ EggDone 是一个轻量级、跨平台、托盘常驻的 Todo 桌面应用。应
 
 项目中的「拖拖蛋」是原创吉祥物：慵懒蛋黄角色配合任务勾选牌。
 
+## 鸿蒙移动版
+
+EggDone 同时提供**纯血鸿蒙（HarmonyOS NEXT）**移动版本，支持手机和平板，数据可与桌面端通过 S3 / MinIO 同步互通。
+
+![HarmonyOS Screenshot](./docs/screenshot-hm.jpg)
+
+- **华为应用市场**：[点击下载](https://appgallery.huawei.com/app/detail?id=com.eggdone.todo&channelId=SHARE&source=appshare)
+
 ## MVP 功能
 
 - 托盘常驻，启动时隐藏面板
