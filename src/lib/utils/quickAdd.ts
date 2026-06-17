@@ -10,6 +10,7 @@ export interface QuickAddResult {
   schedule: QuickAddSchedule | null;
   label: string;
   groupName: string | null;
+  priority: 0 | 1;
 }
 
 interface MatchedToken {
@@ -47,12 +48,14 @@ export function parseQuickAdd(
 
   const dateMatch = findDateToken(originalTitle, now);
   const groupMatch = findGroupToken(originalTitle, groupNames);
-  if (!dateMatch && !groupMatch) {
+  const priorityMatch = findPriorityToken(originalTitle);
+  if (!dateMatch && !groupMatch && !priorityMatch) {
     return emptyResult(originalTitle);
   }
 
   const timeMatch = findTimeToken(originalTitle);
   const tokens = [
+    ...(priorityMatch ? [priorityMatch] : []),
     ...(dateMatch ? [dateMatch.token] : []),
     ...(timeMatch ? [timeMatch.token] : []),
     ...(groupMatch ? [groupMatch.token] : []),
@@ -68,6 +71,7 @@ export function parseQuickAdd(
       schedule: null,
       label: "",
       groupName: groupMatch?.name ?? null,
+      priority: priorityMatch ? 1 : 0,
     };
   }
 
@@ -88,6 +92,7 @@ export function parseQuickAdd(
       },
       label: `${dateMatch.label} ${timeMatch.text}`,
       groupName: groupMatch?.name ?? null,
+      priority: priorityMatch ? 1 : 0,
     };
   }
 
@@ -101,6 +106,7 @@ export function parseQuickAdd(
     },
     label: dateMatch.label,
     groupName: groupMatch?.name ?? null,
+    priority: priorityMatch ? 1 : 0,
   };
 }
 
@@ -110,7 +116,14 @@ function emptyResult(title: string): QuickAddResult {
     schedule: null,
     label: "",
     groupName: null,
+    priority: 0,
   };
+}
+
+function findPriorityToken(input: string): MatchedToken | null {
+  const match = /^[!！](?=$|[\s，,])/.exec(input);
+  if (!match || match.index === undefined) return null;
+  return tokenFromMatch(match);
 }
 
 function findDateToken(input: string, now: Date) {

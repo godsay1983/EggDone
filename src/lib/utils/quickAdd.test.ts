@@ -16,6 +16,7 @@ describe("parseQuickAdd", () => {
       },
       label: "今天",
       groupName: null,
+      priority: 0,
     });
 
     expect(parseQuickAdd("买鸡蛋 明天", now).schedule?.due_date).toBe(
@@ -54,6 +55,7 @@ describe("parseQuickAdd", () => {
       schedule: null,
       label: "",
       groupName: null,
+      priority: 0,
     });
   });
 
@@ -63,6 +65,7 @@ describe("parseQuickAdd", () => {
       schedule: null,
       label: "",
       groupName: null,
+      priority: 0,
     });
   });
 
@@ -72,6 +75,7 @@ describe("parseQuickAdd", () => {
       schedule: null,
       label: "",
       groupName: "工作",
+      priority: 0,
     });
 
     expect(parseQuickAdd("#工作 明天 10:00 写方案", now, ["工作"])).toMatchObject({
@@ -85,6 +89,24 @@ describe("parseQuickAdd", () => {
       schedule: null,
       label: "",
       groupName: null,
+      priority: 0,
+    });
+  });
+
+  it("extracts leading priority marker", () => {
+    expect(parseQuickAdd("! 明天 写方案", now)).toMatchObject({
+      title: "写方案",
+      schedule: { due_date: "2026-06-11" },
+      label: "明天",
+      priority: 1,
+    });
+
+    expect(parseQuickAdd("！ #工作 写方案", now, ["工作"])).toEqual({
+      title: "写方案",
+      schedule: null,
+      label: "",
+      groupName: "工作",
+      priority: 1,
     });
   });
 });

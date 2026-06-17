@@ -193,7 +193,9 @@
   $: quickAddPreview =
     title.trim().length > 0 &&
     quickAddParsingDisabledFor !== title &&
-    (quickAddResult.schedule !== null || quickAddResult.groupName !== null)
+    (quickAddResult.schedule !== null ||
+      quickAddResult.groupName !== null ||
+      quickAddResult.priority === 1)
       ? quickAddResult
       : null;
 
@@ -563,6 +565,7 @@
       schedule: null,
       label: "",
       groupName: null,
+      priority: 0,
     };
     const groupUuid = groupUuidByName(parsed.groupName) ?? newTodoGroupUuid();
 
@@ -571,6 +574,9 @@
       const created = await todos.add(parsed.title, groupUuid);
       if (parsed.schedule) {
         await todos.setSchedule(created.id, parsed.schedule);
+      }
+      if (parsed.priority === 1) {
+        await todos.setPriority(created, 1);
       }
       title = "";
       quickAddParsingDisabledFor = "";
@@ -1324,6 +1330,7 @@
         将创建“{quickAddPreview.title}”
         {#if quickAddPreview.label}，到期 {quickAddPreview.label}{/if}
         {#if quickAddPreview.groupName}，分组 {quickAddPreview.groupName}{/if}
+        {#if quickAddPreview.priority === 1}，标记重要{/if}
       </span>
       <button type="button" onclick={disableQuickAddParsing}>不解析</button>
     </div>
