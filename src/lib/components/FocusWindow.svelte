@@ -33,22 +33,17 @@
       : "已经暂停，继续时会从当前剩余时间开始。";
 
   onMount(() => {
-    const savedTheme = localStorage.getItem("eggdone-theme");
-    const theme =
-      savedTheme === "light" || savedTheme === "dark"
-        ? savedTheme
-        : window.matchMedia("(prefers-color-scheme: dark)").matches
-          ? "dark"
-          : "light";
-    document.documentElement.dataset.theme = theme;
+    refreshThemeFromStorage();
     refreshFocusDurations();
     refreshFocusTarget();
     const focusInterval = window.setInterval(updateFocusTimer, 1000);
     window.addEventListener(FOCUS_SETTINGS_CHANGED_EVENT, refreshFocusDurations);
     window.addEventListener(FOCUS_TARGET_CHANGED_EVENT, refreshFocusTarget);
     window.addEventListener("storage", refreshFocusFromStorage);
+    window.addEventListener("focus", refreshThemeFromStorage);
     window.addEventListener("focus", refreshFocusDurations);
     window.addEventListener("focus", refreshFocusTarget);
+    document.addEventListener("visibilitychange", refreshThemeFromStorage);
     document.addEventListener("visibilitychange", refreshFocusDurations);
     document.addEventListener("visibilitychange", refreshFocusTarget);
     return () => {
@@ -59,12 +54,25 @@
       );
       window.removeEventListener(FOCUS_TARGET_CHANGED_EVENT, refreshFocusTarget);
       window.removeEventListener("storage", refreshFocusFromStorage);
+      window.removeEventListener("focus", refreshThemeFromStorage);
       window.removeEventListener("focus", refreshFocusDurations);
       window.removeEventListener("focus", refreshFocusTarget);
+      document.removeEventListener("visibilitychange", refreshThemeFromStorage);
       document.removeEventListener("visibilitychange", refreshFocusDurations);
       document.removeEventListener("visibilitychange", refreshFocusTarget);
     };
   });
+
+  function refreshThemeFromStorage() {
+    const savedTheme = localStorage.getItem("eggdone-theme");
+    const theme =
+      savedTheme === "light" || savedTheme === "dark"
+        ? savedTheme
+        : window.matchMedia("(prefers-color-scheme: dark)").matches
+          ? "dark"
+          : "light";
+    document.documentElement.dataset.theme = theme;
+  }
 
   function refreshFocusDurations() {
     const previous = focusDurations;
@@ -84,6 +92,9 @@
   }
 
   function refreshFocusFromStorage(event: StorageEvent) {
+    if (!event.key || event.key === "eggdone-theme") {
+      refreshThemeFromStorage();
+    }
     if (!event.key || event.key.startsWith("eggdone-focus-")) {
       refreshFocusDurations();
       refreshFocusTarget();
@@ -189,7 +200,7 @@
   }
 </script>
 
-<main class="focus-window-shell">
+<main class:resting={focusPhase === "break"} class="focus-window-shell">
   <header class="focus-window-header" role="presentation" onmousedown={startWindowDrag}>
     <div>
       <p>番茄钟</p>

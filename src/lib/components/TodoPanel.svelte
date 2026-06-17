@@ -2436,7 +2436,13 @@
 {#if showFocus}
   <div class="focus-backdrop">
     <button class="focus-dismiss" type="button" aria-label="关闭专注面板" onclick={() => (showFocus = false)}></button>
-    <div class="focus-card" role="dialog" aria-modal="true" aria-labelledby="focus-title">
+    <div
+      class:resting={focusPhase === "break"}
+      class="focus-card"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="focus-title"
+    >
       <header>
         <div>
           <p>番茄钟</p>

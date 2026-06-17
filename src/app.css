@@ -2061,6 +2061,11 @@ footer button {
   box-shadow: 0 20px 52px rgb(79 60 27 / 23%);
 }
 
+.focus-card.resting {
+  border-color: #eadfc9;
+  background: linear-gradient(180deg, #fffdf8 0%, #fff4e3 100%);
+}
+
 .focus-card header {
   display: flex;
   align-items: flex-start;
@@ -2150,6 +2155,11 @@ footer button {
   line-height: 1.2;
 }
 
+.focus-window-shell.resting .focus-window-target {
+  color: #7a6542;
+  background: rgb(234 216 184 / 34%);
+}
+
 .focus-target-row .focus-target,
 .focus-window-target-row .focus-window-target {
   margin-top: 0;
@@ -2208,6 +2218,11 @@ footer button {
   background: #f6c94c;
 }
 
+.focus-card.resting .focus-actions button.primary {
+  color: #6b5a3a;
+  background: #ead8b8;
+}
+
 .focus-window-shell {
   display: flex;
   width: 100vw;
@@ -2217,6 +2232,12 @@ footer button {
   background:
     radial-gradient(circle at 82% 10%, rgb(246 201 76 / 28%), transparent 34%),
     #fffaf0;
+}
+
+.focus-window-shell.resting {
+  background:
+    radial-gradient(circle at 82% 10%, rgb(234 216 184 / 36%), transparent 34%),
+    #fff8ec;
 }
 
 .focus-window-header {
@@ -3805,6 +3826,11 @@ html[data-theme="dark"] .focus-card {
   box-shadow: 0 20px 50px rgb(0 0 0 / 45%);
 }
 
+html[data-theme="dark"] .focus-card.resting {
+  border-color: #5a4e3d;
+  background: linear-gradient(180deg, #292621 0%, #302a22 100%);
+}
+
 html[data-theme="dark"] .focus-card h2,
 html[data-theme="dark"] .focus-time {
   color: #f1e9dc;
@@ -3851,10 +3877,26 @@ html[data-theme="dark"] .focus-actions button.primary {
   background: #d8ae3c;
 }
 
+html[data-theme="dark"] .focus-card.resting .focus-actions button.primary {
+  color: #2d271c;
+  background: #cbb487;
+}
+
 html[data-theme="dark"] .focus-window-shell {
   background:
     radial-gradient(circle at 82% 10%, rgb(216 174 60 / 18%), transparent 34%),
     #1d1b18;
+}
+
+html[data-theme="dark"] .focus-window-shell.resting {
+  background:
+    radial-gradient(circle at 82% 10%, rgb(203 180 135 / 18%), transparent 34%),
+    #211f1b;
+}
+
+html[data-theme="dark"] .focus-window-shell.resting .focus-window-target {
+  color: #e5c990;
+  background: rgb(203 180 135 / 16%);
 }
 
 html[data-theme="dark"] .focus-window-header h1,
@@ -3886,6 +3928,11 @@ html[data-theme="dark"] .focus-window-actions button {
 html[data-theme="dark"] .focus-window-actions button.primary {
   color: #352c17;
   background: #d8ae3c;
+}
+
+html[data-theme="dark"] .focus-window-shell.resting .focus-window-actions button.primary {
+  color: #2d271c;
+  background: #cbb487;
 }
 
 html[data-theme="dark"] .data-actions > button {
