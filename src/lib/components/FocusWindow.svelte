@@ -45,6 +45,7 @@
     const focusInterval = window.setInterval(updateFocusTimer, 1000);
     window.addEventListener(FOCUS_SETTINGS_CHANGED_EVENT, refreshFocusDurations);
     window.addEventListener(FOCUS_TARGET_CHANGED_EVENT, refreshFocusTarget);
+    window.addEventListener("storage", refreshFocusFromStorage);
     window.addEventListener("focus", refreshFocusDurations);
     window.addEventListener("focus", refreshFocusTarget);
     document.addEventListener("visibilitychange", refreshFocusDurations);
@@ -56,6 +57,7 @@
         refreshFocusDurations,
       );
       window.removeEventListener(FOCUS_TARGET_CHANGED_EVENT, refreshFocusTarget);
+      window.removeEventListener("storage", refreshFocusFromStorage);
       window.removeEventListener("focus", refreshFocusDurations);
       window.removeEventListener("focus", refreshFocusTarget);
       document.removeEventListener("visibilitychange", refreshFocusDurations);
@@ -78,6 +80,13 @@
 
   function refreshFocusTarget() {
     focusTarget = getFocusTarget();
+  }
+
+  function refreshFocusFromStorage(event: StorageEvent) {
+    if (!event.key || event.key.startsWith("eggdone-focus-")) {
+      refreshFocusDurations();
+      refreshFocusTarget();
+    }
   }
 
   function startFocusSession(phase: FocusPhase = "focus") {
@@ -168,9 +177,7 @@
   </header>
 
   <section class="focus-window-body" role="presentation" onmousedown={startWindowDrag}>
-    <div class:resting={focusPhase === "break"} class="focus-window-orb">
-      <span>{focusPhase === "focus" ? "专" : "歇"}</span>
-    </div>
+    <img class="focus-window-illustration" src="/focus-illustration.png" alt="" aria-hidden="true" />
 
     <strong>{focusDisplayTime}</strong>
     {#if focusTarget}

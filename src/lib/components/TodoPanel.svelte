@@ -2426,9 +2426,7 @@
         <button type="button" aria-label="关闭" onclick={() => (showFocus = false)}>×</button>
       </header>
 
-      <div class:resting={focusPhase === "break"} class="focus-orb">
-        <span>{focusPhase === "focus" ? "专" : "歇"}</span>
-      </div>
+      <img class="focus-illustration" src="/focus-illustration.png" alt="" aria-hidden="true" />
 
       <strong class="focus-time">{focusDisplayTime}</strong>
       {#if focusTarget}
