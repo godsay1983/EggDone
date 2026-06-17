@@ -40,6 +40,7 @@
   ) => Promise<void>;
   export let onPin: (todo: Todo, pinned: boolean) => Promise<void>;
   export let onPriority: (todo: Todo, priority: number) => Promise<void>;
+  export let onFocus: (todo: Todo) => void;
   export let onSchedule: (
     id: number,
     schedule: TodoScheduleInput,
@@ -728,6 +729,16 @@
           }}
         >
           {todo.priority === 1 ? "取消重要" : "设为重要"}
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          onclick={() => {
+            actionsOpen = false;
+            onFocus(todo);
+          }}
+        >
+          专注做这件事
         </button>
         <button
           type="button"

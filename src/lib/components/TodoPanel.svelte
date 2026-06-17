@@ -35,8 +35,12 @@
   } from "$lib/utils/todoFilters";
   import { parseQuickAdd } from "$lib/utils/quickAdd";
   import {
+    clearFocusTarget,
     FOCUS_SETTINGS_CHANGED_EVENT,
     getFocusDurations,
+    getFocusTarget,
+    saveFocusTarget,
+    type FocusTarget,
     type FocusDurations,
     type FocusPhase,
   } from "$lib/utils/focusSettings";
@@ -136,6 +140,7 @@
   let focusDisplayTime = "25:00";
   let focusDisplayHint = "开始一颗番茄，先把注意力放在眼前这一件事。";
   let focusDisplayPhase = "专注";
+  let focusTarget: FocusTarget | null = getFocusTarget();
   let desktopSettings: DesktopSettings | null = null;
   let theme: Theme = "light";
   let reorderAnimationDuration = 170;
@@ -618,9 +623,24 @@
   }
 
   function openFocusPanel() {
+    clearFocusTarget();
+    focusTarget = null;
     showAbout = false;
     showDataManager = false;
     showSettings = false;
+    openFocusSurface();
+  }
+
+  function openFocusForTodo(todo: Todo) {
+    focusTarget = { uuid: todo.uuid, title: todo.title };
+    saveFocusTarget(focusTarget);
+    showAbout = false;
+    showDataManager = false;
+    showSettings = false;
+    openFocusSurface();
+  }
+
+  function openFocusSurface() {
     if (isTauri()) {
       void todoApi.openFocusWindow().catch((error) => {
         todos.reportError(error);
@@ -693,6 +713,8 @@
     focusPhase = "focus";
     focusEndsAt = null;
     focusRemainingMs = focusDurations.focus;
+    clearFocusTarget();
+    focusTarget = null;
     showFocus = false;
   }
 
@@ -2096,6 +2118,7 @@
                       onNote={noteTodo}
                       onPin={pinTodo}
                       onPriority={priorityTodo}
+                      onFocus={openFocusForTodo}
                       onSchedule={scheduleTodo}
                       onSnooze={snoozeTodo}
                       groups={$todos.groups}
@@ -2208,6 +2231,7 @@
                         onNote={noteTodo}
                         onPin={pinTodo}
                         onPriority={priorityTodo}
+                        onFocus={openFocusForTodo}
                         onSchedule={scheduleTodo}
                         onSnooze={snoozeTodo}
                         groups={$todos.groups}
@@ -2260,6 +2284,7 @@
                       onNote={noteTodo}
                       onPin={pinTodo}
                       onPriority={priorityTodo}
+                      onFocus={openFocusForTodo}
                       onSchedule={scheduleTodo}
                       onSnooze={snoozeTodo}
                       groups={$todos.groups}
@@ -2303,6 +2328,7 @@
             onNote={noteTodo}
             onPin={pinTodo}
             onPriority={priorityTodo}
+            onFocus={openFocusForTodo}
             onSchedule={scheduleTodo}
             onSnooze={snoozeTodo}
             groups={$todos.groups}
@@ -2405,6 +2431,9 @@
       </div>
 
       <strong class="focus-time">{focusDisplayTime}</strong>
+      {#if focusTarget}
+        <small class="focus-target">正在专注：{focusTarget.title}</small>
+      {/if}
       <p class="focus-copy">{focusDisplayHint}</p>
 
       <div class="focus-actions">

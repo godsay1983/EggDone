@@ -2133,6 +2133,19 @@ footer button {
   letter-spacing: 0.03em;
 }
 
+.focus-target,
+.focus-window-target {
+  display: block;
+  max-width: 100%;
+  margin-top: 4px;
+  overflow: hidden;
+  color: #8a7447;
+  font-size: 11px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .focus-copy {
   min-height: 34px;
   margin-top: 6px;
@@ -3788,6 +3801,11 @@ html[data-theme="dark"] .focus-time {
 html[data-theme="dark"] .focus-card header p,
 html[data-theme="dark"] .focus-copy {
   color: #a89d8c;
+}
+
+html[data-theme="dark"] .focus-target,
+html[data-theme="dark"] .focus-window-target {
+  color: #e0c46d;
 }
 
 html[data-theme="dark"] .focus-card header button {

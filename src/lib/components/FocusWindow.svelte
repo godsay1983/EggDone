@@ -3,8 +3,12 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { onMount } from "svelte";
   import {
+    clearFocusTarget,
     FOCUS_SETTINGS_CHANGED_EVENT,
+    FOCUS_TARGET_CHANGED_EVENT,
     getFocusDurations,
+    getFocusTarget,
+    type FocusTarget,
     type FocusDurations,
     type FocusPhase,
   } from "$lib/utils/focusSettings";
@@ -17,6 +21,7 @@
   let focusDisplayTime = "25:00";
   let focusDisplayHint = "开始一颗番茄，先把注意力放在眼前这一件事。";
   let focusDisplayPhase = "专注";
+  let focusTarget: FocusTarget | null = getFocusTarget();
 
   $: focusDisplayPhase = focusPhase === "focus" ? "专注" : "休息";
   $: focusDisplayTime = formatFocusTime(focusRemainingMs);
@@ -36,18 +41,25 @@
           : "light";
     document.documentElement.dataset.theme = theme;
     refreshFocusDurations();
+    refreshFocusTarget();
     const focusInterval = window.setInterval(updateFocusTimer, 1000);
     window.addEventListener(FOCUS_SETTINGS_CHANGED_EVENT, refreshFocusDurations);
+    window.addEventListener(FOCUS_TARGET_CHANGED_EVENT, refreshFocusTarget);
     window.addEventListener("focus", refreshFocusDurations);
+    window.addEventListener("focus", refreshFocusTarget);
     document.addEventListener("visibilitychange", refreshFocusDurations);
+    document.addEventListener("visibilitychange", refreshFocusTarget);
     return () => {
       window.clearInterval(focusInterval);
       window.removeEventListener(
         FOCUS_SETTINGS_CHANGED_EVENT,
         refreshFocusDurations,
       );
+      window.removeEventListener(FOCUS_TARGET_CHANGED_EVENT, refreshFocusTarget);
       window.removeEventListener("focus", refreshFocusDurations);
+      window.removeEventListener("focus", refreshFocusTarget);
       document.removeEventListener("visibilitychange", refreshFocusDurations);
+      document.removeEventListener("visibilitychange", refreshFocusTarget);
     };
   });
 
@@ -62,6 +74,10 @@
     ) {
       focusRemainingMs = next[focusPhase];
     }
+  }
+
+  function refreshFocusTarget() {
+    focusTarget = getFocusTarget();
   }
 
   function startFocusSession(phase: FocusPhase = "focus") {
@@ -113,6 +129,7 @@
     focusPhase = "focus";
     focusEndsAt = null;
     focusRemainingMs = focusDurations.focus;
+    clearFocusTarget();
     await hideFocusWindow();
   }
 
@@ -156,6 +173,9 @@
     </div>
 
     <strong>{focusDisplayTime}</strong>
+    {#if focusTarget}
+      <small class="focus-window-target">正在专注：{focusTarget.title}</small>
+    {/if}
     <p>{focusDisplayHint}</p>
   </section>
 
