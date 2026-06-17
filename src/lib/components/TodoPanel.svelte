@@ -35,6 +35,12 @@
   } from "$lib/utils/todoFilters";
   import { parseQuickAdd } from "$lib/utils/quickAdd";
   import {
+    FOCUS_SETTINGS_CHANGED_EVENT,
+    getFocusDurations,
+    type FocusDurations,
+    type FocusPhase,
+  } from "$lib/utils/focusSettings";
+  import {
     DEFAULT_LIST_VIEW_KEY,
     LAST_LIST_VIEW_KEY,
     initialListView,
@@ -48,7 +54,6 @@
   type Theme = "light" | "dark";
   type GroupColor = "yellow" | "green" | "blue" | "peach" | "lavender" | "gray";
   type GroupDropTarget = string | null;
-  type FocusPhase = "focus" | "break";
   type FocusTodoPayload = { uuid: string };
   type QuadrantKey =
     | "importantUrgent"
@@ -116,11 +121,6 @@
     { key: "later", title: "更晚", subtitle: "未来安排" },
     { key: "unscheduled", title: "无到期日", subtitle: "还没有明确时间" },
   ];
-  const focusDurations: Record<FocusPhase, number> = {
-    focus: 25 * 60 * 1000,
-    break: 5 * 60 * 1000,
-  };
-
   let title = "";
   let quickAddParsingDisabledFor = "";
   let adding = false;
@@ -128,6 +128,7 @@
   let showDataManager = false;
   let showSettings = false;
   let showFocus = false;
+  let focusDurations: FocusDurations = getFocusDurations();
   let focusPhase: FocusPhase = "focus";
   let focusRunning = false;
   let focusEndsAt: number | null = null;
@@ -252,6 +253,8 @@
       requestAnimationFrame(() => revealSelectedGroup(selectedGroup, false));
     });
     const focusInterval = window.setInterval(updateFocusTimer, 1000);
+    window.addEventListener(FOCUS_SETTINGS_CHANGED_EVENT, refreshFocusDurations);
+    window.addEventListener("storage", refreshFocusDurations);
     groupResizeObserver.observe(groupScrollElement);
     groupMutationObserver.observe(groupScrollElement, { childList: true });
     updateGroupScrollState();
@@ -349,6 +352,11 @@
       if (clearTimer) clearTimeout(clearTimer);
       if (groupDeleteTimer) clearTimeout(groupDeleteTimer);
       window.clearInterval(focusInterval);
+      window.removeEventListener(
+        FOCUS_SETTINGS_CHANGED_EVENT,
+        refreshFocusDurations,
+      );
+      window.removeEventListener("storage", refreshFocusDurations);
       groupResizeObserver.disconnect();
       groupMutationObserver.disconnect();
       removeDragListeners();
@@ -623,7 +631,21 @@
     showFocus = true;
   }
 
+  function refreshFocusDurations() {
+    const previous = focusDurations;
+    const next = getFocusDurations();
+    focusDurations = next;
+    if (
+      !focusRunning &&
+      focusEndsAt === null &&
+      focusRemainingMs === previous[focusPhase]
+    ) {
+      focusRemainingMs = next[focusPhase];
+    }
+  }
+
   function startFocusSession(phase: FocusPhase = "focus") {
+    refreshFocusDurations();
     focusPhase = phase;
     focusRemainingMs = focusDurations[phase];
     focusEndsAt = Date.now() + focusRemainingMs;
@@ -636,7 +658,8 @@
     if (focusRemainingMs > 0) return;
     focusRunning = false;
     focusEndsAt = null;
-    focusRemainingMs = focusDurations[focusPhase === "focus" ? "break" : "focus"];
+    focusPhase = focusPhase === "focus" ? "break" : "focus";
+    focusRemainingMs = focusDurations[focusPhase];
   }
 
   function toggleFocusRunning() {

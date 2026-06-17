@@ -5,7 +5,16 @@
     updateShortcut,
     type DesktopSettings,
   } from "$lib/api/desktopSettings";
+  import {
+    BREAK_DURATION_OPTIONS,
+    FOCUS_DURATION_OPTIONS,
+    getBreakDurationMinutes,
+    getFocusDurationMinutes,
+    saveBreakDurationMinutes,
+    saveFocusDurationMinutes,
+  } from "$lib/utils/focusSettings";
   import type { DefaultListViewMode } from "$lib/utils/viewPreferences";
+  import { onMount } from "svelte";
   import SyncSettings from "./SyncSettings.svelte";
 
   export let settings: DesktopSettings;
@@ -16,6 +25,13 @@
 
   let busy = false;
   let error = settings.shortcutError ?? settings.autostartError ?? "";
+  let focusDurationMinutes = 25;
+  let breakDurationMinutes = 5;
+
+  onMount(() => {
+    focusDurationMinutes = getFocusDurationMinutes();
+    breakDurationMinutes = getBreakDurationMinutes();
+  });
 
   async function setShortcutEnabled(enabled: boolean) {
     await saveShortcut(settings.shortcut, enabled);
@@ -67,6 +83,14 @@
     } finally {
       busy = false;
     }
+  }
+
+  function setFocusDuration(minutes: number) {
+    focusDurationMinutes = saveFocusDurationMinutes(minutes);
+  }
+
+  function setBreakDuration(minutes: number) {
+    breakDurationMinutes = saveBreakDurationMinutes(minutes);
   }
 </script>
 
@@ -154,6 +178,45 @@
         <option value="calendar">日历</option>
       </select>
     </label>
+
+    <section class="focus-settings-section" aria-labelledby="focus-settings-title">
+      <div class="setting-row focus-settings-heading">
+        <div>
+          <strong id="focus-settings-title">专注时长</strong>
+          <span>新一轮番茄钟使用这里的时长，当前暂停中的会话不被打断</span>
+        </div>
+      </div>
+
+      <div class="duration-setting">
+        <span>专注</span>
+        <div class="duration-options" role="group" aria-label="专注时长">
+          {#each FOCUS_DURATION_OPTIONS as minutes}
+            <button
+              type="button"
+              class:active={focusDurationMinutes === minutes}
+              onclick={() => setFocusDuration(minutes)}
+            >
+              {minutes} 分钟
+            </button>
+          {/each}
+        </div>
+      </div>
+
+      <div class="duration-setting">
+        <span>休息</span>
+        <div class="duration-options" role="group" aria-label="休息时长">
+          {#each BREAK_DURATION_OPTIONS as minutes}
+            <button
+              type="button"
+              class:active={breakDurationMinutes === minutes}
+              onclick={() => setBreakDuration(minutes)}
+            >
+              {minutes} 分钟
+            </button>
+          {/each}
+        </div>
+      </div>
+    </section>
 
     <SyncSettings />
 

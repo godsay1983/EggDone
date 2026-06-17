@@ -2646,6 +2646,59 @@ footer button {
   opacity: 0.5;
 }
 
+.focus-settings-section {
+  padding-bottom: 10px;
+}
+
+.focus-settings-heading {
+  padding-bottom: 8px;
+}
+
+.duration-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 2px;
+}
+
+.duration-setting > span {
+  flex: 0 0 auto;
+  color: #554b3d;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.duration-options {
+  display: flex;
+  min-width: 0;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.duration-options button {
+  min-width: 50px;
+  padding: 5px 7px;
+  border: 1px solid #e2d8c8;
+  border-radius: 999px;
+  color: #766a58;
+  background: #faf7f0;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.duration-options button:hover {
+  border-color: #d9ad31;
+  color: #6f5413;
+}
+
+.duration-options button.active {
+  border-color: #d9ad31;
+  color: #5f4610;
+  background: #f6c94c;
+  box-shadow: 0 4px 12px rgb(217 173 49 / 22%);
+}
+
 .settings-error {
   margin: 4px 0 0;
   padding: 7px 9px;
@@ -3881,6 +3934,27 @@ html[data-theme="dark"] .preference-select select {
   border-color: #534b3f;
   color: #ded4c4;
   background: #312e28;
+}
+
+html[data-theme="dark"] .duration-setting > span {
+  color: #ded4c4;
+}
+
+html[data-theme="dark"] .duration-options button {
+  border-color: #534b3f;
+  color: #b9ad9c;
+  background: #312e28;
+}
+
+html[data-theme="dark"] .duration-options button:hover {
+  border-color: #d9ad31;
+  color: #f1dfb8;
+}
+
+html[data-theme="dark"] .duration-options button.active {
+  border-color: #d9ad31;
+  color: #31230a;
+  background: #f0c44a;
 }
 
 html[data-theme="dark"] .settings-error {

@@ -2,15 +2,15 @@
   import { invoke, isTauri } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { onMount } from "svelte";
-
-  type FocusPhase = "focus" | "break";
-
-  const focusDurations: Record<FocusPhase, number> = {
-    focus: 25 * 60 * 1000,
-    break: 5 * 60 * 1000,
-  };
+  import {
+    FOCUS_SETTINGS_CHANGED_EVENT,
+    getFocusDurations,
+    type FocusDurations,
+    type FocusPhase,
+  } from "$lib/utils/focusSettings";
 
   let focusPhase: FocusPhase = "focus";
+  let focusDurations: FocusDurations = getFocusDurations();
   let focusRunning = false;
   let focusEndsAt: number | null = null;
   let focusRemainingMs = focusDurations.focus;
@@ -35,11 +35,37 @@
           ? "dark"
           : "light";
     document.documentElement.dataset.theme = theme;
+    refreshFocusDurations();
     const focusInterval = window.setInterval(updateFocusTimer, 1000);
-    return () => window.clearInterval(focusInterval);
+    window.addEventListener(FOCUS_SETTINGS_CHANGED_EVENT, refreshFocusDurations);
+    window.addEventListener("focus", refreshFocusDurations);
+    document.addEventListener("visibilitychange", refreshFocusDurations);
+    return () => {
+      window.clearInterval(focusInterval);
+      window.removeEventListener(
+        FOCUS_SETTINGS_CHANGED_EVENT,
+        refreshFocusDurations,
+      );
+      window.removeEventListener("focus", refreshFocusDurations);
+      document.removeEventListener("visibilitychange", refreshFocusDurations);
+    };
   });
 
+  function refreshFocusDurations() {
+    const previous = focusDurations;
+    const next = getFocusDurations();
+    focusDurations = next;
+    if (
+      !focusRunning &&
+      focusEndsAt === null &&
+      focusRemainingMs === previous[focusPhase]
+    ) {
+      focusRemainingMs = next[focusPhase];
+    }
+  }
+
   function startFocusSession(phase: FocusPhase = "focus") {
+    refreshFocusDurations();
     focusPhase = phase;
     focusRemainingMs = focusDurations[phase];
     focusEndsAt = Date.now() + focusRemainingMs;
