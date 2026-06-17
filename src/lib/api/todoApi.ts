@@ -147,6 +147,10 @@ export const todoApi = {
     return invoke<void>("hide_panel");
   },
 
+  openFocusWindow(): Promise<void> {
+    return invoke<void>("open_focus_window");
+  },
+
   markPanelInteraction(): Promise<void> {
     return invoke<void>("mark_panel_interaction");
   },

@@ -25,6 +25,21 @@
         "alwaysOnTop": true,
         "skipTaskbar": true,
         "shadow": true
+      },
+      {
+        "label": "focus",
+        "title": "蛋定专注",
+        "url": "/?window=focus",
+        "width": 320,
+        "height": 430,
+        "minWidth": 300,
+        "minHeight": 390,
+        "visible": false,
+        "decorations": false,
+        "resizable": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": true
       }
     ],
     "security": {

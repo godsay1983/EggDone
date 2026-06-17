@@ -2167,6 +2167,137 @@ footer button {
   background: #f6c94c;
 }
 
+.focus-window-shell {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  flex-direction: column;
+  padding: 16px 16px 18px;
+  background:
+    radial-gradient(circle at 82% 10%, rgb(246 201 76 / 28%), transparent 34%),
+    #fffaf0;
+}
+
+.focus-window-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: move;
+  user-select: none;
+}
+
+.focus-window-header p {
+  margin: 0;
+  color: #9a8c76;
+  font-size: 12px;
+}
+
+.focus-window-header h1 {
+  margin: 2px 0 0;
+  color: #463e31;
+  font-size: 22px;
+  line-height: 1.1;
+}
+
+.focus-window-header button {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 10px;
+  color: #9a8c76;
+  background: rgb(238 232 219 / 80%);
+  cursor: pointer;
+}
+
+.focus-window-header button:hover {
+  color: #5f4c1e;
+  background: #e7dcc8;
+}
+
+.focus-window-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: move;
+  user-select: none;
+  text-align: center;
+}
+
+.focus-window-orb {
+  display: grid;
+  width: 138px;
+  height: 138px;
+  margin-bottom: 18px;
+  place-items: center;
+  border-radius: 50%;
+  color: #614810;
+  background:
+    radial-gradient(circle at 38% 30%, rgb(255 255 255 / 76%), transparent 27%),
+    #f6c94c;
+  box-shadow:
+    inset 0 -12px 20px rgb(170 118 22 / 16%),
+    0 16px 36px rgb(196 152 31 / 25%);
+}
+
+.focus-window-orb.resting {
+  color: #5f6046;
+  background:
+    radial-gradient(circle at 38% 30%, rgb(255 255 255 / 76%), transparent 27%),
+    #dfe9c9;
+}
+
+.focus-window-orb span {
+  font-size: 44px;
+  font-weight: 800;
+}
+
+.focus-window-body strong {
+  color: #3f3526;
+  font-size: 48px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em;
+  line-height: 1;
+}
+
+.focus-window-body p {
+  min-height: 38px;
+  margin: 12px 10px 0;
+  color: #8d7e68;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.focus-window-actions {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 9px;
+}
+
+.focus-window-actions button {
+  height: 38px;
+  border: 0;
+  border-radius: 14px;
+  color: #7b6b55;
+  background: #eee8db;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.focus-window-actions button:hover {
+  color: #5f4c1e;
+  background: #e4d8c4;
+}
+
+.focus-window-actions button.primary {
+  color: #5f4c1e;
+  background: #f6c94c;
+}
+
 .data-backdrop {
   position: fixed;
   inset: 0;
@@ -3622,6 +3753,43 @@ html[data-theme="dark"] .focus-actions button {
 }
 
 html[data-theme="dark"] .focus-actions button.primary {
+  color: #352c17;
+  background: #d8ae3c;
+}
+
+html[data-theme="dark"] .focus-window-shell {
+  background:
+    radial-gradient(circle at 82% 10%, rgb(216 174 60 / 18%), transparent 34%),
+    #1d1b18;
+}
+
+html[data-theme="dark"] .focus-window-header h1,
+html[data-theme="dark"] .focus-window-body strong {
+  color: #f1e9dc;
+}
+
+html[data-theme="dark"] .focus-window-header p,
+html[data-theme="dark"] .focus-window-body p {
+  color: #a89d8c;
+}
+
+html[data-theme="dark"] .focus-window-header button {
+  color: #a99d8b;
+  background: #312e28;
+}
+
+html[data-theme="dark"] .focus-window-header button:hover,
+html[data-theme="dark"] .focus-window-actions button:hover {
+  color: #f3eadb;
+  background: #37322b;
+}
+
+html[data-theme="dark"] .focus-window-actions button {
+  color: #cfc4b3;
+  background: #454038;
+}
+
+html[data-theme="dark"] .focus-window-actions button.primary {
   color: #352c17;
   background: #d8ae3c;
 }

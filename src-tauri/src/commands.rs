@@ -1,6 +1,6 @@
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, State, WebviewWindow};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 use uuid::Uuid;
 
 use crate::{
@@ -364,6 +364,23 @@ pub fn archive_completed_todos(
 
 #[tauri::command]
 pub fn hide_panel(window: WebviewWindow) -> Result<(), String> {
+    window.hide().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn open_focus_window(app: AppHandle) -> Result<(), String> {
+    let Some(window) = app.get_webview_window("focus") else {
+        return Err("专注窗口未初始化".to_string());
+    };
+    window.show().map_err(|error| error.to_string())?;
+    window.set_focus().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn hide_focus_window(app: AppHandle) -> Result<(), String> {
+    let Some(window) = app.get_webview_window("focus") else {
+        return Ok(());
+    };
     window.hide().map_err(|error| error.to_string())
 }
 

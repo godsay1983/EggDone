@@ -1,0 +1,144 @@
+<script lang="ts">
+  import { invoke, isTauri } from "@tauri-apps/api/core";
+  import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { onMount } from "svelte";
+
+  type FocusPhase = "focus" | "break";
+
+  const focusDurations: Record<FocusPhase, number> = {
+    focus: 25 * 60 * 1000,
+    break: 5 * 60 * 1000,
+  };
+
+  let focusPhase: FocusPhase = "focus";
+  let focusRunning = false;
+  let focusEndsAt: number | null = null;
+  let focusRemainingMs = focusDurations.focus;
+  let focusDisplayTime = "25:00";
+  let focusDisplayHint = "开始一颗番茄，先把注意力放在眼前这一件事。";
+  let focusDisplayPhase = "专注";
+
+  $: focusDisplayPhase = focusPhase === "focus" ? "专注" : "休息";
+  $: focusDisplayTime = formatFocusTime(focusRemainingMs);
+  $: focusDisplayHint = focusRunning
+    ? "保持当前节奏，结束后会切到下一阶段。"
+    : focusRemainingMs === focusDurations[focusPhase]
+      ? "开始一颗番茄，先把注意力放在眼前这一件事。"
+      : "已经暂停，继续时会从当前剩余时间开始。";
+
+  onMount(() => {
+    const savedTheme = localStorage.getItem("eggdone-theme");
+    const theme =
+      savedTheme === "light" || savedTheme === "dark"
+        ? savedTheme
+        : window.matchMedia("(prefers-color-scheme: dark)").matches
+          ? "dark"
+          : "light";
+    document.documentElement.dataset.theme = theme;
+    const focusInterval = window.setInterval(updateFocusTimer, 1000);
+    return () => window.clearInterval(focusInterval);
+  });
+
+  function startFocusSession(phase: FocusPhase = "focus") {
+    focusPhase = phase;
+    focusRemainingMs = focusDurations[phase];
+    focusEndsAt = Date.now() + focusRemainingMs;
+    focusRunning = true;
+  }
+
+  function updateFocusTimer() {
+    if (!focusRunning || focusEndsAt === null) return;
+    focusRemainingMs = Math.max(0, focusEndsAt - Date.now());
+    if (focusRemainingMs > 0) return;
+    focusRunning = false;
+    focusEndsAt = null;
+    focusPhase = focusPhase === "focus" ? "break" : "focus";
+    focusRemainingMs = focusDurations[focusPhase];
+  }
+
+  function toggleFocusRunning() {
+    if (focusRunning) {
+      updateFocusTimer();
+      focusRunning = false;
+      focusEndsAt = null;
+      return;
+    }
+    focusEndsAt = Date.now() + focusRemainingMs;
+    focusRunning = true;
+  }
+
+  function addFocusFiveMinutes() {
+    focusRemainingMs += 5 * 60 * 1000;
+    if (focusRunning) {
+      focusEndsAt = Date.now() + focusRemainingMs;
+    }
+  }
+
+  function skipFocusPhase() {
+    startFocusSession(focusPhase === "focus" ? "break" : "focus");
+  }
+
+  async function endFocusSession() {
+    focusRunning = false;
+    focusPhase = "focus";
+    focusEndsAt = null;
+    focusRemainingMs = focusDurations.focus;
+    await hideFocusWindow();
+  }
+
+  async function hideFocusWindow() {
+    if (!isTauri()) {
+      window.close();
+      return;
+    }
+    await invoke("hide_focus_window");
+  }
+
+  function startWindowDrag(event: MouseEvent) {
+    if (!isTauri() || event.button !== 0) return;
+    if (event.target instanceof Element && event.target.closest("button")) {
+      return;
+    }
+    event.preventDefault();
+    void getCurrentWindow().startDragging();
+  }
+
+  function formatFocusTime(milliseconds: number) {
+    const totalSeconds = Math.ceil(milliseconds / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  }
+</script>
+
+<main class="focus-window-shell">
+  <header class="focus-window-header" role="presentation" onmousedown={startWindowDrag}>
+    <div>
+      <p>番茄钟</p>
+      <h1>{focusDisplayPhase}</h1>
+    </div>
+    <button type="button" aria-label="关闭专注窗口" onclick={() => void hideFocusWindow()}>×</button>
+  </header>
+
+  <section class="focus-window-body" role="presentation" onmousedown={startWindowDrag}>
+    <div class:resting={focusPhase === "break"} class="focus-window-orb">
+      <span>{focusPhase === "focus" ? "专" : "歇"}</span>
+    </div>
+
+    <strong>{focusDisplayTime}</strong>
+    <p>{focusDisplayHint}</p>
+  </section>
+
+  <div class="focus-window-actions">
+    <button type="button" class="primary" onclick={() => {
+      if (focusRemainingMs === focusDurations[focusPhase] && !focusRunning) {
+        startFocusSession(focusPhase);
+      } else {
+        toggleFocusRunning();
+      }
+    }}>{focusRunning ? "暂停" : "开始"}</button>
+    <button type="button" onclick={addFocusFiveMinutes}>+5 分钟</button>
+    <button type="button" onclick={skipFocusPhase}>跳过</button>
+    <button type="button" onclick={() => void endFocusSession()}>结束</button>
+  </div>
+</main>

@@ -56,16 +56,16 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            if window.label() != "main" {
-                return;
-            }
-
             match event {
-                WindowEvent::CloseRequested { api, .. } => {
+                WindowEvent::CloseRequested { api, .. } if window.label() == "main" => {
                     api.prevent_close();
                     let _ = window.hide();
                 }
-                WindowEvent::Focused(false) => {
+                WindowEvent::CloseRequested { api, .. } if window.label() == "focus" => {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+                WindowEvent::Focused(false) if window.label() == "main" => {
                     let panel_state = window.app_handle().state::<tray::PanelState>();
                     if !panel_state.handle_blur() {
                         return;
@@ -98,6 +98,8 @@ pub fn run() {
             commands::clear_completed_todos,
             commands::archive_completed_todos,
             commands::hide_panel,
+            commands::open_focus_window,
+            commands::hide_focus_window,
             commands::mark_panel_interaction,
             commands::toggle_panel_from_shortcut,
             commands::prepare_sync_document,

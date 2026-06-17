@@ -613,6 +613,13 @@
     showAbout = false;
     showDataManager = false;
     showSettings = false;
+    if (isTauri()) {
+      void todoApi.openFocusWindow().catch((error) => {
+        todos.reportError(error);
+        showFocus = true;
+      });
+      return;
+    }
     showFocus = true;
   }
 
