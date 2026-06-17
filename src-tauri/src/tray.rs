@@ -173,6 +173,15 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<TrayIcon> {
                 show_panel(app, None);
                 let _ = app.emit_to("main", "show-today", ());
             }
+            "focus-start" => {
+                let _ = app.emit_to("focus", "focus-start", ());
+            }
+            "focus-toggle" => {
+                let _ = app.emit_to("focus", "focus-toggle", ());
+            }
+            "focus-end" => {
+                let _ = app.emit_to("focus", "focus-end", ());
+            }
             "about" => {
                 show_panel(app, None);
                 let _ = app.emit_to("main", "show-about", ());
@@ -220,8 +229,13 @@ fn build_tray_menu(app: &AppHandle, today_task_titles: &[String]) -> tauri::Resu
     let toggle_item = MenuItem::with_id(app, "toggle", "打开 / 隐藏面板", true, None::<&str>)?;
     let new_item = MenuItem::with_id(app, "new", "新增任务", true, None::<&str>)?;
     let today_item = MenuItem::with_id(app, "today", "今天任务", true, None::<&str>)?;
+    let focus_start_item = MenuItem::with_id(app, "focus-start", "开始专注", true, None::<&str>)?;
+    let focus_toggle_item =
+        MenuItem::with_id(app, "focus-toggle", "暂停 / 继续专注", true, None::<&str>)?;
+    let focus_end_item = MenuItem::with_id(app, "focus-end", "结束专注", true, None::<&str>)?;
     let preview_separator = PredefinedMenuItem::separator(app)?;
     let separator = PredefinedMenuItem::separator(app)?;
+    let focus_separator = PredefinedMenuItem::separator(app)?;
     let about_item = MenuItem::with_id(app, "about", "关于 EggDone", true, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
     let preview_items = today_task_titles
@@ -246,6 +260,10 @@ fn build_tray_menu(app: &AppHandle, today_task_titles: &[String]) -> tauri::Resu
             items.push(item);
         }
     }
+    items.push(&focus_separator);
+    items.push(&focus_start_item);
+    items.push(&focus_toggle_item);
+    items.push(&focus_end_item);
     items.push(&separator);
     items.push(&about_item);
     items.push(&quit_item);

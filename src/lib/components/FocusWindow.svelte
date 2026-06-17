@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke, isTauri } from "@tauri-apps/api/core";
+  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { onMount } from "svelte";
   import {
@@ -33,6 +34,7 @@
       : "已经暂停，继续时会从当前剩余时间开始。";
 
   onMount(() => {
+    const unlisteners: UnlistenFn[] = [];
     refreshThemeFromStorage();
     refreshFocusDurations();
     refreshFocusTarget();
@@ -46,7 +48,19 @@
     document.addEventListener("visibilitychange", refreshThemeFromStorage);
     document.addEventListener("visibilitychange", refreshFocusDurations);
     document.addEventListener("visibilitychange", refreshFocusTarget);
+    if (isTauri()) {
+      void listen("focus-start", () => {
+        startFocusSession("focus");
+      }).then((unlisten) => unlisteners.push(unlisten));
+      void listen("focus-toggle", () => {
+        toggleFocusFromTray();
+      }).then((unlisten) => unlisteners.push(unlisten));
+      void listen("focus-end", () => {
+        void endFocusSession();
+      }).then((unlisten) => unlisteners.push(unlisten));
+    }
     return () => {
+      unlisteners.forEach((unlisten) => unlisten());
       window.clearInterval(focusInterval);
       window.removeEventListener(
         FOCUS_SETTINGS_CHANGED_EVENT,
@@ -145,10 +159,20 @@
       updateFocusTimer();
       focusRunning = false;
       focusEndsAt = null;
+      updateFocusTrayTooltip();
       return;
     }
     focusEndsAt = Date.now() + focusRemainingMs;
     focusRunning = true;
+    updateFocusTrayTooltip();
+  }
+
+  function toggleFocusFromTray() {
+    if (!focusRunning && focusEndsAt === null && focusRemainingMs === focusDurations[focusPhase]) {
+      startFocusSession(focusPhase);
+      return;
+    }
+    toggleFocusRunning();
   }
 
   function addFocusFiveMinutes() {
