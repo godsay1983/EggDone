@@ -8,13 +8,18 @@ export const LAST_LIST_VIEW_KEY = "eggdone-list-view";
 export function normalizeDefaultListViewMode(
   value: string | null,
 ): DefaultListViewMode {
-  return value === "all" || value === "today" || value === "quadrants"
+  return value === "all" ||
+    value === "today" ||
+    value === "quadrants" ||
+    value === "calendar"
     ? value
     : "remember";
 }
 
 export function normalizeListView(value: string | null): TodoListView {
-  return value === "today" || value === "quadrants" ? value : "all";
+  return value === "today" || value === "quadrants" || value === "calendar"
+    ? value
+    : "all";
 }
 
 export function initialListView(

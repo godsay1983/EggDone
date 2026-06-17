@@ -11,6 +11,7 @@ describe("view preferences", () => {
     expect(normalizeDefaultListViewMode("all")).toBe("all");
     expect(normalizeDefaultListViewMode("today")).toBe("today");
     expect(normalizeDefaultListViewMode("quadrants")).toBe("quadrants");
+    expect(normalizeDefaultListViewMode("calendar")).toBe("calendar");
     expect(normalizeDefaultListViewMode("remember")).toBe("remember");
     expect(normalizeDefaultListViewMode("bad")).toBe("remember");
     expect(normalizeDefaultListViewMode(null)).toBe("remember");
@@ -19,6 +20,7 @@ describe("view preferences", () => {
   it("normalizes list views", () => {
     expect(normalizeListView("today")).toBe("today");
     expect(normalizeListView("quadrants")).toBe("quadrants");
+    expect(normalizeListView("calendar")).toBe("calendar");
     expect(normalizeListView("all")).toBe("all");
     expect(normalizeListView("bad")).toBe("all");
     expect(normalizeListView(null)).toBe("all");
@@ -27,9 +29,11 @@ describe("view preferences", () => {
   it("resolves the startup view from the configured mode", () => {
     expect(initialListView("remember", "today")).toBe("today");
     expect(initialListView("remember", "quadrants")).toBe("quadrants");
+    expect(initialListView("remember", "calendar")).toBe("calendar");
     expect(initialListView("remember", "all")).toBe("all");
     expect(initialListView("today", "all")).toBe("today");
     expect(initialListView("quadrants", "all")).toBe("quadrants");
+    expect(initialListView("calendar", "all")).toBe("calendar");
     expect(initialListView("all", "today")).toBe("all");
   });
 });

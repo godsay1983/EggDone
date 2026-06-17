@@ -1,7 +1,7 @@
 import type { Todo } from "$lib/types";
 import { isDueTodayOrOverdue } from "./todoDates";
 
-export type TodoListView = "all" | "today" | "quadrants";
+export type TodoListView = "all" | "today" | "quadrants" | "calendar";
 
 export interface TodoFilterOptions {
   view?: TodoListView;

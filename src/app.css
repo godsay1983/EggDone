@@ -955,6 +955,73 @@ footer {
   text-align: center;
 }
 
+.agenda-sections {
+  display: grid;
+  gap: 10px;
+}
+
+.agenda-section {
+  display: grid;
+  gap: 7px;
+  padding: 9px;
+  border: 1px solid #eadfcf;
+  border-radius: 16px;
+  background: #fffaf0;
+}
+
+.agenda-section header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 1px 2px;
+  color: #665844;
+}
+
+.agenda-section header div {
+  display: grid;
+  gap: 1px;
+}
+
+.agenda-section header strong {
+  font-size: 12px;
+}
+
+.agenda-section header span,
+.agenda-section header small {
+  color: #aa9c87;
+  font-size: 10px;
+}
+
+.agenda-section header small {
+  min-width: 24px;
+  height: 22px;
+  padding: 4px 8px 0;
+  border-radius: 999px;
+  background: #f4ecd9;
+  text-align: center;
+}
+
+.agenda-section.overdue {
+  border-color: #f2c6bd;
+  background: #fff0ec;
+}
+
+.agenda-section.today {
+  border-color: #f0d28a;
+  background: #fff6dc;
+}
+
+.agenda-section.tomorrow,
+.agenda-section.week {
+  border-color: #d8e6ef;
+  background: #f2f9fc;
+}
+
+.agenda-section .todo-row:last-child .todo-item {
+  margin-bottom: 0;
+}
+
 .todo-item {
   gap: 9px;
   margin-bottom: 8px;
@@ -2841,6 +2908,40 @@ html[data-theme="dark"] .quadrant-card.active {
 html[data-theme="dark"] .quadrant-reset {
   color: #d9cebd;
   background: #37322b;
+}
+
+html[data-theme="dark"] .agenda-section {
+  border-color: #3b362f;
+  background: #2b2823;
+}
+
+html[data-theme="dark"] .agenda-section.overdue {
+  border-color: color-mix(in srgb, #ff6f61 36%, #3b362f);
+  background: color-mix(in srgb, #ff6f61 14%, #2b2823);
+}
+
+html[data-theme="dark"] .agenda-section.today {
+  border-color: color-mix(in srgb, #ffc83d 34%, #3b362f);
+  background: color-mix(in srgb, #ffc83d 12%, #2b2823);
+}
+
+html[data-theme="dark"] .agenda-section.tomorrow,
+html[data-theme="dark"] .agenda-section.week {
+  border-color: color-mix(in srgb, #5fb0c9 30%, #3b362f);
+  background: color-mix(in srgb, #5fb0c9 10%, #2b2823);
+}
+
+html[data-theme="dark"] .agenda-section header {
+  color: #eadfcf;
+}
+
+html[data-theme="dark"] .agenda-section header span,
+html[data-theme="dark"] .agenda-section header small {
+  color: #9f9483;
+}
+
+html[data-theme="dark"] .agenda-section header small {
+  background: #3a352d;
 }
 
 html[data-theme="dark"] .todo-item {

@@ -28,7 +28,7 @@
     TodoGroup,
   } from "$lib/types";
   import { movePreviewByPointer } from "$lib/utils/reorderPreview";
-  import { isDueTodayOrOverdue } from "$lib/utils/todoDates";
+  import { isDueTodayOrOverdue, localDateString } from "$lib/utils/todoDates";
   import {
     filterTodos,
     type TodoListView,
@@ -54,6 +54,13 @@
     | "importantNotUrgent"
     | "normalUrgent"
     | "normalNotUrgent";
+  type AgendaKey =
+    | "overdue"
+    | "today"
+    | "tomorrow"
+    | "week"
+    | "later"
+    | "unscheduled";
 
   const groupColorOptions: Array<{ value: GroupColor; label: string }> = [
     { value: "yellow", label: "蛋黄" },
@@ -94,6 +101,19 @@
       subtitle: "不重要不紧急",
       tone: "gray",
     },
+  ];
+
+  const agendaDefinitions: Array<{
+    key: AgendaKey;
+    title: string;
+    subtitle: string;
+  }> = [
+    { key: "overdue", title: "逾期", subtitle: "已经过期，优先看一眼" },
+    { key: "today", title: "今天", subtitle: "今天要处理" },
+    { key: "tomorrow", title: "明天", subtitle: "提前安排" },
+    { key: "week", title: "本周内", subtitle: "接下来几天" },
+    { key: "later", title: "更晚", subtitle: "未来安排" },
+    { key: "unscheduled", title: "无到期日", subtitle: "还没有明确时间" },
   ];
 
   let title = "";
@@ -657,6 +677,33 @@
 
   function quadrantCount(key: QuadrantKey) {
     return filteredTodos.filter((todo) => quadrantKey(todo) === key).length;
+  }
+
+  function agendaKey(todo: Todo, now = new Date()): AgendaKey {
+    const dueDate = todoAgendaDate(todo);
+    if (dueDate === null) return "unscheduled";
+
+    const today = localDateString(0, now);
+    if (!todo.completed && todo.due_at !== null && todo.due_at < now.getTime()) {
+      return "overdue";
+    }
+    if (!todo.completed && todo.due_date !== null && todo.due_date < today) {
+      return "overdue";
+    }
+    if (dueDate === today) return "today";
+    if (dueDate === localDateString(1, now)) return "tomorrow";
+    if (dueDate <= localDateString(6, now)) return "week";
+    return "later";
+  }
+
+  function agendaTodos(key: AgendaKey) {
+    return renderedTodos.filter((todo) => agendaKey(todo) === key);
+  }
+
+  function todoAgendaDate(todo: Todo): string | null {
+    if (todo.due_date !== null) return todo.due_date;
+    if (todo.due_at !== null) return localDateString(0, new Date(todo.due_at));
+    return null;
   }
 
   function selectTodo(id: number) {
@@ -1611,6 +1658,14 @@
       >
         四象限
       </button>
+      <button
+        class:active={listView === "calendar"}
+        type="button"
+        aria-pressed={listView === "calendar"}
+        onclick={() => setListView("calendar")}
+      >
+        日历
+      </button>
     </div>
     <div bind:this={summaryActionsElement} class="summary-actions">
       <span class="count">{$remainingCount} 项未完成</span>
@@ -1753,6 +1808,8 @@
               ? "今天还没有到期任务"
               : listView === "quadrants"
                 ? "四象限里还没有匹配任务"
+                : listView === "calendar"
+                  ? "日程里还没有匹配任务"
               : "已完成任务已隐藏"}
         </strong>
         <span>
@@ -1762,6 +1819,8 @@
               ? "可以给任务设置今天或更早的到期日"
               : listView === "quadrants"
                 ? "可以先新增任务或调整筛选条件"
+                : listView === "calendar"
+                  ? "给任务设置到期时间后会自动归入日程"
               : "需要时可以重新显示"}
         </span>
       </div>
@@ -1850,6 +1909,60 @@
                 {/each}
               {/if}
             </section>
+          {/each}
+        </div>
+      {:else if listView === "calendar"}
+        <div class="agenda-sections">
+          {#each agendaDefinitions as section (section.key)}
+            {@const sectionTodos = agendaTodos(section.key)}
+            {#if sectionTodos.length > 0}
+              <section class={`agenda-section ${section.key}`}>
+                <header>
+                  <div>
+                    <strong>{section.title}</strong>
+                    <span>{section.subtitle}</span>
+                  </div>
+                  <small>{sectionTodos.length}</small>
+                </header>
+                {#each sectionTodos as todo (todo.id)}
+                  {@const group = sectionTodos.filter((item) => item.completed === todo.completed && item.pinned === todo.pinned)}
+                  {@const groupIndex = group.findIndex((item) => item.id === todo.id)}
+                  <div
+                    class:selected={selectedTodoId === todo.id}
+                    class="todo-row"
+                    animate:flip={{ duration: reorderAnimationDuration }}
+                  >
+                    <TodoItem
+                      {todo}
+                      onToggle={toggleTodo}
+                      onEdit={editTodo}
+                      onNote={noteTodo}
+                      onPin={pinTodo}
+                      onPriority={priorityTodo}
+                      onSchedule={scheduleTodo}
+                      onSnooze={snoozeTodo}
+                      groups={$todos.groups}
+                      onGroupChange={moveTodoToGroup}
+                      onDelete={deleteTodo}
+                      onMove={moveTodo}
+                      onDragStart={startDrag}
+                      batchMode={batchMode}
+                      batchSelected={batchSelectedIds.has(todo.id)}
+                      onBatchSelect={toggleBatchTodo}
+                      canMoveUp={groupIndex > 0}
+                      canMoveDown={groupIndex < group.length - 1}
+                      isDragging={draggedTodo?.id === todo.id}
+                      isDragTarget={draggedTodo?.id === todo.id}
+                      dragDisabled={true}
+                      reorderDisabled={true}
+                      editRequest={
+                        editRequestTodoId === todo.id ? editRequestSeq : 0
+                      }
+                    />
+                  </div>
+                {/each}
+              </section>
+            {/if}
           {/each}
         </div>
       {:else}

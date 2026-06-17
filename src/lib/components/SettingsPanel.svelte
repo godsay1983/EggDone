@@ -151,6 +151,7 @@
         <option value="all">全部</option>
         <option value="today">今天</option>
         <option value="quadrants">四象限</option>
+        <option value="calendar">日历</option>
       </select>
     </label>
 
