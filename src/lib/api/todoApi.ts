@@ -151,6 +151,10 @@ export const todoApi = {
     return invoke<void>("open_focus_window");
   },
 
+  publishFocusNotification(completedPhase: "focus" | "break"): Promise<void> {
+    return invoke<void>("publish_focus_notification", { completedPhase });
+  },
+
   markPanelInteraction(): Promise<void> {
     return invoke<void>("mark_panel_interaction");
   },

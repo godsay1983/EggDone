@@ -168,6 +168,47 @@ fn deliver_system_notification(app: &AppHandle, reminder: &DueReminder) -> Resul
         .map_err(|error| format!("发送系统提醒失败：{error}"))
 }
 
+pub(crate) fn deliver_focus_notification(
+    app: &AppHandle,
+    completed_phase: &str,
+) -> Result<(), String> {
+    let body = if completed_phase == "break" {
+        "休息结束，可以开始下一轮专注。"
+    } else {
+        "专注结束，先休息一下。"
+    };
+    deliver_focus_system_notification(app, body)
+}
+
+#[cfg(target_os = "windows")]
+fn deliver_focus_system_notification(app: &AppHandle, body: &str) -> Result<(), String> {
+    use tauri_winrt_notification::{Duration as ToastDuration, Toast};
+
+    let app_id = if tauri::is_dev() {
+        Toast::POWERSHELL_APP_ID
+    } else {
+        &app.config().identifier
+    };
+
+    Toast::new(app_id)
+        .title("蛋定专注")
+        .text1(body)
+        .duration(ToastDuration::Short)
+        .show()
+        .map_err(|error| format!("发送专注提醒失败：{error}"))
+}
+
+#[cfg(not(target_os = "windows"))]
+fn deliver_focus_system_notification(app: &AppHandle, body: &str) -> Result<(), String> {
+    app.notification()
+        .builder()
+        .title("蛋定专注")
+        .body(body)
+        .auto_cancel()
+        .show()
+        .map_err(|error| format!("发送专注提醒失败：{error}"))
+}
+
 fn focus_todo_from_notification(app: &AppHandle, uuid: &str) {
     tray::show_panel(app, None);
     let _ = app.emit_to(

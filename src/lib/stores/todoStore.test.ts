@@ -110,6 +110,7 @@ function createApi(initialItems: Todo[] = []) {
     archiveCompleted: vi.fn(async () => items.filter((todo) => todo.completed).length),
     hidePanel: vi.fn(async () => undefined),
     openFocusWindow: vi.fn(async () => undefined),
+    publishFocusNotification: vi.fn(async () => undefined),
     markPanelInteraction: vi.fn(async () => undefined),
   };
   return api;

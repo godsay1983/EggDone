@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 use crate::{
     db::{device_id, now_millis, Database},
+    reminders,
     s3_sync::{
         self, ConnectionTestResult, ManualSyncResult, SaveSyncSettings, SyncRuntime, SyncSettings,
         UploadOutcome,
@@ -382,6 +383,11 @@ pub fn hide_focus_window(app: AppHandle) -> Result<(), String> {
         return Ok(());
     };
     window.hide().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn publish_focus_notification(app: AppHandle, completed_phase: String) -> Result<(), String> {
+    reminders::deliver_focus_notification(&app, &completed_phase)
 }
 
 #[tauri::command]

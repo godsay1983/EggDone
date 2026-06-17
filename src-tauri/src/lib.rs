@@ -100,6 +100,7 @@ pub fn run() {
             commands::hide_panel,
             commands::open_focus_window,
             commands::hide_focus_window,
+            commands::publish_focus_notification,
             commands::mark_panel_interaction,
             commands::toggle_panel_from_shortcut,
             commands::prepare_sync_document,

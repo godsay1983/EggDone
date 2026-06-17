@@ -656,10 +656,14 @@
     if (!focusRunning || focusEndsAt === null) return;
     focusRemainingMs = Math.max(0, focusEndsAt - Date.now());
     if (focusRemainingMs > 0) return;
+    const completedPhase = focusPhase;
     focusRunning = false;
     focusEndsAt = null;
     focusPhase = focusPhase === "focus" ? "break" : "focus";
     focusRemainingMs = focusDurations[focusPhase];
+    if (isTauri()) {
+      void todoApi.publishFocusNotification(completedPhase).catch(() => {});
+    }
   }
 
   function toggleFocusRunning() {
