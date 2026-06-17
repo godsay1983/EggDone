@@ -140,6 +140,10 @@
   let showCompleted = true;
   let listView: TodoListView = "all";
   let selectedQuadrant: QuadrantKey | "all" = "all";
+  let selectedAgendaDate: string | null = null;
+  let agendaWeekStartAt = startOfAgendaWeek();
+  let agendaWeekVersion = 0;
+  let agendaDatePickerOpen = false;
   let defaultListViewMode: DefaultListViewMode = "remember";
   let selectedGroup = "all";
   let creatingGroup = false;
@@ -371,6 +375,12 @@
     listView = view;
     if (view !== "quadrants") {
       selectedQuadrant = "all";
+    }
+    if (view !== "calendar") {
+      selectedAgendaDate = null;
+      agendaWeekStartAt = startOfAgendaWeek();
+      agendaWeekVersion += 1;
+      agendaDatePickerOpen = false;
     }
     summaryMenuOpen = false;
     localStorage.setItem(LAST_LIST_VIEW_KEY, view);
@@ -698,6 +708,78 @@
 
   function agendaTodos(key: AgendaKey) {
     return renderedTodos.filter((todo) => agendaKey(todo) === key);
+  }
+
+  function agendaDateTodos(date: string) {
+    return renderedTodos.filter((todo) => todoAgendaDate(todo) === date);
+  }
+
+  function startOfAgendaWeek(value = Date.now()) {
+    const date = new Date(value);
+    date.setHours(0, 0, 0, 0);
+    date.setDate(date.getDate() - date.getDay());
+    return date.getTime();
+  }
+
+  function agendaWeekDays(now = new Date(agendaWeekStartAt)) {
+    return Array.from({ length: 7 }, (_, index) => {
+      const date = new Date(now);
+      date.setDate(now.getDate() + index);
+      const dateKey = localDateString(0, date);
+      return {
+        dateKey,
+        day: String(date.getDate()),
+        label: agendaDayLabel(dateKey, date),
+        count: renderedTodos.filter((todo) => todoAgendaDate(todo) === dateKey)
+          .length,
+      };
+    });
+  }
+
+  function agendaDayLabel(dateKey: string, date: Date) {
+    if (dateKey === localDateString(0)) return "今天";
+    if (dateKey === localDateString(1)) return "明天";
+    return ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][
+      date.getDay()
+    ];
+  }
+
+  function selectedAgendaLabel() {
+    const dateKey = selectedAgendaDate ?? localDateString(0);
+    if (dateKey === localDateString(0)) return "今天";
+    if (dateKey === localDateString(1)) return "明天";
+    return dateKey.slice(5).replace("-", "/");
+  }
+
+  function selectAgendaDate(dateKey: string) {
+    selectedAgendaDate = dateKey;
+    agendaDatePickerOpen = false;
+  }
+
+  function shiftAgendaWeek(offsetDays: number) {
+    const date = new Date(startOfAgendaWeek(agendaWeekStartAt));
+    date.setDate(date.getDate() + offsetDays);
+    agendaWeekStartAt = date.getTime();
+    selectedAgendaDate = localDateString(0, date);
+    agendaWeekVersion += 1;
+    agendaDatePickerOpen = false;
+  }
+
+  function jumpAgendaToday() {
+    agendaWeekStartAt = startOfAgendaWeek();
+    selectedAgendaDate = localDateString(0);
+    agendaWeekVersion += 1;
+    agendaDatePickerOpen = false;
+  }
+
+  function setAgendaDateFromPicker(dateKey: string) {
+    if (!dateKey) return;
+    selectedAgendaDate = dateKey;
+    agendaWeekStartAt = startOfAgendaWeek(
+      new Date(`${dateKey}T00:00:00`).getTime(),
+    );
+    agendaWeekVersion += 1;
+    agendaDatePickerOpen = false;
   }
 
   function todoAgendaDate(todo: Todo): string | null {
@@ -1912,8 +1994,118 @@
           {/each}
         </div>
       {:else if listView === "calendar"}
+        <section class="agenda-nav" aria-label="日程日期">
+          <div class="agenda-week-actions">
+            <button type="button" onclick={() => shiftAgendaWeek(-7)}>
+              上一周
+            </button>
+            <button type="button" onclick={jumpAgendaToday}>今天</button>
+            <button type="button" onclick={() => shiftAgendaWeek(7)}>
+              下一周
+            </button>
+          </div>
+          {#key `${agendaWeekStartAt}-${agendaWeekVersion}`}
+            <div class="agenda-week-strip">
+              {#each agendaWeekDays() as day (day.dateKey)}
+                <button
+                  class:active={selectedAgendaDate === day.dateKey}
+                  class:today={day.dateKey === localDateString(0)}
+                  type="button"
+                  aria-pressed={selectedAgendaDate === day.dateKey}
+                  onclick={() => selectAgendaDate(day.dateKey)}
+                >
+                  <span>{day.label}</span>
+                  <strong>{day.day}</strong>
+                  <small class:visible={day.count > 0}>{day.count}</small>
+                </button>
+              {/each}
+            </div>
+          {/key}
+          <div class="agenda-jump">
+            <button
+              type="button"
+              onclick={() => (agendaDatePickerOpen = !agendaDatePickerOpen)}
+            >
+              跳转日期
+            </button>
+            {#if selectedAgendaDate}
+              <button
+                class="plain"
+                type="button"
+                onclick={() => (selectedAgendaDate = null)}
+              >
+                显示全部
+              </button>
+            {/if}
+          </div>
+          {#if agendaDatePickerOpen}
+            <input
+              class="agenda-date-picker"
+              type="date"
+              value={selectedAgendaDate ?? localDateString(0)}
+              onchange={(event) => {
+                setAgendaDateFromPicker(event.currentTarget.value);
+              }}
+            />
+          {/if}
+        </section>
         <div class="agenda-sections">
-          {#each agendaDefinitions as section (section.key)}
+          {#if selectedAgendaDate}
+            {#key selectedAgendaDate}
+              {@const sectionTodos = agendaDateTodos(selectedAgendaDate)}
+              <section class="agenda-section selected-date">
+                <header>
+                  <div>
+                    <strong>{selectedAgendaLabel()}</strong>
+                    <span>选中日期任务</span>
+                  </div>
+                  <small>{sectionTodos.length}</small>
+                </header>
+                {#if sectionTodos.length === 0}
+                  <div class="agenda-empty">这一天还没有任务</div>
+                {:else}
+                  {#each sectionTodos as todo (todo.id)}
+                    {@const group = sectionTodos.filter((item) => item.completed === todo.completed && item.pinned === todo.pinned)}
+                    {@const groupIndex = group.findIndex((item) => item.id === todo.id)}
+                    <div
+                      class:selected={selectedTodoId === todo.id}
+                      class="todo-row"
+                      animate:flip={{ duration: reorderAnimationDuration }}
+                    >
+                      <TodoItem
+                        {todo}
+                        onToggle={toggleTodo}
+                        onEdit={editTodo}
+                        onNote={noteTodo}
+                        onPin={pinTodo}
+                        onPriority={priorityTodo}
+                        onSchedule={scheduleTodo}
+                        onSnooze={snoozeTodo}
+                        groups={$todos.groups}
+                        onGroupChange={moveTodoToGroup}
+                        onDelete={deleteTodo}
+                        onMove={moveTodo}
+                        onDragStart={startDrag}
+                        batchMode={batchMode}
+                        batchSelected={batchSelectedIds.has(todo.id)}
+                        onBatchSelect={toggleBatchTodo}
+                        canMoveUp={groupIndex > 0}
+                        canMoveDown={groupIndex < group.length - 1}
+                        isDragging={draggedTodo?.id === todo.id}
+                        isDragTarget={draggedTodo?.id === todo.id}
+                        dragDisabled={true}
+                        reorderDisabled={true}
+                        editRequest={
+                          editRequestTodoId === todo.id ? editRequestSeq : 0
+                        }
+                      />
+                    </div>
+                  {/each}
+                {/if}
+              </section>
+            {/key}
+          {:else}
+            {#each agendaDefinitions as section (section.key)}
             {@const sectionTodos = agendaTodos(section.key)}
             {#if sectionTodos.length > 0}
               <section class={`agenda-section ${section.key}`}>
@@ -1963,7 +2155,8 @@
                 {/each}
               </section>
             {/if}
-          {/each}
+            {/each}
+          {/if}
         </div>
       {:else}
       {#each renderedTodos as todo (todo.id)}
