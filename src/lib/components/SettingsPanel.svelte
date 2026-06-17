@@ -150,6 +150,7 @@
         <option value="remember">记住上次</option>
         <option value="all">全部</option>
         <option value="today">今天</option>
+        <option value="quadrants">四象限</option>
       </select>
     </label>
 

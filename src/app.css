@@ -775,6 +775,186 @@ footer {
   scrollbar-width: thin;
 }
 
+.quadrant-overview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin-bottom: 9px;
+}
+
+.quadrant-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 13px;
+  color: var(--quadrant-contrast, #fff);
+  background: var(--quadrant-color, #c9c2b2);
+  text-align: left;
+  box-shadow: 0 8px 20px rgb(120 90 30 / 10%);
+  cursor: pointer;
+}
+
+.quadrant-card span,
+.quadrant-card small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quadrant-card span {
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.quadrant-card strong {
+  color: var(--quadrant-contrast, #fff);
+  font-size: 16px;
+}
+
+.quadrant-card small {
+  color: color-mix(in srgb, var(--quadrant-contrast, #fff) 82%, transparent);
+  font-size: 10px;
+}
+
+.quadrant-card.active {
+  border-color: #fffdf8;
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--quadrant-color, #c9c2b2) 45%, transparent),
+    0 8px 20px rgb(120 90 30 / 14%);
+}
+
+.quadrant-card.warm {
+  --quadrant-color: #ff6f61;
+  --quadrant-soft: #ffe9e6;
+  --quadrant-contrast: #fff;
+}
+
+.quadrant-card.gold {
+  --quadrant-color: #ffc83d;
+  --quadrant-soft: #fff0bd;
+  --quadrant-contrast: #3d3528;
+}
+
+.quadrant-card.blue {
+  --quadrant-color: #5fb0c9;
+  --quadrant-soft: #e7f4f8;
+  --quadrant-contrast: #fff;
+}
+
+.quadrant-card.gray {
+  --quadrant-color: #c9c2b2;
+  --quadrant-soft: #f0ece4;
+  --quadrant-contrast: #3d3528;
+}
+
+.quadrant-reset {
+  margin: 0 0 9px;
+  padding: 5px 9px;
+  border: 0;
+  border-radius: 999px;
+  color: #8f7650;
+  background: #f4ecd9;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.quadrant-sections {
+  display: grid;
+  gap: 10px;
+}
+
+.quadrant-section {
+  --quadrant-color: #c9c2b2;
+  --quadrant-soft: #f0ece4;
+  display: grid;
+  gap: 7px;
+  padding: 9px;
+  border: 1px solid color-mix(in srgb, var(--quadrant-color) 34%, #eee2cc);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--quadrant-soft) 72%, #fffdf8);
+}
+
+.quadrant-section.warm {
+  --quadrant-color: #ff6f61;
+  --quadrant-soft: #ffe9e6;
+}
+
+.quadrant-section.gold {
+  --quadrant-color: #ffc83d;
+  --quadrant-soft: #fff0bd;
+}
+
+.quadrant-section.blue {
+  --quadrant-color: #5fb0c9;
+  --quadrant-soft: #e7f4f8;
+}
+
+.quadrant-section.gray {
+  --quadrant-color: #c9c2b2;
+  --quadrant-soft: #f0ece4;
+}
+
+.quadrant-section header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #665844;
+}
+
+.quadrant-dot {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--quadrant-color);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 6%);
+}
+
+.quadrant-section .todo-item {
+  border-color: color-mix(in srgb, var(--quadrant-color) 28%, #eadfcf);
+  background: color-mix(in srgb, var(--quadrant-soft) 44%, #fffdf8);
+}
+
+.quadrant-section .todo-item:hover {
+  border-color: color-mix(in srgb, var(--quadrant-color) 48%, #eadfcf);
+  background: color-mix(in srgb, var(--quadrant-soft) 58%, #fffdf8);
+}
+
+.quadrant-section .todo-row.selected .todo-item {
+  border-color: var(--quadrant-color);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--quadrant-color) 18%, transparent);
+}
+
+.quadrant-section header div {
+  display: grid;
+  gap: 1px;
+}
+
+.quadrant-section header strong {
+  font-size: 12px;
+}
+
+.quadrant-section header span,
+.quadrant-section header small,
+.quadrant-empty {
+  color: #aa9c87;
+  font-size: 10px;
+}
+
+.quadrant-section .todo-row:last-child .todo-item {
+  margin-bottom: 0;
+}
+
+.quadrant-empty {
+  padding: 10px 4px;
+  text-align: center;
+}
+
 .todo-item {
   gap: 9px;
   margin-bottom: 8px;
@@ -885,7 +1065,8 @@ footer {
   cursor: pointer;
 }
 
-.pin-badge {
+.pin-badge,
+.priority-badge {
   display: inline-flex;
   align-items: center;
   padding: 2px 6px;
@@ -896,6 +1077,11 @@ footer {
   font-size: 10px;
   line-height: 1.3;
   cursor: pointer;
+}
+
+.priority-badge {
+  color: #9a5748;
+  background: #f8e4df;
 }
 
 .reminder-badge {
@@ -2610,6 +2796,53 @@ html[data-theme="dark"] .todo-list {
   scrollbar-color: #4c453a transparent;
 }
 
+html[data-theme="dark"] .quadrant-card {
+  background: color-mix(in srgb, var(--quadrant-color) 58%, #2b2823);
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .quadrant-section {
+  border-color: color-mix(in srgb, var(--quadrant-color) 38%, #3b362f);
+  background: color-mix(in srgb, var(--quadrant-color) 16%, #2b2823);
+}
+
+html[data-theme="dark"] .quadrant-section .todo-item {
+  border-color: color-mix(in srgb, var(--quadrant-color) 26%, #3b362f);
+  background: color-mix(in srgb, var(--quadrant-color) 13%, #2b2823);
+}
+
+html[data-theme="dark"] .quadrant-section .todo-item:hover {
+  border-color: color-mix(in srgb, var(--quadrant-color) 42%, #51493d);
+  background: color-mix(in srgb, var(--quadrant-color) 18%, #2b2823);
+}
+
+html[data-theme="dark"] .quadrant-section .todo-row.selected .todo-item {
+  border-color: color-mix(in srgb, var(--quadrant-color) 72%, #f1e9dc);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--quadrant-color) 22%, transparent);
+}
+
+html[data-theme="dark"] .quadrant-card strong,
+html[data-theme="dark"] .quadrant-section header {
+  color: #eadfcf;
+}
+
+html[data-theme="dark"] .quadrant-card small,
+html[data-theme="dark"] .quadrant-section header span,
+html[data-theme="dark"] .quadrant-section header small,
+html[data-theme="dark"] .quadrant-empty {
+  color: #9f9483;
+}
+
+html[data-theme="dark"] .quadrant-card.active {
+  border-color: #f1e9dc;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--quadrant-color) 45%, transparent);
+}
+
+html[data-theme="dark"] .quadrant-reset {
+  color: #d9cebd;
+  background: #37322b;
+}
+
 html[data-theme="dark"] .todo-item {
   border-color: #3b362f;
   background: rgb(43 40 35 / 82%);
@@ -2655,6 +2888,11 @@ html[data-theme="dark"] .due-badge {
 html[data-theme="dark"] .pin-badge {
   color: #d3ad4d;
   background: #3f3520;
+}
+
+html[data-theme="dark"] .priority-badge {
+  color: #e0a094;
+  background: #462b25;
 }
 
 html[data-theme="dark"] .reminder-badge {

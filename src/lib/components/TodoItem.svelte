@@ -39,6 +39,7 @@
     repeatScope?: RepeatEditScope,
   ) => Promise<void>;
   export let onPin: (todo: Todo, pinned: boolean) => Promise<void>;
+  export let onPriority: (todo: Todo, priority: number) => Promise<void>;
   export let onSchedule: (
     id: number,
     schedule: TodoScheduleInput,
@@ -469,7 +470,7 @@
           {notePreview}
         </button>
       {/if}
-      {#if dueLabel || todo.pinned || todo.reminder_at !== null || todo.repeat_rule !== null}
+      {#if dueLabel || todo.pinned || todo.priority === 1 || todo.reminder_at !== null || todo.repeat_rule !== null}
         <div class="todo-meta">
           {#if todo.pinned}
             <button
@@ -479,6 +480,16 @@
               onclick={() => void onPin(todo, false)}
             >
               置顶
+            </button>
+          {/if}
+          {#if todo.priority === 1}
+            <button
+              class="priority-badge"
+              type="button"
+              title="取消重要"
+              onclick={() => void onPriority(todo, 0)}
+            >
+              重要
             </button>
           {/if}
           {#if dueLabel}
@@ -707,6 +718,16 @@
           }}
         >
           {todo.pinned ? "取消置顶" : "置顶"}
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          onclick={() => {
+            actionsOpen = false;
+            void onPriority(todo, todo.priority === 1 ? 0 : 1);
+          }}
+        >
+          {todo.priority === 1 ? "取消重要" : "设为重要"}
         </button>
         <button
           type="button"

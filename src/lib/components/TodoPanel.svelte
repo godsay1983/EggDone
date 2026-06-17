@@ -49,6 +49,11 @@
   type GroupColor = "yellow" | "green" | "blue" | "peach" | "lavender" | "gray";
   type GroupDropTarget = string | null;
   type FocusTodoPayload = { uuid: string };
+  type QuadrantKey =
+    | "importantUrgent"
+    | "importantNotUrgent"
+    | "normalUrgent"
+    | "normalNotUrgent";
 
   const groupColorOptions: Array<{ value: GroupColor; label: string }> = [
     { value: "yellow", label: "蛋黄" },
@@ -57,6 +62,38 @@
     { value: "peach", label: "蜜桃" },
     { value: "lavender", label: "薰衣草" },
     { value: "gray", label: "米灰" },
+  ];
+
+  const quadrantDefinitions: Array<{
+    key: QuadrantKey;
+    title: string;
+    subtitle: string;
+    tone: string;
+  }> = [
+    {
+      key: "importantUrgent",
+      title: "立刻做",
+      subtitle: "重要且紧急",
+      tone: "warm",
+    },
+    {
+      key: "importantNotUrgent",
+      title: "安排做",
+      subtitle: "重要不紧急",
+      tone: "gold",
+    },
+    {
+      key: "normalUrgent",
+      title: "顺手做",
+      subtitle: "不重要但紧急",
+      tone: "blue",
+    },
+    {
+      key: "normalNotUrgent",
+      title: "有空再说",
+      subtitle: "不重要不紧急",
+      tone: "gray",
+    },
   ];
 
   let title = "";
@@ -82,6 +119,7 @@
   let searchQuery = "";
   let showCompleted = true;
   let listView: TodoListView = "all";
+  let selectedQuadrant: QuadrantKey | "all" = "all";
   let defaultListViewMode: DefaultListViewMode = "remember";
   let selectedGroup = "all";
   let creatingGroup = false;
@@ -111,7 +149,7 @@
   let batchBusy = false;
   let batchMoveTarget = "";
   $: searchActive = searchQuery.trim().length > 0;
-  $: reorderDisabled = searchActive || listView === "today";
+  $: reorderDisabled = searchActive || listView !== "all";
   $: todayCount = $todos.items.filter((todo) => isDueTodayOrOverdue(todo)).length;
   $: activeGroupUuid = groupFilterValue(selectedGroup);
   $: selectedGroupObject = $todos.groups.find(
@@ -309,6 +347,9 @@
 
   function setListView(view: TodoListView) {
     listView = view;
+    if (view !== "quadrants") {
+      selectedQuadrant = "all";
+    }
     summaryMenuOpen = false;
     localStorage.setItem(LAST_LIST_VIEW_KEY, view);
     selectedTodoId = null;
@@ -581,6 +622,35 @@
     } catch (error) {
       todos.reportError(error);
     }
+  }
+
+  async function priorityTodo(todo: Todo, priority: number) {
+    try {
+      await todos.setPriority(todo, priority);
+    } catch (error) {
+      todos.reportError(error);
+    }
+  }
+
+  function isUrgentTodo(todo: Todo) {
+    return isDueTodayOrOverdue(todo);
+  }
+
+  function quadrantKey(todo: Todo): QuadrantKey {
+    const important = todo.priority === 1;
+    const urgent = isUrgentTodo(todo);
+    if (important && urgent) return "importantUrgent";
+    if (important) return "importantNotUrgent";
+    if (urgent) return "normalUrgent";
+    return "normalNotUrgent";
+  }
+
+  function quadrantTodos(key: QuadrantKey) {
+    return renderedTodos.filter((todo) => quadrantKey(todo) === key);
+  }
+
+  function quadrantCount(key: QuadrantKey) {
+    return filteredTodos.filter((todo) => quadrantKey(todo) === key).length;
   }
 
   function selectTodo(id: number) {
@@ -1526,6 +1596,14 @@
       >
         今天{todayCount > 0 ? ` ${todayCount}` : ""}
       </button>
+      <button
+        class:active={listView === "quadrants"}
+        type="button"
+        aria-pressed={listView === "quadrants"}
+        onclick={() => setListView("quadrants")}
+      >
+        四象限
+      </button>
     </div>
     <div bind:this={summaryActionsElement} class="summary-actions">
       <span class="count">{$remainingCount} 项未完成</span>
@@ -1666,6 +1744,8 @@
             ? "没有找到匹配任务"
             : listView === "today"
               ? "今天还没有到期任务"
+              : listView === "quadrants"
+                ? "四象限里还没有匹配任务"
               : "已完成任务已隐藏"}
         </strong>
         <span>
@@ -1673,6 +1753,8 @@
             ? "换个关键词试试"
             : listView === "today"
               ? "可以给任务设置今天或更早的到期日"
+              : listView === "quadrants"
+                ? "可以先新增任务或调整筛选条件"
               : "需要时可以重新显示"}
         </span>
       </div>
@@ -1680,6 +1762,90 @@
       {#if $todos.error}
         <div class="inline-error" role="alert">{$todos.error}</div>
       {/if}
+      {#if listView === "quadrants"}
+        <div class="quadrant-overview" aria-label="四象限概览">
+          {#each quadrantDefinitions as quadrant (quadrant.key)}
+            <button
+              class:active={selectedQuadrant === quadrant.key}
+              class={`quadrant-card ${quadrant.tone}`}
+              type="button"
+              aria-pressed={selectedQuadrant === quadrant.key}
+              onclick={() =>
+                (selectedQuadrant =
+                  selectedQuadrant === quadrant.key ? "all" : quadrant.key)}
+            >
+              <span>{quadrant.title}</span>
+              <strong>{quadrantCount(quadrant.key)}</strong>
+              <small>{quadrant.subtitle}</small>
+            </button>
+          {/each}
+        </div>
+        {#if selectedQuadrant !== "all"}
+          <button
+            class="quadrant-reset"
+            type="button"
+            onclick={() => (selectedQuadrant = "all")}
+          >
+            显示全部象限
+          </button>
+        {/if}
+        <div class="quadrant-sections">
+          {#each quadrantDefinitions.filter((quadrant) => selectedQuadrant === "all" || selectedQuadrant === quadrant.key) as quadrant (quadrant.key)}
+            {@const sectionTodos = quadrantTodos(quadrant.key)}
+            <section class={`quadrant-section ${quadrant.tone}`}>
+              <header>
+                <span class="quadrant-dot" aria-hidden="true"></span>
+                <div>
+                  <strong>{quadrant.title}</strong>
+                  <span>{quadrant.subtitle}</span>
+                </div>
+                <small>{sectionTodos.length}</small>
+              </header>
+              {#if sectionTodos.length === 0}
+                <div class="quadrant-empty">这里暂时没有任务</div>
+              {:else}
+                {#each sectionTodos as todo (todo.id)}
+                  {@const group = sectionTodos.filter((item) => item.completed === todo.completed && item.pinned === todo.pinned)}
+                  {@const groupIndex = group.findIndex((item) => item.id === todo.id)}
+                  <div
+                    class:selected={selectedTodoId === todo.id}
+                    class="todo-row"
+                    animate:flip={{ duration: reorderAnimationDuration }}
+                  >
+                    <TodoItem
+                      {todo}
+                      onToggle={toggleTodo}
+                      onEdit={editTodo}
+                      onNote={noteTodo}
+                      onPin={pinTodo}
+                      onPriority={priorityTodo}
+                      onSchedule={scheduleTodo}
+                      onSnooze={snoozeTodo}
+                      groups={$todos.groups}
+                      onGroupChange={moveTodoToGroup}
+                      onDelete={deleteTodo}
+                      onMove={moveTodo}
+                      onDragStart={startDrag}
+                      batchMode={batchMode}
+                      batchSelected={batchSelectedIds.has(todo.id)}
+                      onBatchSelect={toggleBatchTodo}
+                      canMoveUp={groupIndex > 0}
+                      canMoveDown={groupIndex < group.length - 1}
+                      isDragging={draggedTodo?.id === todo.id}
+                      isDragTarget={draggedTodo?.id === todo.id}
+                      dragDisabled={true}
+                      reorderDisabled={true}
+                      editRequest={
+                        editRequestTodoId === todo.id ? editRequestSeq : 0
+                      }
+                    />
+                  </div>
+                {/each}
+              {/if}
+            </section>
+          {/each}
+        </div>
+      {:else}
       {#each renderedTodos as todo (todo.id)}
         {@const group = renderedTodos.filter((item) => item.completed === todo.completed && item.pinned === todo.pinned)}
         {@const groupIndex = group.findIndex((item) => item.id === todo.id)}
@@ -1694,6 +1860,7 @@
             onEdit={editTodo}
             onNote={noteTodo}
             onPin={pinTodo}
+            onPriority={priorityTodo}
             onSchedule={scheduleTodo}
             onSnooze={snoozeTodo}
             groups={$todos.groups}
@@ -1716,6 +1883,7 @@
           />
         </div>
       {/each}
+      {/if}
     {/if}
   </section>
 
