@@ -306,8 +306,41 @@ pub(crate) fn update_task_badge(app: &AppHandle) {
     }
 }
 
+pub(crate) fn update_focus_tooltip(
+    app: &AppHandle,
+    phase: &str,
+    remaining_ms: u64,
+    title: Option<&str>,
+) {
+    let Some(tray) = app.tray_by_id(TRAY_ID) else {
+        return;
+    };
+    let tooltip = focus_tooltip(phase, remaining_ms, title);
+    let _ = tray.set_tooltip(Some(tooltip));
+}
+
 fn task_tooltip(remaining: u32, total: u32, today_due: u32) -> String {
     format!("蛋定 Todo · {remaining}/{total} 项未完成 · 今天 {today_due} 项")
+}
+
+fn focus_tooltip(phase: &str, remaining_ms: u64, title: Option<&str>) -> String {
+    let phase_label = if phase == "break" { "休息" } else { "专注" };
+    let total_seconds = remaining_ms.div_ceil(1000);
+    let minutes = total_seconds / 60;
+    let seconds = total_seconds % 60;
+    let time = format!("{minutes:02}:{seconds:02}");
+    let task = title
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(truncate_focus_title);
+    match task {
+        Some(task) => format!("{phase_label} {time} · {task}"),
+        None => format!("{phase_label} {time}"),
+    }
+}
+
+fn truncate_focus_title(title: &str) -> String {
+    truncate_menu_title(title, 18)
 }
 
 fn today_task_titles(
@@ -672,6 +705,15 @@ mod tests {
             task_tooltip(3, 4, 2),
             "蛋定 Todo · 3/4 项未完成 · 今天 2 项"
         );
+    }
+
+    #[test]
+    fn focus_tooltip_includes_phase_time_and_task() {
+        assert_eq!(
+            focus_tooltip("focus", 24 * 60 * 1000 + 59 * 1000, Some("写周报")),
+            "专注 24:59 · 写周报"
+        );
+        assert_eq!(focus_tooltip("break", 5 * 60 * 1000, None), "休息 05:00");
     }
 
     #[test]

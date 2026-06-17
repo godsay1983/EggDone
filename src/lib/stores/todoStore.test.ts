@@ -119,6 +119,8 @@ function createApi(initialItems: Todo[] = []) {
     hidePanel: vi.fn(async () => undefined),
     openFocusWindow: vi.fn(async () => undefined),
     publishFocusNotification: vi.fn(async () => undefined),
+    updateFocusTrayTooltip: vi.fn(async () => undefined),
+    restoreTrayTaskTooltip: vi.fn(async () => undefined),
     markPanelInteraction: vi.fn(async () => undefined),
   };
   return api;

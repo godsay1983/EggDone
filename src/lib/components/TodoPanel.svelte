@@ -671,17 +671,20 @@
     focusRemainingMs = focusDurations[phase];
     focusEndsAt = Date.now() + focusRemainingMs;
     focusRunning = true;
+    updateFocusTrayTooltip();
   }
 
   function updateFocusTimer() {
     if (!focusRunning || focusEndsAt === null) return;
     focusRemainingMs = Math.max(0, focusEndsAt - Date.now());
+    updateFocusTrayTooltip();
     if (focusRemainingMs > 0) return;
     const completedPhase = focusPhase;
     focusRunning = false;
     focusEndsAt = null;
     focusPhase = focusPhase === "focus" ? "break" : "focus";
     focusRemainingMs = focusDurations[focusPhase];
+    updateFocusTrayTooltip();
     if (isTauri()) {
       void todoApi.publishFocusNotification(completedPhase).catch(() => {});
     }
@@ -717,6 +720,9 @@
     clearFocusTarget();
     focusTarget = null;
     showFocus = false;
+    if (isTauri()) {
+      void todoApi.restoreTrayTaskTooltip().catch(() => {});
+    }
   }
 
   async function completeFocusTarget() {
@@ -742,6 +748,17 @@
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
     return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  }
+
+  function updateFocusTrayTooltip() {
+    if (!isTauri()) return;
+    void todoApi
+      .updateFocusTrayTooltip(
+        focusPhase,
+        Math.max(0, Math.ceil(focusRemainingMs)),
+        focusTarget?.title ?? null,
+      )
+      .catch(() => {});
   }
 
   async function addTodo() {

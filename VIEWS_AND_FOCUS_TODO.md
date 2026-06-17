@@ -96,7 +96,7 @@ UI 设计预览见 `mockups/eggdone-features-mockup.html`。
 
 ### 托盘与提醒
 
-- [ ] 托盘 tooltip 显示 `专注 mm:ss · 任务名`。
+- [x] 托盘 tooltip 显示 `专注 mm:ss · 任务名`。
 - [ ] 托盘右键增加 `开始专注 / 暂停 / 结束专注`，不开窗也能控制。
 - [x] 阶段结束发 Windows 系统通知（复用现有 toast，可带「开始休息 / 再来一颗」按钮）。
 

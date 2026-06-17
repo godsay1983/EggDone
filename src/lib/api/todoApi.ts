@@ -165,6 +165,22 @@ export const todoApi = {
     return invoke<void>("publish_focus_notification", { completedPhase });
   },
 
+  updateFocusTrayTooltip(
+    phase: "focus" | "break",
+    remainingMs: number,
+    title?: string | null,
+  ): Promise<void> {
+    return invoke<void>("update_focus_tray_tooltip", {
+      phase,
+      remainingMs,
+      title,
+    });
+  },
+
+  restoreTrayTaskTooltip(): Promise<void> {
+    return invoke<void>("restore_tray_task_tooltip");
+  },
+
   markPanelInteraction(): Promise<void> {
     return invoke<void>("mark_panel_interaction");
   },

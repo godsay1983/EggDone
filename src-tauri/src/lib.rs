@@ -102,6 +102,8 @@ pub fn run() {
             commands::open_focus_window,
             commands::hide_focus_window,
             commands::publish_focus_notification,
+            commands::update_focus_tray_tooltip,
+            commands::restore_tray_task_tooltip,
             commands::mark_panel_interaction,
             commands::toggle_panel_from_shortcut,
             commands::prepare_sync_document,

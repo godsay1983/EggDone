@@ -74,6 +74,20 @@
     document.documentElement.dataset.theme = theme;
   }
 
+  function updateFocusTrayTooltip() {
+    if (!isTauri()) return;
+    void invoke("update_focus_tray_tooltip", {
+      phase: focusPhase,
+      remainingMs: Math.max(0, Math.ceil(focusRemainingMs)),
+      title: focusTarget?.title ?? null,
+    }).catch(() => {});
+  }
+
+  function restoreTrayTaskTooltip() {
+    if (!isTauri()) return;
+    void invoke("restore_tray_task_tooltip").catch(() => {});
+  }
+
   function refreshFocusDurations() {
     const previous = focusDurations;
     const next = getFocusDurations();
@@ -107,17 +121,20 @@
     focusRemainingMs = focusDurations[phase];
     focusEndsAt = Date.now() + focusRemainingMs;
     focusRunning = true;
+    updateFocusTrayTooltip();
   }
 
   function updateFocusTimer() {
     if (!focusRunning || focusEndsAt === null) return;
     focusRemainingMs = Math.max(0, focusEndsAt - Date.now());
+    updateFocusTrayTooltip();
     if (focusRemainingMs > 0) return;
     const completedPhase = focusPhase;
     focusRunning = false;
     focusEndsAt = null;
     focusPhase = focusPhase === "focus" ? "break" : "focus";
     focusRemainingMs = focusDurations[focusPhase];
+    updateFocusTrayTooltip();
     if (isTauri()) {
       void invoke("publish_focus_notification", { completedPhase }).catch(() => {});
     }
@@ -151,6 +168,7 @@
     focusEndsAt = null;
     focusRemainingMs = focusDurations.focus;
     clearFocusTarget();
+    restoreTrayTaskTooltip();
     await hideFocusWindow();
   }
 
@@ -169,6 +187,7 @@
       focusEndsAt = null;
       focusRemainingMs = focusDurations.focus;
       clearFocusTarget();
+      restoreTrayTaskTooltip();
       await hideFocusWindow();
     } finally {
       completingTarget = false;

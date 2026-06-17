@@ -410,6 +410,23 @@ pub fn publish_focus_notification(app: AppHandle, completed_phase: String) -> Re
 }
 
 #[tauri::command]
+pub fn update_focus_tray_tooltip(
+    app: AppHandle,
+    phase: String,
+    remaining_ms: u64,
+    title: Option<String>,
+) -> Result<(), String> {
+    tray::update_focus_tooltip(&app, &phase, remaining_ms, title.as_deref());
+    Ok(())
+}
+
+#[tauri::command]
+pub fn restore_tray_task_tooltip(app: AppHandle) -> Result<(), String> {
+    tray::update_task_badge(&app);
+    Ok(())
+}
+
+#[tauri::command]
 pub fn mark_panel_interaction(panel_state: State<'_, PanelState>) {
     panel_state.mark_internal_interaction();
 }
