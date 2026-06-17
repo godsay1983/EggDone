@@ -123,6 +123,18 @@ export function createTodoStore(api = todoApi, onChanged = scheduleAutoSync) {
       onChanged();
     },
 
+    async setPriority(todo: Todo, priority: number) {
+      const updatedTodo = await api.setPriority(todo.id, priority);
+      update((state) => ({
+        ...state,
+        items: state.items
+          .map((item) => (item.id === updatedTodo.id ? updatedTodo : item))
+          .sort(sortTodos),
+        error: null,
+      }));
+      onChanged();
+    },
+
     async addGroup(name: string) {
       const group = await api.createGroup(name);
       update((state) => ({

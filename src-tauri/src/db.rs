@@ -9,7 +9,7 @@ use rusqlite::{params, Connection, Transaction};
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
-const CURRENT_SCHEMA_VERSION: i64 = 12;
+const CURRENT_SCHEMA_VERSION: i64 = 13;
 const DEVICE_ID_KEY: &str = "device_id";
 
 pub struct Database {
@@ -75,6 +75,7 @@ pub(crate) fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {
     apply_migration(connection, 10, add_repeat_series_uuid)?;
     apply_migration(connection, 11, add_todo_note)?;
     apply_migration(connection, 12, add_todo_archive)?;
+    apply_migration(connection, 13, add_todo_priority)?;
 
     debug_assert_eq!(schema_version(connection)?, CURRENT_SCHEMA_VERSION);
     Ok(())
@@ -398,6 +399,15 @@ fn add_todo_archive(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
     )
 }
 
+fn add_todo_priority(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
+    transaction.execute_batch(
+        "
+        ALTER TABLE todos
+            ADD COLUMN priority INTEGER NOT NULL DEFAULT 0 CHECK(priority IN (0, 1));
+        ",
+    )
+}
+
 pub(crate) fn device_id(connection: &Connection) -> rusqlite::Result<String> {
     connection.query_row(
         "SELECT value FROM app_metadata WHERE key = ?1",
@@ -458,6 +468,7 @@ mod tests {
             "repeat_series_uuid",
             "note",
             "archived_at",
+            "priority",
         ] {
             assert!(columns.iter().any(|column| column == expected));
         }
@@ -937,5 +948,54 @@ mod tests {
             .unwrap();
         assert!(columns.iter().any(|column| column == "note"));
         assert!(columns.iter().any(|column| column == "archived_at"));
+    }
+
+    #[test]
+    fn upgrades_v12_database_with_default_priority() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "
+                CREATE TABLE schema_migrations (
+                    version INTEGER PRIMARY KEY,
+                    applied_at INTEGER NOT NULL
+                );
+                ",
+            )
+            .unwrap();
+        apply_migration(&mut connection, 1, create_legacy_schema).unwrap();
+        apply_migration(&mut connection, 2, migrate_todos_for_sync).unwrap();
+        apply_migration(&mut connection, 3, add_sync_identity).unwrap();
+        apply_migration(&mut connection, 4, add_sync_settings).unwrap();
+        apply_migration(&mut connection, 5, add_todo_pinning).unwrap();
+        apply_migration(&mut connection, 6, add_todo_due_fields).unwrap();
+        apply_migration(&mut connection, 7, add_reminder_deliveries).unwrap();
+        apply_migration(&mut connection, 8, add_todo_groups).unwrap();
+        apply_migration(&mut connection, 9, add_todo_repeats).unwrap();
+        apply_migration(&mut connection, 10, add_repeat_series_uuid).unwrap();
+        apply_migration(&mut connection, 11, add_todo_note).unwrap();
+        apply_migration(&mut connection, 12, add_todo_archive).unwrap();
+        connection
+            .execute(
+                "
+                INSERT INTO todos (
+                    uuid, title, completed, sort_order, created_at, updated_at, updated_by
+                )
+                VALUES (?1, 'priority default', 0, 0, 1, 2, ?2)
+                ",
+                params![
+                    "00000000-0000-4000-8000-000000000001",
+                    device_id(&connection).unwrap()
+                ],
+            )
+            .unwrap();
+
+        migrate(&mut connection).unwrap();
+
+        assert_eq!(schema_version(&connection).unwrap(), CURRENT_SCHEMA_VERSION);
+        let priority: i64 = connection
+            .query_row("SELECT priority FROM todos", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(priority, 0);
     }
 }

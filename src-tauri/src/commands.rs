@@ -25,6 +25,7 @@ pub struct Todo {
     group_uuid: Option<String>,
     completed: bool,
     pinned: bool,
+    priority: i64,
     sort_order: i64,
     created_at: i64,
     updated_at: i64,
@@ -229,6 +230,21 @@ pub fn set_todo_pinned(
     let result = {
         let connection = lock_database(&database)?;
         set_todo_pinned_in_connection(&connection, id, pinned)
+    };
+    refresh_badge_after_success(&app, &result);
+    result
+}
+
+#[tauri::command]
+pub fn set_todo_priority(
+    id: i64,
+    priority: i64,
+    app: AppHandle,
+    database: State<'_, Database>,
+) -> Result<Todo, String> {
+    let result = {
+        let connection = lock_database(&database)?;
+        set_todo_priority_in_connection(&connection, id, priority)
     };
     refresh_badge_after_success(&app, &result);
     result
@@ -496,7 +512,7 @@ fn list_todos_from_connection(connection: &Connection) -> Result<Vec<Todo>, Stri
         .prepare(
             "
             SELECT
-                id, uuid, title, note, group_uuid, completed, pinned, sort_order,
+                id, uuid, title, note, group_uuid, completed, pinned, priority, sort_order,
                 created_at, updated_at, completed_at, deleted_at, archived_at,
                 due_date, due_at, reminder_at,
                 repeat_rule, repeat_next_due_date, repeat_series_uuid
@@ -559,12 +575,12 @@ fn create_todo_in_connection(
         .execute(
             "
             INSERT INTO todos (
-                uuid, title, note, group_uuid, completed, sort_order,
+                uuid, title, note, group_uuid, completed, pinned, priority, sort_order,
                 created_at, updated_at, completed_at, deleted_at, archived_at,
                 due_date, due_at, reminder_at,
                 repeat_rule, repeat_next_due_date, repeat_series_uuid, updated_by
             )
-            VALUES (?1, ?2, NULL, ?3, 0, ?4, ?5, ?5, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?6)
+            VALUES (?1, ?2, NULL, ?3, 0, 0, 0, ?4, ?5, ?5, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?6)
             ",
             params![uuid, title, group_uuid, sort_order, now, updated_by],
         )
@@ -904,6 +920,36 @@ fn set_todo_pinned_in_connection(
     find_todo(connection, id)?.ok_or_else(|| "置顶后未能读取任务".to_string())
 }
 
+fn set_todo_priority_in_connection(
+    connection: &Connection,
+    id: i64,
+    priority: i64,
+) -> Result<Todo, String> {
+    let priority = normalize_todo_priority(priority)?;
+    let changed = connection
+        .execute(
+            "
+            UPDATE todos
+            SET priority = ?1, updated_at = ?2, updated_by = ?3
+            WHERE id = ?4 AND deleted_at IS NULL
+              AND archived_at IS NULL
+            ",
+            params![
+                priority,
+                now_millis(),
+                device_id(connection).map_err(database_error)?,
+                id
+            ],
+        )
+        .map_err(database_error)?;
+
+    if changed == 0 {
+        return Err("任务不存在".to_string());
+    }
+
+    find_todo(connection, id)?.ok_or_else(|| "更新重要级别后未能读取任务".to_string())
+}
+
 fn set_todo_schedule_in_connection(
     connection: &mut Connection,
     id: i64,
@@ -1192,7 +1238,7 @@ fn find_todo(connection: &Connection, id: i64) -> Result<Option<Todo>, String> {
         .query_row(
             "
             SELECT
-                id, uuid, title, note, group_uuid, completed, pinned, sort_order,
+                id, uuid, title, note, group_uuid, completed, pinned, priority, sort_order,
                 created_at, updated_at, completed_at, deleted_at, archived_at,
                 due_date, due_at, reminder_at,
                 repeat_rule, repeat_next_due_date, repeat_series_uuid
@@ -1285,18 +1331,19 @@ fn map_todo(row: &rusqlite::Row<'_>) -> rusqlite::Result<Todo> {
         group_uuid: row.get(4)?,
         completed: row.get::<_, i64>(5)? != 0,
         pinned: row.get::<_, i64>(6)? != 0,
-        sort_order: row.get(7)?,
-        created_at: row.get(8)?,
-        updated_at: row.get(9)?,
-        completed_at: row.get(10)?,
-        deleted_at: row.get(11)?,
-        archived_at: row.get(12)?,
-        due_date: row.get(13)?,
-        due_at: row.get(14)?,
-        reminder_at: row.get(15)?,
-        repeat_rule: row.get(16)?,
-        repeat_next_due_date: row.get(17)?,
-        repeat_series_uuid: row.get(18)?,
+        priority: row.get(7)?,
+        sort_order: row.get(8)?,
+        created_at: row.get(9)?,
+        updated_at: row.get(10)?,
+        completed_at: row.get(11)?,
+        deleted_at: row.get(12)?,
+        archived_at: row.get(13)?,
+        due_date: row.get(14)?,
+        due_at: row.get(15)?,
+        reminder_at: row.get(16)?,
+        repeat_rule: row.get(17)?,
+        repeat_next_due_date: row.get(18)?,
+        repeat_series_uuid: row.get(19)?,
     })
 }
 
@@ -1423,6 +1470,13 @@ fn normalize_group_color(color: &str) -> Result<&str, String> {
     }
 }
 
+fn normalize_todo_priority(priority: i64) -> Result<i64, String> {
+    match priority {
+        0 | 1 => Ok(priority),
+        _ => Err("任务重要级别无效".to_string()),
+    }
+}
+
 fn normalize_due_date(due_date: Option<String>) -> Result<Option<String>, String> {
     let Some(value) = due_date else {
         return Ok(None);
@@ -1501,12 +1555,12 @@ fn create_next_repeat_instance(
         .execute(
             "
             INSERT INTO todos (
-                uuid, title, note, group_uuid, completed, pinned, sort_order,
+                uuid, title, note, group_uuid, completed, pinned, priority, sort_order,
                 created_at, updated_at, completed_at, deleted_at,
                 archived_at, due_date, due_at, reminder_at,
                 repeat_rule, repeat_next_due_date, repeat_series_uuid, updated_by
             )
-            VALUES (?1, ?2, ?3, ?4, 0, ?5, ?6, ?7, ?7, NULL, NULL, NULL, ?8, ?9, NULL, ?10, ?11, ?12, ?13)
+            VALUES (?1, ?2, ?3, ?4, 0, ?5, ?6, ?7, ?8, ?8, NULL, NULL, NULL, ?9, ?10, NULL, ?11, ?12, ?13, ?14)
             ",
             params![
                 uuid,
@@ -1514,6 +1568,7 @@ fn create_next_repeat_instance(
                 source.note,
                 source.group_uuid,
                 source.pinned,
+                source.priority,
                 sort_order,
                 now,
                 due_date,

@@ -19,12 +19,12 @@ UI 设计预览见 `mockups/eggdone-features-mockup.html`。
 
 ### 数据模型
 
-- [ ] 为 `todos` 增加 `priority` 字段：整数，`NOT NULL DEFAULT 0`，`0 = 普通`、`1 = 重要`（预留升级到多级）。
-- [ ] 提供顺序 migration（`db.rs`），验证旧库升级到默认 `0`。
-- [ ] `commands.rs` 读写 `priority`，设置 / 取消重要时更新 `updated_at` 和 `updated_by`。
-- [ ] `data_exchange.rs` 的 JSON 导入导出包含 `priority`。
-- [ ] `sync.rs` 序列化包含 `priority`；合并仍按整条记录比 `updated_at`，不新增合并规则。
-- [ ] `types.ts` 与 `todoStore.ts` 增加 `priority`，旧数据缺字段时回退 `0`。
+- [x] 为 `todos` 增加 `priority` 字段：整数，`NOT NULL DEFAULT 0`，`0 = 普通`、`1 = 重要`（预留升级到多级）。
+- [x] 提供顺序 migration（`db.rs`），验证旧库升级到默认 `0`。
+- [x] `commands.rs` 读写 `priority`，设置 / 取消重要时更新 `updated_at` 和 `updated_by`。
+- [x] `data_exchange.rs` 的 JSON 导入导出包含 `priority`。
+- [x] `sync.rs` 序列化包含 `priority`；合并仍按整条记录比 `updated_at`，不新增合并规则。
+- [x] `types.ts` 与 `todoStore.ts` 增加 `priority`，旧数据缺字段时回退 `0`。
 
 ### 紧急度推导（不新增字段）
 

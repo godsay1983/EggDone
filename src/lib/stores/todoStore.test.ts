@@ -14,6 +14,7 @@ function makeTodo(id: number, overrides: Partial<Todo> = {}): Todo {
     group_uuid: null,
     completed: false,
     pinned: false,
+    priority: 0,
     sort_order: id * 1024,
     created_at: id,
     updated_at: id,
@@ -89,6 +90,7 @@ function createApi(initialItems: Todo[] = []) {
       updated_todos: [makeTodo(id, { note })],
     })),
     setPinned: vi.fn(async (id, pinned) => makeTodo(id, { pinned })),
+    setPriority: vi.fn(async (id, priority) => makeTodo(id, { priority })),
     setSchedule: vi.fn(async (id, schedule) => ({
       updated_todos: [makeTodo(id, schedule)],
     })),

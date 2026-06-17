@@ -17,6 +17,7 @@ function makeTodo(overrides: Partial<Todo> = {}): Todo {
     group_uuid: null,
     completed: false,
     pinned: false,
+    priority: 0,
     sort_order: 0,
     created_at: 1,
     updated_at: 1,

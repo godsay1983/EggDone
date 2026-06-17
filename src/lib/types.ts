@@ -6,6 +6,7 @@ export interface Todo {
   group_uuid: string | null;
   completed: boolean;
   pinned: boolean;
+  priority: number;
   sort_order: number;
   created_at: number;
   updated_at: number;

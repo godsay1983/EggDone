@@ -17,6 +17,7 @@ function makeTodo(
     group_uuid: null,
     completed,
     pinned: false,
+    priority: 0,
     sort_order: id * 1024,
     created_at: id,
     updated_at: id,

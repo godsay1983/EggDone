@@ -89,6 +89,10 @@ export const todoApi = {
     return invoke<Todo>("set_todo_pinned", { id, pinned });
   },
 
+  setPriority(id: number, priority: number): Promise<Todo> {
+    return invoke<Todo>("set_todo_priority", { id, priority });
+  },
+
   setSchedule(
     id: number,
     schedule: TodoScheduleInput,

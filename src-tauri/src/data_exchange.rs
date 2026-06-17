@@ -30,6 +30,8 @@ struct TransferTodo {
     completed: bool,
     #[serde(default)]
     pinned: bool,
+    #[serde(default)]
+    priority: i64,
     sort_order: i64,
     created_at: i64,
     updated_at: i64,
@@ -297,6 +299,9 @@ fn validate_import(import: &TodoExport) -> Result<(), String> {
         if todo.title.trim().is_empty() {
             return Err("导入文件包含空标题任务".to_string());
         }
+        if !matches!(todo.priority, 0 | 1) {
+            return Err("导入文件包含无效任务重要级别".to_string());
+        }
         if todo
             .note
             .as_deref()
@@ -360,7 +365,7 @@ fn read_all_todos(connection: &Connection) -> Result<Vec<TransferTodo>, String> 
     let mut statement = connection
         .prepare(
             "
-            SELECT uuid, title, group_uuid, completed, pinned, sort_order, created_at, updated_at,
+            SELECT uuid, title, group_uuid, completed, pinned, priority, sort_order, created_at, updated_at,
                    completed_at, deleted_at, archived_at, due_date, due_at, reminder_at,
                    repeat_rule, repeat_next_due_date, repeat_series_uuid, note
             FROM todos
@@ -542,11 +547,11 @@ fn insert_todo(
         .execute(
             "
             INSERT INTO todos (
-                uuid, title, group_uuid, completed, pinned, sort_order, created_at, updated_at,
+                uuid, title, group_uuid, completed, pinned, priority, sort_order, created_at, updated_at,
                 completed_at, deleted_at, archived_at, due_date, due_at, reminder_at,
                 repeat_rule, repeat_next_due_date, repeat_series_uuid, note, updated_by
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)
             ",
             params![
                 todo.uuid,
@@ -554,6 +559,7 @@ fn insert_todo(
                 todo.group_uuid,
                 todo.completed,
                 todo.pinned,
+                todo.priority,
                 todo.sort_order,
                 todo.created_at,
                 todo.updated_at,
@@ -593,17 +599,18 @@ fn update_todo(
         .execute(
             "
             UPDATE todos
-            SET title = ?1, completed = ?2, pinned = ?3, sort_order = ?4,
-                created_at = ?5, updated_at = ?6, completed_at = ?7,
-                deleted_at = ?8, archived_at = ?9, due_date = ?10, due_at = ?11, reminder_at = ?12,
-                repeat_rule = ?13, repeat_next_due_date = ?14,
-                repeat_series_uuid = ?15, note = ?16, group_uuid = ?17, updated_by = ?18
-            WHERE uuid = ?19
+            SET title = ?1, completed = ?2, pinned = ?3, priority = ?4, sort_order = ?5,
+                created_at = ?6, updated_at = ?7, completed_at = ?8,
+                deleted_at = ?9, archived_at = ?10, due_date = ?11, due_at = ?12, reminder_at = ?13,
+                repeat_rule = ?14, repeat_next_due_date = ?15,
+                repeat_series_uuid = ?16, note = ?17, group_uuid = ?18, updated_by = ?19
+            WHERE uuid = ?20
             ",
             params![
                 todo.title.trim(),
                 todo.completed,
                 todo.pinned,
+                todo.priority,
                 todo.sort_order,
                 todo.created_at,
                 todo.updated_at,
@@ -633,19 +640,20 @@ fn map_transfer_todo(row: &rusqlite::Row<'_>) -> rusqlite::Result<TransferTodo> 
         group_uuid: row.get(2)?,
         completed: row.get::<_, i64>(3)? != 0,
         pinned: row.get::<_, i64>(4)? != 0,
-        sort_order: row.get(5)?,
-        created_at: row.get(6)?,
-        updated_at: row.get(7)?,
-        completed_at: row.get(8)?,
-        deleted_at: row.get(9)?,
-        archived_at: row.get(10)?,
-        due_date: row.get(11)?,
-        due_at: row.get(12)?,
-        reminder_at: row.get(13)?,
-        repeat_rule: row.get(14)?,
-        repeat_next_due_date: row.get(15)?,
-        repeat_series_uuid: row.get(16)?,
-        note: row.get(17)?,
+        priority: row.get(5)?,
+        sort_order: row.get(6)?,
+        created_at: row.get(7)?,
+        updated_at: row.get(8)?,
+        completed_at: row.get(9)?,
+        deleted_at: row.get(10)?,
+        archived_at: row.get(11)?,
+        due_date: row.get(12)?,
+        due_at: row.get(13)?,
+        reminder_at: row.get(14)?,
+        repeat_rule: row.get(15)?,
+        repeat_next_due_date: row.get(16)?,
+        repeat_series_uuid: row.get(17)?,
+        note: row.get(18)?,
     })
 }
 
@@ -778,6 +786,7 @@ mod tests {
             group_uuid: None,
             completed: false,
             pinned: false,
+            priority: 0,
             sort_order: 0,
             created_at: 1,
             updated_at,
@@ -927,6 +936,7 @@ mod tests {
         let import: TodoExport = serde_json::from_str(json).unwrap();
         assert!(import.groups.is_empty());
         assert!(!import.todos[0].pinned);
+        assert_eq!(import.todos[0].priority, 0);
         assert_eq!(import.todos[0].note, None);
         assert_eq!(import.todos[0].archived_at, None);
         assert_eq!(import.todos[0].due_date, None);

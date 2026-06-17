@@ -26,6 +26,8 @@ pub(crate) struct SyncTodo {
     pub completed: bool,
     #[serde(default)]
     pub pinned: bool,
+    #[serde(default)]
+    pub priority: i64,
     pub sort_order: i64,
     pub created_at: i64,
     pub updated_at: i64,
@@ -93,7 +95,7 @@ pub(crate) fn build_document(
     let mut statement = connection
         .prepare(
             "
-            SELECT uuid, title, group_uuid, completed, pinned, sort_order, created_at, updated_at,
+            SELECT uuid, title, group_uuid, completed, pinned, priority, sort_order, created_at, updated_at,
                    completed_at, deleted_at, archived_at, due_date, due_at, reminder_at,
                    repeat_rule, repeat_next_due_date, repeat_series_uuid, note, updated_by
             FROM todos
@@ -221,16 +223,17 @@ pub(crate) fn merge_remote_document(
             .execute(
                 "
                 INSERT INTO todos (
-                    uuid, title, group_uuid, completed, pinned, sort_order, created_at, updated_at,
+                    uuid, title, group_uuid, completed, pinned, priority, sort_order, created_at, updated_at,
                     completed_at, deleted_at, archived_at, due_date, due_at, reminder_at,
                     repeat_rule, repeat_next_due_date, repeat_series_uuid, note, updated_by
                 )
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)
                 ON CONFLICT(uuid) DO UPDATE SET
                     title = excluded.title,
                     group_uuid = excluded.group_uuid,
                     completed = excluded.completed,
                     pinned = excluded.pinned,
+                    priority = excluded.priority,
                     sort_order = excluded.sort_order,
                     created_at = excluded.created_at,
                     updated_at = excluded.updated_at,
@@ -252,6 +255,7 @@ pub(crate) fn merge_remote_document(
                     todo.group_uuid,
                     todo.completed,
                     todo.pinned,
+                    todo.priority,
                     todo.sort_order,
                     todo.created_at,
                     todo.updated_at,
@@ -342,6 +346,9 @@ pub(crate) fn validate_document(document: &SyncDocument) -> Result<(), String> {
         if todo.title.trim().is_empty() {
             return Err("同步文件包含空标题任务".to_string());
         }
+        if !matches!(todo.priority, 0 | 1) {
+            return Err("同步文件包含无效任务重要级别".to_string());
+        }
         if todo
             .note
             .as_deref()
@@ -391,6 +398,7 @@ fn compare_todos(left: &SyncTodo, right: &SyncTodo) -> Ordering {
         .then_with(|| left.updated_by.cmp(&right.updated_by))
         .then_with(|| left.repeat_series_uuid.cmp(&right.repeat_series_uuid))
         .then_with(|| left.note.cmp(&right.note))
+        .then_with(|| left.priority.cmp(&right.priority))
         .then_with(|| canonical_tie_break(left).cmp(&canonical_tie_break(right)))
 }
 
@@ -501,20 +509,21 @@ fn map_sync_todo(row: &rusqlite::Row<'_>) -> rusqlite::Result<SyncTodo> {
         group_uuid: row.get(2)?,
         completed: row.get::<_, i64>(3)? != 0,
         pinned: row.get::<_, i64>(4)? != 0,
-        sort_order: row.get(5)?,
-        created_at: row.get(6)?,
-        updated_at: row.get(7)?,
-        completed_at: row.get(8)?,
-        deleted_at: row.get(9)?,
-        archived_at: row.get(10)?,
-        due_date: row.get(11)?,
-        due_at: row.get(12)?,
-        reminder_at: row.get(13)?,
-        repeat_rule: row.get(14)?,
-        repeat_next_due_date: row.get(15)?,
-        repeat_series_uuid: row.get(16)?,
-        note: row.get(17)?,
-        updated_by: row.get(18)?,
+        priority: row.get(5)?,
+        sort_order: row.get(6)?,
+        created_at: row.get(7)?,
+        updated_at: row.get(8)?,
+        completed_at: row.get(9)?,
+        deleted_at: row.get(10)?,
+        archived_at: row.get(11)?,
+        due_date: row.get(12)?,
+        due_at: row.get(13)?,
+        reminder_at: row.get(14)?,
+        repeat_rule: row.get(15)?,
+        repeat_next_due_date: row.get(16)?,
+        repeat_series_uuid: row.get(17)?,
+        note: row.get(18)?,
+        updated_by: row.get(19)?,
     })
 }
 
@@ -648,6 +657,7 @@ mod tests {
             group_uuid: None,
             completed: false,
             pinned: false,
+            priority: 0,
             sort_order: 0,
             created_at: 1,
             updated_at,
@@ -907,6 +917,7 @@ mod tests {
 
         let document: SyncDocument = serde_json::from_str(&json).unwrap();
         assert!(!document.todos[0].pinned);
+        assert_eq!(document.todos[0].priority, 0);
         assert_eq!(document.todos[0].note, None);
         assert!(document.groups.is_empty());
         assert_eq!(document.todos[0].archived_at, None);
