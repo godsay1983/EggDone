@@ -22,6 +22,7 @@
   let focusDisplayHint = "开始一颗番茄，先把注意力放在眼前这一件事。";
   let focusDisplayPhase = "专注";
   let focusTarget: FocusTarget | null = getFocusTarget();
+  let completingTarget = false;
 
   $: focusDisplayPhase = focusPhase === "focus" ? "专注" : "休息";
   $: focusDisplayTime = formatFocusTime(focusRemainingMs);
@@ -142,6 +143,27 @@
     await hideFocusWindow();
   }
 
+  async function completeFocusTarget() {
+    if (!focusTarget || completingTarget) return;
+    completingTarget = true;
+    try {
+      if (isTauri()) {
+        await invoke("set_todo_completed_by_uuid", {
+          uuid: focusTarget.uuid,
+          completed: true,
+        });
+      }
+      focusRunning = false;
+      focusPhase = "focus";
+      focusEndsAt = null;
+      focusRemainingMs = focusDurations.focus;
+      clearFocusTarget();
+      await hideFocusWindow();
+    } finally {
+      completingTarget = false;
+    }
+  }
+
   async function hideFocusWindow() {
     if (!isTauri()) {
       window.close();
@@ -181,7 +203,12 @@
 
     <strong>{focusDisplayTime}</strong>
     {#if focusTarget}
-      <small class="focus-window-target">正在专注：{focusTarget.title}</small>
+      <div class="focus-window-target-row">
+        <small class="focus-window-target">正在专注：{focusTarget.title}</small>
+        <button type="button" onclick={() => void completeFocusTarget()} disabled={completingTarget}>
+          {completingTarget ? "完成中" : "完成"}
+        </button>
+      </div>
     {/if}
     <p>{focusDisplayHint}</p>
   </section>

@@ -2117,6 +2117,7 @@ footer button {
 .focus-target,
 .focus-window-target {
   display: block;
+  min-width: 0;
   max-width: 100%;
   margin-top: 4px;
   overflow: hidden;
@@ -2127,12 +2128,50 @@ footer button {
   white-space: nowrap;
 }
 
+.focus-target-row,
+.focus-window-target-row {
+  display: flex;
+  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.focus-target-row {
+  margin-top: 4px;
+}
+
 .focus-window-target {
-  max-width: 252px;
+  flex: 1 1 auto;
+  max-width: 198px;
   padding: 4px 9px;
   border-radius: 999px;
   background: rgb(246 201 76 / 18%);
   line-height: 1.2;
+}
+
+.focus-target-row .focus-target,
+.focus-window-target-row .focus-window-target {
+  margin-top: 0;
+}
+
+.focus-target-row button,
+.focus-window-target-row button {
+  flex: 0 0 auto;
+  height: 24px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 999px;
+  color: #5f4c1e;
+  background: rgb(246 201 76 / 30%);
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.focus-target-row button:hover,
+.focus-window-target-row button:hover {
+  background: rgb(246 201 76 / 48%);
 }
 
 .focus-copy {
@@ -3779,6 +3818,17 @@ html[data-theme="dark"] .focus-copy {
 html[data-theme="dark"] .focus-target,
 html[data-theme="dark"] .focus-window-target {
   color: #e0c46d;
+}
+
+html[data-theme="dark"] .focus-target-row button,
+html[data-theme="dark"] .focus-window-target-row button {
+  color: #352c17;
+  background: rgb(216 174 60 / 82%);
+}
+
+html[data-theme="dark"] .focus-target-row button:hover,
+html[data-theme="dark"] .focus-window-target-row button:hover {
+  background: #d8ae3c;
 }
 
 html[data-theme="dark"] .focus-card header button {

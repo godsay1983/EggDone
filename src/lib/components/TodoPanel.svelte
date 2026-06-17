@@ -141,6 +141,7 @@
   let focusDisplayHint = "开始一颗番茄，先把注意力放在眼前这一件事。";
   let focusDisplayPhase = "专注";
   let focusTarget: FocusTarget | null = getFocusTarget();
+  let completingFocusTarget = false;
   let desktopSettings: DesktopSettings | null = null;
   let theme: Theme = "light";
   let reorderAnimationDuration = 170;
@@ -716,6 +717,24 @@
     clearFocusTarget();
     focusTarget = null;
     showFocus = false;
+  }
+
+  async function completeFocusTarget() {
+    if (!focusTarget || completingFocusTarget) return;
+    const targetTodo = $todos.items.find((todo) => todo.uuid === focusTarget?.uuid);
+    if (!targetTodo || targetTodo.completed) {
+      endFocusSession();
+      return;
+    }
+    completingFocusTarget = true;
+    try {
+      await todos.toggle(targetTodo);
+      endFocusSession();
+    } catch (error) {
+      todos.reportError(error);
+    } finally {
+      completingFocusTarget = false;
+    }
   }
 
   function formatFocusTime(milliseconds: number) {
@@ -2430,7 +2449,12 @@
 
       <strong class="focus-time">{focusDisplayTime}</strong>
       {#if focusTarget}
-        <small class="focus-target">正在专注：{focusTarget.title}</small>
+        <div class="focus-target-row">
+          <small class="focus-target">正在专注：{focusTarget.title}</small>
+          <button type="button" onclick={() => void completeFocusTarget()} disabled={completingFocusTarget}>
+            {completingFocusTarget ? "完成中" : "完成"}
+          </button>
+        </div>
       {/if}
       <p class="focus-copy">{focusDisplayHint}</p>
 

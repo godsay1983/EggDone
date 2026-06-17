@@ -190,6 +190,25 @@ pub fn set_todo_completed(
 }
 
 #[tauri::command]
+pub fn set_todo_completed_by_uuid(
+    uuid: String,
+    completed: bool,
+    app: AppHandle,
+    database: State<'_, Database>,
+) -> Result<TodoCompletion, String> {
+    let result = {
+        let mut connection = lock_database(&database)?;
+        let id = find_todo_id_by_uuid(&connection, &uuid)?
+            .ok_or_else(|| "任务不存在".to_string())?;
+        set_todo_completed_in_connection(&mut connection, id, completed)
+    };
+    refresh_badge_after_success(&app, &result);
+    app.emit_to("main", "todos-changed", ())
+        .map_err(|error| error.to_string())?;
+    result
+}
+
+#[tauri::command]
 pub fn update_todo_title(
     id: i64,
     title: String,
@@ -1270,6 +1289,23 @@ fn find_todo(connection: &Connection, id: i64) -> Result<Option<Todo>, String> {
             ",
             params![id],
             map_todo,
+        )
+        .optional()
+        .map_err(database_error)
+}
+
+fn find_todo_id_by_uuid(connection: &Connection, uuid: &str) -> Result<Option<i64>, String> {
+    connection
+        .query_row(
+            "
+            SELECT id
+            FROM todos
+            WHERE uuid = ?1
+              AND deleted_at IS NULL
+              AND archived_at IS NULL
+            ",
+            params![uuid],
+            |row| row.get(0),
         )
         .optional()
         .map_err(database_error)

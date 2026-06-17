@@ -83,6 +83,14 @@ function createApi(initialItems: Todo[] = []) {
       }),
       created_todo: null,
     })),
+    setCompletedByUuid: vi.fn(async (uuid, completed) => ({
+      updated_todo: makeTodo(1, {
+        uuid,
+        completed,
+        completed_at: completed ? 100 : null,
+      }),
+      created_todo: null,
+    })),
     updateTitle: vi.fn(async (id, title) => ({
       updated_todos: [makeTodo(id, { title })],
     })),

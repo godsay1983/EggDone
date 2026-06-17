@@ -65,6 +65,16 @@ export const todoApi = {
     return invoke<TodoCompletionResult>("set_todo_completed", { id, completed });
   },
 
+  setCompletedByUuid(
+    uuid: string,
+    completed: boolean,
+  ): Promise<TodoCompletionResult> {
+    return invoke<TodoCompletionResult>("set_todo_completed_by_uuid", {
+      uuid,
+      completed,
+    });
+  },
+
   updateTitle(
     id: number,
     title: string,
