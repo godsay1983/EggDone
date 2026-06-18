@@ -140,8 +140,11 @@
   let focusDisplayTime = "25:00";
   let focusDisplayHint = "开始一颗番茄，先把注意力放在眼前这一件事。";
   let focusDisplayPhase = "专注";
+  let focusIllustrationSrc = "/focus-illustration.png";
   let focusTarget: FocusTarget | null = getFocusTarget();
   let completingFocusTarget = false;
+  let focusCompletionVisible = false;
+  let focusCompletionTimer: number | null = null;
   let desktopSettings: DesktopSettings | null = null;
   let theme: Theme = "light";
   let reorderAnimationDuration = 170;
@@ -242,13 +245,24 @@
       quickAddResult.priority === 1)
       ? quickAddResult
       : null;
-  $: focusDisplayPhase = focusPhase === "focus" ? "专注" : "休息";
+  $: focusDisplayPhase = focusCompletionVisible
+    ? "完成"
+    : focusPhase === "focus"
+      ? "专注"
+      : "休息";
   $: focusDisplayTime = formatFocusTime(focusRemainingMs);
-  $: focusDisplayHint = focusRunning
-    ? "保持当前节奏，结束后会切到下一阶段。"
-    : focusRemainingMs === focusDurations[focusPhase]
-      ? "开始一颗番茄，先把注意力放在眼前这一件事。"
-      : "已经暂停，继续时会从当前剩余时间开始。";
+  $: focusDisplayHint = focusCompletionVisible
+    ? "这一阶段完成了，准备切换到下一阶段。"
+    : focusRunning
+      ? "保持当前节奏，结束后会切到下一阶段。"
+      : focusRemainingMs === focusDurations[focusPhase]
+        ? "开始一颗番茄，先把注意力放在眼前这一件事。"
+        : "已经暂停，继续时会从当前剩余时间开始。";
+  $: focusIllustrationSrc = focusCompletionVisible
+    ? "/focus-done.png"
+    : focusPhase === "break"
+      ? "/focus-break.png"
+      : "/focus-illustration.png";
 
   onMount(() => {
     const unlisteners: UnlistenFn[] = [];
@@ -357,6 +371,7 @@
       if (undoTimer) clearTimeout(undoTimer);
       if (clearTimer) clearTimeout(clearTimer);
       if (groupDeleteTimer) clearTimeout(groupDeleteTimer);
+      clearFocusCompletionTimer();
       window.clearInterval(focusInterval);
       window.removeEventListener(
         FOCUS_SETTINGS_CHANGED_EVENT,
@@ -666,6 +681,8 @@
   }
 
   function startFocusSession(phase: FocusPhase = "focus") {
+    clearFocusCompletionTimer();
+    focusCompletionVisible = false;
     refreshFocusDurations();
     focusPhase = phase;
     focusRemainingMs = focusDurations[phase];
@@ -682,15 +699,17 @@
     const completedPhase = focusPhase;
     focusRunning = false;
     focusEndsAt = null;
-    focusPhase = focusPhase === "focus" ? "break" : "focus";
-    focusRemainingMs = focusDurations[focusPhase];
+    focusRemainingMs = 0;
+    focusCompletionVisible = true;
     updateFocusTrayTooltip();
     if (isTauri()) {
       void todoApi.publishFocusNotification(completedPhase).catch(() => {});
     }
+    scheduleNextFocusPhase(completedPhase);
   }
 
   function toggleFocusRunning() {
+    if (focusCompletionVisible) return;
     if (focusRunning) {
       updateFocusTimer();
       focusRunning = false;
@@ -702,6 +721,7 @@
   }
 
   function addFocusFiveMinutes() {
+    if (focusCompletionVisible) return;
     focusRemainingMs += 5 * 60 * 1000;
     if (focusRunning) {
       focusEndsAt = Date.now() + focusRemainingMs;
@@ -709,10 +729,14 @@
   }
 
   function skipFocusPhase() {
+    clearFocusCompletionTimer();
+    focusCompletionVisible = false;
     startFocusSession(focusPhase === "focus" ? "break" : "focus");
   }
 
   function endFocusSession() {
+    clearFocusCompletionTimer();
+    focusCompletionVisible = false;
     focusRunning = false;
     focusPhase = "focus";
     focusEndsAt = null;
@@ -741,6 +765,24 @@
     } finally {
       completingFocusTarget = false;
     }
+  }
+
+  function scheduleNextFocusPhase(completedPhase: FocusPhase) {
+    clearFocusCompletionTimer();
+    focusCompletionTimer = window.setTimeout(() => {
+      focusCompletionTimer = null;
+      if (!focusCompletionVisible || focusRunning) return;
+      focusCompletionVisible = false;
+      focusPhase = completedPhase === "focus" ? "break" : "focus";
+      focusRemainingMs = focusDurations[focusPhase];
+      updateFocusTrayTooltip();
+    }, 1800);
+  }
+
+  function clearFocusCompletionTimer() {
+    if (focusCompletionTimer === null) return;
+    window.clearTimeout(focusCompletionTimer);
+    focusCompletionTimer = null;
   }
 
   function formatFocusTime(milliseconds: number) {
@@ -2454,7 +2496,8 @@
   <div class="focus-backdrop">
     <button class="focus-dismiss" type="button" aria-label="关闭专注面板" onclick={() => (showFocus = false)}></button>
     <div
-      class:resting={focusPhase === "break"}
+      class:completed={focusCompletionVisible}
+      class:resting={focusPhase === "break" && !focusCompletionVisible}
       class="focus-card"
       role="dialog"
       aria-modal="true"
@@ -2468,7 +2511,7 @@
         <button type="button" aria-label="关闭" onclick={() => (showFocus = false)}>×</button>
       </header>
 
-      <img class="focus-illustration" src="/focus-illustration.png" alt="" aria-hidden="true" />
+      <img class="focus-illustration" src={focusIllustrationSrc} alt="" aria-hidden="true" />
 
       <strong class="focus-time">{focusDisplayTime}</strong>
       {#if focusTarget}

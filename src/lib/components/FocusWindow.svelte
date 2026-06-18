@@ -22,16 +22,30 @@
   let focusDisplayTime = "25:00";
   let focusDisplayHint = "开始一颗番茄，先把注意力放在眼前这一件事。";
   let focusDisplayPhase = "专注";
+  let focusIllustrationSrc = "/focus-illustration.png";
   let focusTarget: FocusTarget | null = getFocusTarget();
   let completingTarget = false;
+  let focusCompletionVisible = false;
+  let focusCompletionTimer: number | null = null;
 
-  $: focusDisplayPhase = focusPhase === "focus" ? "专注" : "休息";
+  $: focusDisplayPhase = focusCompletionVisible
+    ? "完成"
+    : focusPhase === "focus"
+      ? "专注"
+      : "休息";
   $: focusDisplayTime = formatFocusTime(focusRemainingMs);
-  $: focusDisplayHint = focusRunning
-    ? "保持当前节奏，结束后会切到下一阶段。"
-    : focusRemainingMs === focusDurations[focusPhase]
-      ? "开始一颗番茄，先把注意力放在眼前这一件事。"
-      : "已经暂停，继续时会从当前剩余时间开始。";
+  $: focusDisplayHint = focusCompletionVisible
+    ? "这一阶段完成了，准备切换到下一阶段。"
+    : focusRunning
+      ? "保持当前节奏，结束后会切到下一阶段。"
+      : focusRemainingMs === focusDurations[focusPhase]
+        ? "开始一颗番茄，先把注意力放在眼前这一件事。"
+        : "已经暂停，继续时会从当前剩余时间开始。";
+  $: focusIllustrationSrc = focusCompletionVisible
+    ? "/focus-done.png"
+    : focusPhase === "break"
+      ? "/focus-break.png"
+      : "/focus-illustration.png";
 
   onMount(() => {
     const unlisteners: UnlistenFn[] = [];
@@ -61,6 +75,7 @@
     }
     return () => {
       unlisteners.forEach((unlisten) => unlisten());
+      clearFocusCompletionTimer();
       window.clearInterval(focusInterval);
       window.removeEventListener(
         FOCUS_SETTINGS_CHANGED_EVENT,
@@ -130,6 +145,8 @@
   }
 
   function startFocusSession(phase: FocusPhase = "focus") {
+    clearFocusCompletionTimer();
+    focusCompletionVisible = false;
     refreshFocusDurations();
     focusPhase = phase;
     focusRemainingMs = focusDurations[phase];
@@ -146,15 +163,17 @@
     const completedPhase = focusPhase;
     focusRunning = false;
     focusEndsAt = null;
-    focusPhase = focusPhase === "focus" ? "break" : "focus";
-    focusRemainingMs = focusDurations[focusPhase];
+    focusRemainingMs = 0;
+    focusCompletionVisible = true;
     updateFocusTrayTooltip();
     if (isTauri()) {
       void invoke("publish_focus_notification", { completedPhase }).catch(() => {});
     }
+    scheduleNextFocusPhase(completedPhase);
   }
 
   function toggleFocusRunning() {
+    if (focusCompletionVisible) return;
     if (focusRunning) {
       updateFocusTimer();
       focusRunning = false;
@@ -168,6 +187,7 @@
   }
 
   function toggleFocusFromTray() {
+    if (focusCompletionVisible) return;
     if (!focusRunning && focusEndsAt === null && focusRemainingMs === focusDurations[focusPhase]) {
       startFocusSession(focusPhase);
       return;
@@ -176,6 +196,7 @@
   }
 
   function addFocusFiveMinutes() {
+    if (focusCompletionVisible) return;
     focusRemainingMs += 5 * 60 * 1000;
     if (focusRunning) {
       focusEndsAt = Date.now() + focusRemainingMs;
@@ -183,10 +204,14 @@
   }
 
   function skipFocusPhase() {
+    clearFocusCompletionTimer();
+    focusCompletionVisible = false;
     startFocusSession(focusPhase === "focus" ? "break" : "focus");
   }
 
   async function endFocusSession() {
+    clearFocusCompletionTimer();
+    focusCompletionVisible = false;
     focusRunning = false;
     focusPhase = "focus";
     focusEndsAt = null;
@@ -206,6 +231,8 @@
           completed: true,
         });
       }
+      clearFocusCompletionTimer();
+      focusCompletionVisible = false;
       focusRunning = false;
       focusPhase = "focus";
       focusEndsAt = null;
@@ -216,6 +243,24 @@
     } finally {
       completingTarget = false;
     }
+  }
+
+  function scheduleNextFocusPhase(completedPhase: FocusPhase) {
+    clearFocusCompletionTimer();
+    focusCompletionTimer = window.setTimeout(() => {
+      focusCompletionTimer = null;
+      if (!focusCompletionVisible || focusRunning) return;
+      focusCompletionVisible = false;
+      focusPhase = completedPhase === "focus" ? "break" : "focus";
+      focusRemainingMs = focusDurations[focusPhase];
+      updateFocusTrayTooltip();
+    }, 1800);
+  }
+
+  function clearFocusCompletionTimer() {
+    if (focusCompletionTimer === null) return;
+    window.clearTimeout(focusCompletionTimer);
+    focusCompletionTimer = null;
   }
 
   async function hideFocusWindow() {
@@ -243,7 +288,11 @@
   }
 </script>
 
-<main class:resting={focusPhase === "break"} class="focus-window-shell">
+<main
+  class:completed={focusCompletionVisible}
+  class:resting={focusPhase === "break" && !focusCompletionVisible}
+  class="focus-window-shell"
+>
   <header class="focus-window-header" role="presentation" onmousedown={startWindowDrag}>
     <div>
       <p>番茄钟</p>
@@ -253,7 +302,7 @@
   </header>
 
   <section class="focus-window-body" role="presentation" onmousedown={startWindowDrag}>
-    <img class="focus-window-illustration" src="/focus-illustration.png" alt="" aria-hidden="true" />
+    <img class="focus-window-illustration" src={focusIllustrationSrc} alt="" aria-hidden="true" />
 
     <strong>{focusDisplayTime}</strong>
     {#if focusTarget}

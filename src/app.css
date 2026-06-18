@@ -2066,6 +2066,11 @@ footer button {
   background: linear-gradient(180deg, #fffdf8 0%, #fff4e3 100%);
 }
 
+.focus-card.completed {
+  border-color: #d6ead9;
+  background: linear-gradient(180deg, #fbfff8 0%, #edf8ec 100%);
+}
+
 .focus-card header {
   display: flex;
   align-items: flex-start;
@@ -2223,6 +2228,11 @@ footer button {
   background: #ead8b8;
 }
 
+.focus-card.completed .focus-actions button.primary {
+  color: #244a2c;
+  background: #a8d8a8;
+}
+
 .focus-window-shell {
   display: flex;
   width: 100vw;
@@ -2238,6 +2248,12 @@ footer button {
   background:
     radial-gradient(circle at 82% 10%, rgb(234 216 184 / 36%), transparent 34%),
     #fff8ec;
+}
+
+.focus-window-shell.completed {
+  background:
+    radial-gradient(circle at 82% 10%, rgb(125 184 128 / 24%), transparent 34%),
+    #f8fff4;
 }
 
 .focus-window-header {
@@ -3831,6 +3847,11 @@ html[data-theme="dark"] .focus-card.resting {
   background: linear-gradient(180deg, #292621 0%, #302a22 100%);
 }
 
+html[data-theme="dark"] .focus-card.completed {
+  border-color: #425842;
+  background: linear-gradient(180deg, #242a21 0%, #263326 100%);
+}
+
 html[data-theme="dark"] .focus-card h2,
 html[data-theme="dark"] .focus-time {
   color: #f1e9dc;
@@ -3882,6 +3903,11 @@ html[data-theme="dark"] .focus-card.resting .focus-actions button.primary {
   background: #cbb487;
 }
 
+html[data-theme="dark"] .focus-card.completed .focus-actions button.primary {
+  color: #152114;
+  background: #93c993;
+}
+
 html[data-theme="dark"] .focus-window-shell {
   background:
     radial-gradient(circle at 82% 10%, rgb(216 174 60 / 18%), transparent 34%),
@@ -3892,6 +3918,12 @@ html[data-theme="dark"] .focus-window-shell.resting {
   background:
     radial-gradient(circle at 82% 10%, rgb(203 180 135 / 18%), transparent 34%),
     #211f1b;
+}
+
+html[data-theme="dark"] .focus-window-shell.completed {
+  background:
+    radial-gradient(circle at 82% 10%, rgb(147 201 147 / 16%), transparent 34%),
+    #1d231b;
 }
 
 html[data-theme="dark"] .focus-window-shell.resting .focus-window-target {
@@ -3933,6 +3965,11 @@ html[data-theme="dark"] .focus-window-actions button.primary {
 html[data-theme="dark"] .focus-window-shell.resting .focus-window-actions button.primary {
   color: #2d271c;
   background: #cbb487;
+}
+
+html[data-theme="dark"] .focus-window-shell.completed .focus-window-actions button.primary {
+  color: #152114;
+  background: #93c993;
 }
 
 html[data-theme="dark"] .data-actions > button {
