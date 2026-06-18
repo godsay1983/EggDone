@@ -2244,6 +2244,13 @@ footer button {
     #fffaf0;
 }
 
+.focus-window-shell.compact {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+}
+
 .focus-window-shell.resting {
   background:
     radial-gradient(circle at 82% 10%, rgb(234 216 184 / 36%), transparent 34%),
@@ -2265,10 +2272,20 @@ footer button {
   user-select: none;
 }
 
+.focus-window-shell.compact .focus-window-header {
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
 .focus-window-header p {
   margin: 0;
   color: #9a8c76;
   font-size: 12px;
+}
+
+.focus-window-shell.compact .focus-window-header p {
+  display: none;
 }
 
 .focus-window-header h1 {
@@ -2278,9 +2295,23 @@ footer button {
   line-height: 1.1;
 }
 
+.focus-window-shell.compact .focus-window-header h1 {
+  width: 28px;
+  margin: 0;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.focus-window-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .focus-window-header button {
-  width: 30px;
+  min-width: 30px;
   height: 30px;
+  padding: 0 8px;
   border: 0;
   border-radius: 10px;
   color: #9a8c76;
@@ -2291,6 +2322,12 @@ footer button {
 .focus-window-header button:hover {
   color: #5f4c1e;
   background: #e7dcc8;
+}
+
+.focus-window-shell.compact .focus-window-header button {
+  height: 28px;
+  padding: 0 7px;
+  font-size: 11px;
 }
 
 .focus-window-body {
@@ -2307,6 +2344,15 @@ footer button {
   text-align: center;
 }
 
+.focus-window-shell.compact .focus-window-body {
+  flex: 1;
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 8px;
+  padding-top: 0;
+  text-align: left;
+}
+
 .focus-window-illustration {
   display: block;
   width: min(166px, 64%);
@@ -2314,6 +2360,12 @@ footer button {
   margin: 0 auto 2px;
   object-fit: contain;
   filter: drop-shadow(0 10px 20px rgb(124 83 14 / 16%));
+}
+
+.focus-window-shell.compact .focus-window-illustration {
+  width: 42px;
+  margin: 0;
+  filter: drop-shadow(0 6px 12px rgb(124 83 14 / 14%));
 }
 
 .focus-window-body strong {
@@ -2324,6 +2376,10 @@ footer button {
   line-height: 1;
 }
 
+.focus-window-shell.compact .focus-window-body strong {
+  font-size: 26px;
+}
+
 .focus-window-body p {
   max-width: 252px;
   min-height: 0;
@@ -2331,6 +2387,12 @@ footer button {
   color: #8d7e68;
   font-size: 12px;
   line-height: 1.35;
+}
+
+.focus-window-shell.compact .focus-window-target-row,
+.focus-window-shell.compact .focus-window-body p,
+.focus-window-shell.compact .focus-window-actions {
+  display: none;
 }
 
 .focus-window-actions {

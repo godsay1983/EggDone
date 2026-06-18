@@ -1,6 +1,6 @@
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
+use tauri::{AppHandle, Emitter, LogicalSize, Manager, Size, State, WebviewWindow};
 use uuid::Uuid;
 
 use crate::{
@@ -16,6 +16,14 @@ use crate::{
 };
 
 const TODO_NOTE_MAX_CHARS: usize = 1000;
+const FOCUS_WINDOW_WIDTH: f64 = 320.0;
+const FOCUS_WINDOW_HEIGHT: f64 = 430.0;
+const FOCUS_WINDOW_MIN_WIDTH: f64 = 300.0;
+const FOCUS_WINDOW_MIN_HEIGHT: f64 = 390.0;
+const FOCUS_COMPACT_WIDTH: f64 = 288.0;
+const FOCUS_COMPACT_HEIGHT: f64 = 86.0;
+const FOCUS_COMPACT_MIN_WIDTH: f64 = 260.0;
+const FOCUS_COMPACT_MIN_HEIGHT: f64 = 80.0;
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct Todo {
@@ -198,8 +206,8 @@ pub fn set_todo_completed_by_uuid(
 ) -> Result<TodoCompletion, String> {
     let result = {
         let mut connection = lock_database(&database)?;
-        let id = find_todo_id_by_uuid(&connection, &uuid)?
-            .ok_or_else(|| "任务不存在".to_string())?;
+        let id =
+            find_todo_id_by_uuid(&connection, &uuid)?.ok_or_else(|| "任务不存在".to_string())?;
         set_todo_completed_in_connection(&mut connection, id, completed)
     };
     refresh_badge_after_success(&app, &result);
@@ -402,6 +410,42 @@ pub fn hide_focus_window(app: AppHandle) -> Result<(), String> {
         return Ok(());
     };
     window.hide().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn set_focus_window_compact(app: AppHandle, compact: bool) -> Result<(), String> {
+    let Some(window) = app.get_webview_window("focus") else {
+        return Ok(());
+    };
+
+    let min_size = if compact {
+        LogicalSize::new(FOCUS_COMPACT_MIN_WIDTH, FOCUS_COMPACT_MIN_HEIGHT)
+    } else {
+        LogicalSize::new(FOCUS_WINDOW_MIN_WIDTH, FOCUS_WINDOW_MIN_HEIGHT)
+    };
+    let size = if compact {
+        LogicalSize::new(FOCUS_COMPACT_WIDTH, FOCUS_COMPACT_HEIGHT)
+    } else {
+        LogicalSize::new(FOCUS_WINDOW_WIDTH, FOCUS_WINDOW_HEIGHT)
+    };
+
+    if compact {
+        window
+            .set_min_size(Some(Size::Logical(min_size)))
+            .map_err(|error| error.to_string())?;
+        window
+            .set_size(Size::Logical(size))
+            .map_err(|error| error.to_string())?;
+    } else {
+        window
+            .set_size(Size::Logical(size))
+            .map_err(|error| error.to_string())?;
+        window
+            .set_min_size(Some(Size::Logical(min_size)))
+            .map_err(|error| error.to_string())?;
+    }
+
+    Ok(())
 }
 
 #[tauri::command]

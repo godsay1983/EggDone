@@ -27,6 +27,7 @@
   let completingTarget = false;
   let focusCompletionVisible = false;
   let focusCompletionTimer: number | null = null;
+  let compactMode = false;
 
   $: focusDisplayPhase = focusCompletionVisible
     ? "完成"
@@ -271,6 +272,16 @@
     await invoke("hide_focus_window");
   }
 
+  function toggleCompactMode() {
+    compactMode = !compactMode;
+    resizeFocusWindow(compactMode);
+  }
+
+  function resizeFocusWindow(compact: boolean) {
+    if (!isTauri()) return;
+    void invoke("set_focus_window_compact", { compact }).catch(() => {});
+  }
+
   function startWindowDrag(event: MouseEvent) {
     if (!isTauri() || event.button !== 0) return;
     if (event.target instanceof Element && event.target.closest("button")) {
@@ -289,6 +300,7 @@
 </script>
 
 <main
+  class:compact={compactMode}
   class:completed={focusCompletionVisible}
   class:resting={focusPhase === "break" && !focusCompletionVisible}
   class="focus-window-shell"
@@ -298,7 +310,14 @@
       <p>番茄钟</p>
       <h1>{focusDisplayPhase}</h1>
     </div>
-    <button type="button" aria-label="关闭专注窗口" onclick={() => void hideFocusWindow()}>×</button>
+    <div class="focus-window-header-actions">
+      <button
+        type="button"
+        aria-label={compactMode ? "展开专注窗口" : "收起为胶囊"}
+        onclick={toggleCompactMode}
+      >{compactMode ? "展开" : "收起"}</button>
+      <button type="button" aria-label="关闭专注窗口" onclick={() => void hideFocusWindow()}>×</button>
+    </div>
   </header>
 
   <section class="focus-window-body" role="presentation" onmousedown={startWindowDrag}>
