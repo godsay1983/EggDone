@@ -1,6 +1,6 @@
 {
   "name": "eggdone",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "蛋定 Todo - 轻量级托盘 Todo 桌面应用",
   "type": "module",
   "scripts": {

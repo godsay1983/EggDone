@@ -95,6 +95,11 @@
   $: dueLabel = formatDueLabel(todo);
   $: dueTone = getDueTone(todo);
   $: notePreview = todo.note?.trim() ?? "";
+  $: currentGroup =
+    todo.group_uuid === null
+      ? undefined
+      : groups.find((group) => group.uuid === todo.group_uuid);
+  $: currentGroupColor = groupColorValue(currentGroup?.color);
   $: canSaveSchedule =
     Boolean(customDate) &&
     dateTimeLocalToTimestamp(`${customDate}T${customDueTime}`) !== null &&
@@ -266,6 +271,19 @@
     if (rule === "monthly") return "每月";
     if (rule === "weekdays") return "工作日";
     return "";
+  }
+
+  function groupColorValue(color: string | undefined) {
+    if (
+      color === "green" ||
+      color === "blue" ||
+      color === "peach" ||
+      color === "lavender" ||
+      color === "gray"
+    ) {
+      return color;
+    }
+    return "yellow";
   }
 
   function chooseRepeatEditScope(action: string): RepeatEditScope {
@@ -471,8 +489,18 @@
           {notePreview}
         </button>
       {/if}
-      {#if dueLabel || todo.pinned || todo.priority === 1 || todo.reminder_at !== null || todo.repeat_rule !== null}
+      {#if currentGroup || dueLabel || todo.pinned || todo.priority === 1 || todo.reminder_at !== null || todo.repeat_rule !== null}
         <div class="todo-meta">
+          {#if currentGroup}
+            <span
+              class="todo-group-badge"
+              data-group-color={currentGroupColor}
+              title={`分组：${currentGroup.name}`}
+            >
+              <span class="group-dot" aria-hidden="true"></span>
+              {currentGroup.name}
+            </span>
+          {/if}
           {#if todo.pinned}
             <button
               class="pin-badge"
