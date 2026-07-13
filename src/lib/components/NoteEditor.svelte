@@ -39,6 +39,7 @@
     maxlength="100"
     placeholder="便签标题"
     aria-label="便签标题"
+    autocomplete="off"
     oninput={changed}
   />
   <textarea
@@ -46,6 +47,7 @@
     maxlength="20000"
     placeholder="写下想法、资料或临时记录…"
     aria-label="便签内容"
+    autocomplete="off"
     oninput={changed}
   ></textarea>
   <footer>

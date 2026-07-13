@@ -504,6 +504,12 @@
   }
 
   async function closeNoteEditor() {
+    if (noteDraft && !hasNoteDraftContent(noteDraft)) {
+      notes.cancelPending();
+      discardNoteDraft();
+      selectedNoteUuid = null;
+      return;
+    }
     await flushAllNoteChanges();
     discardNoteDraft();
     selectedNoteUuid = null;
