@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 use crate::{
     db::{device_id, now_millis, Database},
+    notes::{self, Note},
     reminders,
     s3_sync::{
         self, ConnectionTestResult, ManualSyncResult, SaveSyncSettings, SyncRuntime, SyncSettings,
@@ -93,6 +94,102 @@ pub fn list_todos(database: State<'_, Database>) -> Result<Vec<Todo>, String> {
 pub fn list_groups(database: State<'_, Database>) -> Result<Vec<TodoGroup>, String> {
     let connection = lock_database(&database)?;
     list_groups_from_connection(&connection)
+}
+
+#[tauri::command]
+pub fn list_notes(database: State<'_, Database>) -> Result<Vec<Note>, String> {
+    let connection = lock_database(&database)?;
+    notes::list_active(&connection)
+}
+
+#[tauri::command]
+pub fn create_note(
+    title: String,
+    content: String,
+    color: String,
+    app: AppHandle,
+    database: State<'_, Database>,
+) -> Result<Note, String> {
+    let result = {
+        let connection = lock_database(&database)?;
+        notes::create(&connection, &title, &content, &color)
+    };
+    emit_notes_changed_after_success(&app, &result);
+    result
+}
+
+#[tauri::command]
+pub fn update_note(
+    uuid: String,
+    title: String,
+    content: String,
+    app: AppHandle,
+    database: State<'_, Database>,
+) -> Result<Note, String> {
+    let result = {
+        let connection = lock_database(&database)?;
+        notes::update(&connection, &uuid, &title, &content)
+    };
+    emit_notes_changed_after_success(&app, &result);
+    result
+}
+
+#[tauri::command]
+pub fn set_note_pinned(
+    uuid: String,
+    pinned: bool,
+    app: AppHandle,
+    database: State<'_, Database>,
+) -> Result<Note, String> {
+    let result = {
+        let connection = lock_database(&database)?;
+        notes::set_pinned(&connection, &uuid, pinned)
+    };
+    emit_notes_changed_after_success(&app, &result);
+    result
+}
+
+#[tauri::command]
+pub fn set_note_color(
+    uuid: String,
+    color: String,
+    app: AppHandle,
+    database: State<'_, Database>,
+) -> Result<Note, String> {
+    let result = {
+        let connection = lock_database(&database)?;
+        notes::set_color(&connection, &uuid, &color)
+    };
+    emit_notes_changed_after_success(&app, &result);
+    result
+}
+
+#[tauri::command]
+pub fn delete_note(
+    uuid: String,
+    app: AppHandle,
+    database: State<'_, Database>,
+) -> Result<Note, String> {
+    let result = {
+        let connection = lock_database(&database)?;
+        notes::soft_delete(&connection, &uuid)
+    };
+    emit_notes_changed_after_success(&app, &result);
+    result
+}
+
+#[tauri::command]
+pub fn restore_note(
+    uuid: String,
+    app: AppHandle,
+    database: State<'_, Database>,
+) -> Result<Note, String> {
+    let result = {
+        let connection = lock_database(&database)?;
+        notes::restore(&connection, &uuid)
+    };
+    emit_notes_changed_after_success(&app, &result);
+    result
 }
 
 #[tauri::command]
@@ -598,6 +695,12 @@ pub async fn sync_now(
 fn refresh_badge_after_success<T>(app: &AppHandle, result: &Result<T, String>) {
     if result.is_ok() {
         tray::update_task_badge(app);
+    }
+}
+
+fn emit_notes_changed_after_success<T>(app: &AppHandle, result: &Result<T, String>) {
+    if result.is_ok() {
+        let _ = app.emit_to("main", "notes-changed", ());
     }
 }
 

@@ -4,22 +4,22 @@
 
 ## D0：跨端协议冻结
 
-- [ ] 与鸿蒙端确认 Note 字段、字符上限和颜色枚举。
-- [ ] 固定 `notes.json` Object Key 推导规则。
-- [ ] 固定冲突决胜顺序和删除墓碑语义。
-- [ ] 在两端保存相同的 JSON fixture 和预期合并结果。
-- [ ] 明确旧客户端只同步 Todo、不会触碰 Note 对象。
+- [x] 与鸿蒙端确认 Note 字段、字符上限和颜色枚举。
+- [x] 固定 `notes.json` Object Key 推导规则。
+- [x] 固定冲突决胜顺序和删除墓碑语义。
+- [x] 在两端保存相同的 JSON fixture 和预期合并结果。
+- [x] 明确旧客户端只同步 Todo、不会触碰 Note 对象。
 
 交付物：跨端协议 fixture、决胜测试样例、实现方案定稿。
 
 ## D1：数据库与领域模型
 
-- [ ] `db.rs` 增加 migration 14 和 `notes` 表。
-- [ ] 验证全新数据库建库。
-- [ ] 验证 migration 13 升级且原 Todo 数据不变。
-- [ ] 新增 Note Rust 类型和参数校验。
-- [ ] 实现列表、创建、更新、置顶、换色、软删除和撤销。
-- [ ] 增加 Repository / command 单元测试。
+- [x] `db.rs` 增加 migration 14 和 `notes` 表。
+- [x] 验证全新数据库建库。
+- [x] 验证 migration 13 升级且原 Todo 数据不变。
+- [x] 新增 Note Rust 类型和参数校验。
+- [x] 实现列表、创建、更新、置顶、换色、软删除和撤销。
+- [x] 增加 Repository / command 单元测试。
 
 完成条件：不依赖 UI 即可通过 Rust 测试完成 Note CRUD。
 
@@ -87,4 +87,3 @@
 3. `feat(sync): sync notes through separate s3 object`
 4. `test(notes): cover migration and cross-device merge`
 5. `docs(notes): document desktop notes and release behavior`
-

@@ -1,6 +1,7 @@
 mod commands;
 mod data_exchange;
 mod db;
+mod notes;
 mod panel_position;
 mod reminders;
 mod s3_sync;
@@ -79,8 +80,15 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::list_todos,
             commands::list_groups,
+            commands::list_notes,
             commands::create_todo,
             commands::create_group,
+            commands::create_note,
+            commands::update_note,
+            commands::set_note_pinned,
+            commands::set_note_color,
+            commands::delete_note,
+            commands::restore_note,
             commands::update_group_name,
             commands::update_group_color,
             commands::delete_group,

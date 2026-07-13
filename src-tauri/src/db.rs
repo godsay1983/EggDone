@@ -9,7 +9,7 @@ use rusqlite::{params, Connection, Transaction};
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
-const CURRENT_SCHEMA_VERSION: i64 = 13;
+const CURRENT_SCHEMA_VERSION: i64 = 14;
 const DEVICE_ID_KEY: &str = "device_id";
 
 pub struct Database {
@@ -76,6 +76,7 @@ pub(crate) fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {
     apply_migration(connection, 11, add_todo_note)?;
     apply_migration(connection, 12, add_todo_archive)?;
     apply_migration(connection, 13, add_todo_priority)?;
+    apply_migration(connection, 14, add_notes)?;
 
     debug_assert_eq!(schema_version(connection)?, CURRENT_SCHEMA_VERSION);
     Ok(())
@@ -408,6 +409,31 @@ fn add_todo_priority(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
     )
 }
 
+fn add_notes(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
+    transaction.execute_batch(
+        "
+        CREATE TABLE notes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            uuid TEXT NOT NULL UNIQUE,
+            title TEXT NOT NULL DEFAULT '' CHECK(length(title) <= 100),
+            content TEXT NOT NULL DEFAULT '' CHECK(length(content) <= 20000),
+            color TEXT NOT NULL DEFAULT 'default'
+                CHECK(color IN ('default', 'yellow', 'pink', 'green', 'blue')),
+            pinned INTEGER NOT NULL DEFAULT 0 CHECK(pinned IN (0, 1)),
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            deleted_at INTEGER,
+            updated_by TEXT NOT NULL,
+            CHECK(length(trim(title)) > 0 OR length(trim(content)) > 0)
+        );
+
+        CREATE INDEX idx_notes_active_order
+            ON notes(deleted_at, pinned DESC, updated_at DESC);
+        CREATE INDEX idx_notes_updated_at ON notes(updated_at);
+        ",
+    )
+}
+
 pub(crate) fn device_id(connection: &Connection) -> rusqlite::Result<String> {
     connection.query_row(
         "SELECT value FROM app_metadata WHERE key = ?1",
@@ -487,6 +513,10 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM groups", [], |row| row.get(0))
             .unwrap();
         assert_eq!(group_count, 0);
+        let note_count: i64 = connection
+            .query_row("SELECT COUNT(*) FROM notes", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(note_count, 0);
     }
 
     #[test]
@@ -559,6 +589,49 @@ mod tests {
         let first_device_id = device_id(&connection).unwrap();
         migrate(&mut connection).unwrap();
         assert_eq!(device_id(&connection).unwrap(), first_device_id);
+    }
+
+    #[test]
+    fn upgrades_v13_database_with_notes_without_touching_todos() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        configure_connection(&connection).unwrap();
+        migrate(&mut connection).unwrap();
+        connection
+            .execute_batch(
+                "
+            DROP TABLE notes;
+            DELETE FROM schema_migrations WHERE version = 14;
+            ",
+            )
+            .unwrap();
+        let identity = device_id(&connection).unwrap();
+        connection
+            .execute(
+                "
+            INSERT INTO todos (
+                uuid, title, completed, sort_order, created_at, updated_at, updated_by
+            )
+            VALUES (?1, '保留任务', 0, 0, 100, 100, ?2)
+            ",
+                params!["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", identity],
+            )
+            .unwrap();
+
+        migrate(&mut connection).unwrap();
+
+        assert_eq!(schema_version(&connection).unwrap(), 14);
+        let title: String = connection
+            .query_row("SELECT title FROM todos", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(title, "保留任务");
+        let note_table_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'notes'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(note_table_count, 1);
     }
 
     #[test]
