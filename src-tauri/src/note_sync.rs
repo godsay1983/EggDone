@@ -147,8 +147,12 @@ pub(crate) fn validate_document(document: &NoteSyncDocument) -> Result<(), Strin
         return Err("便签同步文件 generated_at 无效".to_string());
     }
 
+    validate_notes(&document.notes)
+}
+
+pub(crate) fn validate_notes(notes: &[SyncNote]) -> Result<(), String> {
     let mut uuids = HashSet::new();
-    for note in &document.notes {
+    for note in notes {
         if Uuid::parse_str(&note.uuid).is_err() {
             return Err(format!("同步便签 UUID 无效：{}", note.uuid));
         }
@@ -184,7 +188,7 @@ pub(crate) fn validate_document(document: &NoteSyncDocument) -> Result<(), Strin
     Ok(())
 }
 
-fn compare_notes(left: &SyncNote, right: &SyncNote) -> Ordering {
+pub(crate) fn compare_notes(left: &SyncNote, right: &SyncNote) -> Ordering {
     left.updated_at
         .cmp(&right.updated_at)
         .then_with(|| left.deleted_at.is_some().cmp(&right.deleted_at.is_some()))

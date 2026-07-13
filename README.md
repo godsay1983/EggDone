@@ -39,10 +39,10 @@ EggDone 同时提供**纯血鸿蒙（HarmonyOS NEXT）**移动版本，支持手
 - 支持简单键盘导航：上下选择任务、空格完成、Enter 编辑
 - 支持批量选择任务后完成、移动分组和删除
 - 支持归档已完成任务，减少日常列表长度且保留同步/导出记录
-- JSON 导入导出、UUID 合并和 SQLite 手动备份
+- 包含分组、任务和便签的 JSON 导入导出、UUID 合并和 SQLite 手动备份
 - 可配置 AWS S3、MinIO 和其他 S3 兼容存储
 - Access Key 和 Secret Key 保存到系统凭据库
-- 支持手动下载、合并并上传 Todo，同步写入使用 ETag 冲突保护
+- 支持分别下载、合并并上传任务与便签，同步写入使用 ETag 冲突保护
 - 启动和窗口回到前台时自动同步，前台每 60 秒检查 ETag，本地修改后 4 秒防抖同步
 - 可配置全局快捷键，默认 `Ctrl + Shift + Space`
 - 可选开机自动运行，并静默进入托盘
@@ -151,17 +151,17 @@ pnpm release:check
 | `repeat_next_due_date` | 完成当前实例后生成的下一次日期，格式 `YYYY-MM-DD`（可空） |
 | `repeat_series_uuid` | 重复系列 UUID，用于整组删除和跨设备同步（可空） |
 
-`groups` 表保存单层分组，包含 UUID、名称、颜色、排序和软删除字段。`schema_migrations` 表记录已执行的数据库版本，`app_metadata` 保存本机 `device_id`，`sync_settings` 只保存 Endpoint、Region、Bucket、Object Key 等非敏感配置，`reminder_deliveries` 记录本机已触发提醒以避免重复通知。Access Key 和 Secret Key 保存到操作系统凭据库，不写入 SQLite。开发时可以删除数据库以重置数据，具体根目录由 Tauri 的 `app_data_dir` 按平台决定。
+`groups` 表保存单层分组，`notes` 表保存便签正文、颜色、置顶状态和删除墓碑。`schema_migrations` 表记录已执行的数据库版本，`app_metadata` 保存本机 `device_id`，`sync_settings` 只保存 Endpoint、Region、Bucket、Object Key 等非敏感配置，`reminder_deliveries` 记录本机已触发提醒以避免重复通知。Access Key 和 Secret Key 保存到操作系统凭据库，不写入 SQLite。开发时可以删除数据库以重置数据，具体根目录由 Tauri 的 `app_data_dir` 按平台决定。
 
 项目已包含版本化同步文档和本地合并核心：按 Todo UUID 合并，优先采用较新的 `updated_at`；时间相同时优先保留删除记录，再通过 `updated_by` 稳定决胜。两台设备离线同时完成同一重复任务时，同一重复系列、同一到期日只保留一个未完成的下一实例，重复生成的实例会被软删除。设置页可配置 AWS S3 或自定义 S3 Endpoint，支持 MinIO 常用的 Path Style 和 HTTP。HTTP 必须显式确认明文传输风险。
 
 “测试连接”会向配置的 Bucket 和 Object Key 发起签名请求，验证 Endpoint、凭据和访问权限；返回 404 时会提示同步文件尚未创建，此时仍需确认 Bucket 已提前创建。
 
-“立即同步”先下载远端 `todos.json`，按 UUID 和更新时间与 SQLite 合并，再上传合并结果。更新已有对象使用 `If-Match`，首次创建使用 `If-None-Match: *`。若上传期间远端发生变化，应用会重新下载、合并并重试一次；再次冲突时停止上传并保留本地数据。
+“立即同步”依次处理任务对象和便签对象。默认任务使用 `todos.json`，便签 Object Key 自动推导为 `notes.json`；自定义任务路径时，设置页会显示对应的只读便签路径。两个对象分别按 UUID 合并并使用 ETag 保护，旧客户端继续操作 `todos.json` 不会改写或删除便签。
 
 启用同步且系统凭据可用时，应用启动或窗口重新获得焦点时会检查远端 ETag；窗口保持前台期间每 60 秒重复检查，ETag 未变化时不会下载完整同步文件。新增、编辑标题或备注、设置到期时间、完成、排序、删除和恢复任务后，会在最后一次修改的 4 秒后同步。“立即同步”始终执行完整下载、合并和上传。网络类错误使用 1.5 秒、3 秒两次有限退避；权限、配置和持续冲突错误不会自动重试。本地 Todo 操作不等待网络结果，窗口隐藏后停止轮询，退出时也不会阻塞等待同步。
 
-面板右上角的“数据管理”可导出版本化 JSON、预览并合并导入文件，或创建一致的 SQLite 快照。导入只更新 `updated_at` 更新的同 UUID 任务，不会直接覆盖整个本地数据库。
+面板右上角的“数据管理”可导出包含分组、任务和便签的版本化 JSON、预览并合并导入文件，或创建一致的 SQLite 快照。旧备份缺少 `notes` 时按空数组处理；新备份中的便签使用与 S3 同步相同的冲突决胜规则，不会直接覆盖较新的本地数据。
 
 面板右上角的“设置”可管理全局快捷键、启动默认视图、系统开机启动和 S3 / MinIO 同步连接。删除系统凭据时会同时禁用同步。快捷键冲突时会保留之前的有效配置并显示错误。
 

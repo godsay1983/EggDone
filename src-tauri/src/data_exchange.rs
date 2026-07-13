@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 use crate::{
     db::{device_id, now_millis, Database},
+    note_sync::{self, NoteSyncDocument, SyncNote},
     schedule::{local_date_from_timestamp, timestamp_for_local_date},
     tray::PanelState,
 };
@@ -71,6 +72,8 @@ struct TodoExport {
     #[serde(default)]
     groups: Vec<TransferGroup>,
     todos: Vec<TransferTodo>,
+    #[serde(default)]
+    notes: Vec<SyncNote>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -81,6 +84,10 @@ pub struct ImportPreview {
     added: usize,
     updated: usize,
     unchanged: usize,
+    note_total: usize,
+    note_added: usize,
+    note_updated: usize,
+    note_unchanged: usize,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -88,6 +95,9 @@ pub struct ImportResult {
     added: usize,
     updated: usize,
     unchanged: usize,
+    note_added: usize,
+    note_updated: usize,
+    note_unchanged: usize,
 }
 
 #[tauri::command]
@@ -99,7 +109,7 @@ pub fn export_todos(
     let Some(path) = pick_save_path(
         &app,
         &panel_state,
-        "eggdone-todos.json",
+        "eggdone-data.json",
         "EggDone JSON",
         &["json"],
     )?
@@ -108,11 +118,13 @@ pub fn export_todos(
     };
 
     let connection = lock_database(&database)?;
+    let exported_at = now_millis();
     let export = TodoExport {
         format_version: FORMAT_VERSION,
-        exported_at: now_millis(),
+        exported_at,
         groups: read_all_groups(&connection)?,
         todos: read_all_todos(&connection)?,
+        notes: note_sync::build_document(&connection, exported_at)?.notes,
     };
     let json = serde_json::to_string_pretty(&export)
         .map_err(|error| format!("生成导出文件失败：{error}"))?;
@@ -132,7 +144,7 @@ pub fn preview_todo_import(
     };
     let import = read_import_file(&path)?;
     let connection = lock_database(&database)?;
-    let preview = build_preview(&connection, &path, &import.todos)?;
+    let preview = build_preview(&connection, &path, &import)?;
     Ok(Some(preview))
 }
 
@@ -145,7 +157,7 @@ pub fn confirm_todo_import(
     let import = read_import_file(Path::new(&path))?;
     let result = {
         let mut connection = lock_database(&database)?;
-        merge_transfer(&mut connection, &import.groups, &import.todos)
+        merge_import(&mut connection, import)
     };
     if result.is_ok() {
         crate::tray::update_task_badge(&app);
@@ -340,6 +352,7 @@ fn validate_import(import: &TodoExport) -> Result<(), String> {
             "导入文件",
         )?;
     }
+    note_sync::validate_notes(&import.notes)?;
     Ok(())
 }
 
@@ -387,20 +400,21 @@ fn read_all_todos(connection: &Connection) -> Result<Vec<TransferTodo>, String> 
 fn build_preview(
     connection: &Connection,
     path: &Path,
-    imported: &[TransferTodo],
+    import: &TodoExport,
 ) -> Result<ImportPreview, String> {
     let local_versions = local_versions(connection)?;
     let mut added = 0;
     let mut updated = 0;
     let mut unchanged = 0;
 
-    for todo in imported {
+    for todo in &import.todos {
         match local_versions.get(&todo.uuid) {
             None => added += 1,
             Some(local_updated_at) if todo.updated_at > *local_updated_at => updated += 1,
             Some(_) => unchanged += 1,
         }
     }
+    let (note_added, note_updated, note_unchanged) = count_note_changes(connection, &import.notes)?;
 
     Ok(ImportPreview {
         path: path.to_string_lossy().into_owned(),
@@ -409,10 +423,14 @@ fn build_preview(
             .and_then(|name| name.to_str())
             .unwrap_or("EggDone JSON")
             .to_string(),
-        total: imported.len(),
+        total: import.todos.len(),
         added,
         updated,
         unchanged,
+        note_total: import.notes.len(),
+        note_added,
+        note_updated,
+        note_unchanged,
     })
 }
 
@@ -429,6 +447,9 @@ fn merge_transfer(
         added: 0,
         updated: 0,
         unchanged: 0,
+        note_added: 0,
+        note_updated: 0,
+        note_unchanged: 0,
     };
 
     for group in imported_groups {
@@ -457,6 +478,47 @@ fn merge_transfer(
 
     transaction.commit().map_err(database_error)?;
     Ok(result)
+}
+
+fn merge_import(connection: &mut Connection, import: TodoExport) -> Result<ImportResult, String> {
+    let note_changes = count_note_changes(connection, &import.notes)?;
+    let mut result = merge_transfer(connection, &import.groups, &import.todos)?;
+    result.note_added = note_changes.0;
+    result.note_updated = note_changes.1;
+    result.note_unchanged = note_changes.2;
+    if !import.notes.is_empty() {
+        let remote = NoteSyncDocument {
+            format_version: note_sync::NOTE_SYNC_FORMAT_VERSION,
+            device_id: device_id(connection).map_err(database_error)?,
+            generated_at: import.exported_at,
+            notes: import.notes,
+        };
+        note_sync::merge_remote_document(connection, &remote, now_millis())?;
+    }
+    Ok(result)
+}
+
+fn count_note_changes(
+    connection: &Connection,
+    imported: &[SyncNote],
+) -> Result<(usize, usize, usize), String> {
+    let local = note_sync::build_document(connection, now_millis())?;
+    let local_notes = local
+        .notes
+        .into_iter()
+        .map(|note| (note.uuid.clone(), note))
+        .collect::<HashMap<_, _>>();
+    let mut added = 0;
+    let mut updated = 0;
+    let mut unchanged = 0;
+    for note in imported {
+        match local_notes.get(&note.uuid) {
+            None => added += 1,
+            Some(local_note) if note_sync::compare_notes(note, local_note).is_gt() => updated += 1,
+            Some(_) => unchanged += 1,
+        }
+    }
+    Ok((added, updated, unchanged))
 }
 
 fn local_versions(connection: &Connection) -> Result<HashMap<String, i64>, String> {
@@ -814,6 +876,20 @@ mod tests {
         }
     }
 
+    fn note(uuid: &str, title: &str, updated_at: i64) -> SyncNote {
+        SyncNote {
+            uuid: uuid.to_string(),
+            title: title.to_string(),
+            content: "backup content".to_string(),
+            color: "yellow".to_string(),
+            pinned: true,
+            created_at: 1,
+            updated_at,
+            deleted_at: None,
+            updated_by: "00000000-0000-4000-8000-000000000099".to_string(),
+        }
+    }
+
     #[test]
     fn export_and_import_round_trip_including_deleted_todos() {
         let mut source = connection();
@@ -828,10 +904,22 @@ mod tests {
         active.group_uuid = Some(work.uuid.clone());
         let mut deleted = todo("00000000-0000-4000-8000-000000000002", "deleted", 3);
         deleted.deleted_at = Some(3);
+        let exported_note = note("00000000-0000-4000-8000-000000000003", "note", 4);
         merge_transfer(
             &mut source,
             std::slice::from_ref(&work),
             &[active.clone(), deleted.clone()],
+        )
+        .unwrap();
+        note_sync::merge_remote_document(
+            &mut source,
+            &NoteSyncDocument {
+                format_version: note_sync::NOTE_SYNC_FORMAT_VERSION,
+                device_id: "00000000-0000-4000-8000-000000000099".to_string(),
+                generated_at: 4,
+                notes: vec![exported_note.clone()],
+            },
+            4,
         )
         .unwrap();
 
@@ -840,14 +928,16 @@ mod tests {
             exported_at: 10,
             groups: read_all_groups(&source).unwrap(),
             todos: read_all_todos(&source).unwrap(),
+            notes: note_sync::build_document(&source, 10).unwrap().notes,
         };
         let json = serde_json::to_string(&export).unwrap();
         let exported: TodoExport = serde_json::from_str(&json).unwrap();
         validate_import(&exported).unwrap();
         let mut destination = connection();
-        let result = merge_transfer(&mut destination, &exported.groups, &exported.todos).unwrap();
+        let result = merge_import(&mut destination, exported).unwrap();
 
         assert_eq!(result.added, 2);
+        assert_eq!(result.note_added, 1);
         let (stored_due_date, stored_due_at): (Option<String>, Option<i64>) = destination
             .query_row(
                 "SELECT due_date, due_at FROM todos WHERE uuid = ?1",
@@ -862,6 +952,10 @@ mod tests {
         );
         assert_eq!(read_all_groups(&destination).unwrap(), vec![work]);
         assert_eq!(read_all_todos(&destination).unwrap(), vec![active, deleted]);
+        assert_eq!(
+            note_sync::build_document(&destination, 10).unwrap().notes,
+            vec![exported_note]
+        );
     }
 
     #[test]
@@ -904,6 +998,7 @@ mod tests {
             exported_at: 1,
             groups: vec![],
             todos: vec![],
+            notes: vec![],
         };
         assert!(validate_import(&future).is_err());
 
@@ -912,6 +1007,7 @@ mod tests {
             exported_at: 1,
             groups: vec![],
             todos: vec![shared.clone(), shared],
+            notes: vec![],
         };
         assert!(validate_import(&duplicated).is_err());
     }
@@ -940,6 +1036,44 @@ mod tests {
         assert_eq!(import.todos[0].note, None);
         assert_eq!(import.todos[0].archived_at, None);
         assert_eq!(import.todos[0].due_date, None);
+        assert!(import.notes.is_empty());
         validate_import(&import).unwrap();
+    }
+
+    #[test]
+    fn note_import_uses_sync_conflict_tiebreakers() {
+        let mut connection = connection();
+        let uuid = "00000000-0000-4000-8000-000000000007";
+        let local = note(uuid, "local", 10);
+        note_sync::merge_remote_document(
+            &mut connection,
+            &NoteSyncDocument {
+                format_version: note_sync::NOTE_SYNC_FORMAT_VERSION,
+                device_id: local.updated_by.clone(),
+                generated_at: 10,
+                notes: vec![local],
+            },
+            10,
+        )
+        .unwrap();
+        let mut imported = note(uuid, "imported", 10);
+        imported.updated_by = "00000000-0000-4000-8000-000000000100".to_string();
+        let result = merge_import(
+            &mut connection,
+            TodoExport {
+                format_version: FORMAT_VERSION,
+                exported_at: 11,
+                groups: vec![],
+                todos: vec![],
+                notes: vec![imported.clone()],
+            },
+        )
+        .unwrap();
+
+        assert_eq!(result.note_updated, 1);
+        assert_eq!(
+            note_sync::build_document(&connection, 11).unwrap().notes,
+            vec![imported]
+        );
     }
 }

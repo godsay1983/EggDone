@@ -7,12 +7,19 @@ export interface ImportPreview {
   added: number;
   updated: number;
   unchanged: number;
+  note_total: number;
+  note_added: number;
+  note_updated: number;
+  note_unchanged: number;
 }
 
 export interface ImportResult {
   added: number;
   updated: number;
   unchanged: number;
+  note_added: number;
+  note_updated: number;
+  note_unchanged: number;
 }
 
 export const dataApi = {

@@ -2726,7 +2726,9 @@
 {#if showDataManager}
   <DataManager
     onClose={() => (showDataManager = false)}
-    onImported={async () => todos.load()}
+    onImported={async () => {
+      await Promise.all([todos.load(), notes.load()]);
+    }}
   />
 {/if}
 

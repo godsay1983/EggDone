@@ -18,10 +18,10 @@
 
   onMount(() => dialogElement?.focus());
 
-  async function exportTodos() {
+  async function exportData() {
     await runAction(async () => {
       const path = await dataApi.exportTodos();
-      if (path) message = "Todo JSON 已导出";
+      if (path) message = "任务和便签 JSON 已导出";
     });
   }
 
@@ -63,7 +63,7 @@
   }
 
   function importMessage(result: ImportResult) {
-    return `导入完成：新增 ${result.added}，更新 ${result.updated}，保持 ${result.unchanged}`;
+    return `导入完成：任务新增 ${result.added}、更新 ${result.updated}、保持 ${result.unchanged}；便签新增 ${result.note_added}、更新 ${result.note_updated}、保持 ${result.note_unchanged}`;
   }
 </script>
 
@@ -91,19 +91,19 @@
     <header>
       <div>
         <h2 id="data-title">数据管理</h2>
-        <p>导出、恢复或备份本地任务</p>
+        <p>导出、恢复或备份本地任务和便签</p>
       </div>
       <button type="button" aria-label="关闭数据管理" onclick={onClose}>×</button>
     </header>
 
     <div class="data-actions">
-      <button type="button" disabled={busy} onclick={() => void exportTodos()}>
-        <strong>导出 Todo JSON</strong>
-        <span>用于交换数据或迁移设备</span>
+      <button type="button" disabled={busy} onclick={() => void exportData()}>
+        <strong>导出完整 JSON</strong>
+        <span>包含分组、任务和便签</span>
       </button>
       <button type="button" disabled={busy} onclick={() => void chooseImport()}>
-        <strong>导入 Todo JSON</strong>
-        <span>按 UUID 合并，不覆盖较新的本地任务</span>
+        <strong>导入完整 JSON</strong>
+        <span>按 UUID 合并，不覆盖较新的本地数据</span>
       </button>
       <button type="button" disabled={busy} onclick={() => void backupDatabase()}>
         <strong>备份 SQLite</strong>
@@ -114,11 +114,10 @@
     {#if preview}
       <div class="import-preview">
         <strong>确认导入 {preview.file_name}？</strong>
-        <span>共 {preview.total} 项</span>
+        <span>任务 {preview.total} 项，便签 {preview.note_total} 项</span>
         <div>
-          <span>新增 {preview.added}</span>
-          <span>更新 {preview.updated}</span>
-          <span>保持 {preview.unchanged}</span>
+          <span>任务：新增 {preview.added}，更新 {preview.updated}，保持 {preview.unchanged}</span>
+          <span>便签：新增 {preview.note_added}，更新 {preview.note_updated}，保持 {preview.note_unchanged}</span>
         </div>
         <div class="preview-actions">
           <button type="button" disabled={busy} onclick={() => (preview = null)}>
