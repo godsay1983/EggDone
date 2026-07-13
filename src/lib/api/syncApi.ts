@@ -6,6 +6,7 @@ export interface SyncSettings {
   region: string;
   bucket: string;
   objectKey: string;
+  noteObjectKey: string;
   pathStyle: boolean;
   allowHttp: boolean;
   credentialsConfigured: boolean;
@@ -13,7 +14,7 @@ export interface SyncSettings {
 
 export interface SaveSyncSettings extends Omit<
   SyncSettings,
-  "credentialsConfigured"
+  "credentialsConfigured" | "noteObjectKey"
 > {
   accessKey: string | null;
   secretKey: string | null;

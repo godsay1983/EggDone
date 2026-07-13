@@ -22,6 +22,7 @@ const enabledSettings = {
   region: "us-east-1",
   bucket: "eggdone",
   objectKey: "todos.json",
+  noteObjectKey: "notes.json",
   pathStyle: true,
   allowHttp: true,
   credentialsConfigured: true,

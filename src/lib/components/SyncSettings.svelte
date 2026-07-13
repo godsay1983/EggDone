@@ -74,7 +74,7 @@
     if (!settings || busy) return;
     busy = true;
     error = "";
-    message = "正在下载并合并远端任务…";
+    message = "正在下载并合并远端任务和便签…";
     try {
       settings = await saveSyncSettings({
         enabled: settings.enabled,
@@ -91,7 +91,7 @@
       secretKey = "";
       configureAutoSync(settings);
       const result = await runManualSync();
-      message = `${result.message}，共 ${result.todoCount} 条任务`;
+      message = `${result.message}，任务 ${result.todoCount} 条，便签 ${result.noteCount} 条`;
     } catch (reason) {
       message = "";
       error = errorMessage(reason);
@@ -126,7 +126,7 @@
   <div class="sync-heading">
     <div>
       <strong id="sync-title">S3 / MinIO 同步</strong>
-      <span>手动合并本地与远端任务</span>
+      <span>合并本地与远端任务、便签</span>
     </div>
     {#if settings}
       <label class="switch">
@@ -166,7 +166,7 @@
     {#if usesHttp}
       <label class="http-warning">
         <input type="checkbox" bind:checked={settings.allowHttp} disabled={busy} />
-        <span>我了解 HTTP 会明文传输凭据和 Todo 数据</span>
+        <span>我了解 HTTP 会明文传输凭据、任务和便签数据</span>
       </label>
     {/if}
 
@@ -182,8 +182,13 @@
     </div>
 
     <label class="sync-field">
-      <span>Object Key</span>
+      <span>任务 Object Key</span>
       <input bind:value={settings.objectKey} disabled={busy} />
+    </label>
+
+    <label class="sync-field">
+      <span>便签 Object Key <small>根据任务路径自动生成</small></span>
+      <input value={settings.noteObjectKey} readonly aria-readonly="true" />
     </label>
 
     <label class="path-style">
