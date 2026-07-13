@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 use crate::{
     db::{device_id, now_millis, Database},
+    note_sync,
     notes::{self, Note},
     reminders,
     s3_sync::{
@@ -648,12 +649,12 @@ pub async fn sync_now(
         let connection = lock_database(&database)?;
         s3_sync::prepare_manual_sync(&connection)?
     };
-    let mut remote = s3_sync::download_remote(&prepared).await?;
-
-    for attempt in 0..=1 {
+    let mut todo_remote = s3_sync::download_remote(&prepared).await?;
+    let mut todo_conflict_retried = false;
+    let todo_count = loop {
         let merged = {
             let mut connection = lock_database(&database)?;
-            match &remote.document {
+            match &todo_remote.document {
                 Some(document) => {
                     sync::merge_remote_document(&mut connection, document, now_millis())?
                 }
@@ -663,33 +664,66 @@ pub async fn sync_now(
         tray::update_task_badge(&app);
         let _ = app.emit_to("main", "todos-changed", ());
 
-        match s3_sync::upload_document(&prepared, &merged, &remote).await? {
-            UploadOutcome::Success => {
-                let remote_etag = s3_sync::get_remote_state(&prepared)
-                    .await
-                    .ok()
-                    .and_then(|state| state.etag);
-                return Ok(ManualSyncResult {
-                    message: if attempt == 0 {
-                        "同步完成".to_string()
-                    } else {
-                        "检测到远端更新，重新合并后同步完成".to_string()
-                    },
-                    todo_count: merged.todos.len(),
-                    conflict_retried: attempt > 0,
-                    remote_etag,
-                });
-            }
-            UploadOutcome::Conflict if attempt == 0 => {
-                remote = s3_sync::download_remote(&prepared).await?;
+        match s3_sync::upload_document(&prepared, &merged, &todo_remote).await? {
+            UploadOutcome::Success => break merged.todos.len(),
+            UploadOutcome::Conflict if !todo_conflict_retried => {
+                todo_conflict_retried = true;
+                todo_remote = s3_sync::download_remote(&prepared).await?;
             }
             UploadOutcome::Conflict => {
                 return Err("远端文件持续发生变化，已停止上传并保留本地数据".to_string());
             }
         }
-    }
+    };
 
-    Err("同步未完成".to_string())
+    let mut note_remote = s3_sync::download_note_remote(&prepared)
+        .await
+        .map_err(|error| format!("便签同步失败：{error}"))?;
+    let mut note_conflict_retried = false;
+    let note_count = loop {
+        let merged = {
+            let mut connection = lock_database(&database)?;
+            match &note_remote.document {
+                Some(document) => {
+                    note_sync::merge_remote_document(&mut connection, document, now_millis())?
+                }
+                None => note_sync::build_document(&connection, now_millis())?,
+            }
+        };
+        match s3_sync::upload_note_document(&prepared, &merged, &note_remote)
+            .await
+            .map_err(|error| format!("便签同步失败：{error}"))?
+        {
+            UploadOutcome::Success => {
+                let _ = app.emit_to("main", "notes-changed", ());
+                break merged.notes.len();
+            }
+            UploadOutcome::Conflict if !note_conflict_retried => {
+                note_conflict_retried = true;
+                note_remote = s3_sync::download_note_remote(&prepared)
+                    .await
+                    .map_err(|error| format!("便签同步失败：{error}"))?;
+            }
+            UploadOutcome::Conflict => {
+                return Err("便签远端文件持续发生变化，已停止上传并保留本地数据".to_string());
+            }
+        }
+    };
+
+    let state = s3_sync::get_remote_state(&prepared).await.ok();
+    let conflict_retried = todo_conflict_retried || note_conflict_retried;
+    Ok(ManualSyncResult {
+        message: if conflict_retried {
+            "检测到远端更新，重新合并后同步完成".to_string()
+        } else {
+            "任务和便签同步完成".to_string()
+        },
+        todo_count,
+        note_count,
+        conflict_retried,
+        todo_remote_etag: state.as_ref().and_then(|value| value.todo_etag.clone()),
+        note_remote_etag: state.and_then(|value| value.note_etag),
+    })
 }
 
 fn refresh_badge_after_success<T>(app: &AppHandle, result: &Result<T, String>) {

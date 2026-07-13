@@ -9,6 +9,7 @@ use url::Url;
 
 use crate::{
     db::{device_id, now_millis},
+    note_sync::{self, NoteSyncDocument},
     sync::{self, SyncDocument},
 };
 
@@ -56,6 +57,7 @@ pub struct PreparedConnectionTest {
 pub struct PreparedManualSync {
     bucket: Box<Bucket>,
     object_key: String,
+    note_object_key: String,
 }
 
 pub struct RemoteSyncObject {
@@ -63,11 +65,18 @@ pub struct RemoteSyncObject {
     etag: Option<String>,
 }
 
+pub struct RemoteNoteSyncObject {
+    pub document: Option<NoteSyncDocument>,
+    etag: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoteSyncState {
-    pub object_exists: bool,
-    pub etag: Option<String>,
+    pub todo_object_exists: bool,
+    pub todo_etag: Option<String>,
+    pub note_object_exists: bool,
+    pub note_etag: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -75,8 +84,10 @@ pub struct RemoteSyncState {
 pub struct ManualSyncResult {
     pub message: String,
     pub todo_count: usize,
+    pub note_count: usize,
     pub conflict_retried: bool,
-    pub remote_etag: Option<String>,
+    pub todo_remote_etag: Option<String>,
+    pub note_remote_etag: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -228,6 +239,7 @@ pub fn prepare_manual_sync(connection: &Connection) -> Result<PreparedManualSync
         .ok_or_else(|| "请先填写并保存 Access Key 和 Secret Key".to_string())?;
     Ok(PreparedManualSync {
         bucket: build_bucket(&settings, credentials)?,
+        note_object_key: derive_note_object_key(&settings.object_key),
         object_key: settings.object_key,
     })
 }
@@ -263,10 +275,13 @@ pub async fn download_remote(prepared: &PreparedManualSync) -> Result<RemoteSync
     }
 }
 
-pub async fn get_remote_state(prepared: &PreparedManualSync) -> Result<RemoteSyncState, String> {
+async fn get_object_state(
+    prepared: &PreparedManualSync,
+    object_key: &str,
+) -> Result<(bool, Option<String>), String> {
     let (headers, status) = prepared
         .bucket
-        .head_object(&prepared.object_key)
+        .head_object(object_key)
         .await
         .map_err(|error| format!("检查远端同步文件失败：{error}"))?;
 
@@ -275,17 +290,56 @@ pub async fn get_remote_state(prepared: &PreparedManualSync) -> Result<RemoteSyn
             let etag = headers
                 .e_tag
                 .ok_or_else(|| "远端同步文件缺少 ETag".to_string())?;
-            Ok(RemoteSyncState {
-                object_exists: true,
+            Ok((true, Some(etag)))
+        }
+        404 => Ok((false, None)),
+        401 | 403 => Err("连接失败：凭据无效或没有 Bucket 访问权限".to_string()),
+        _ => Err(format!("检查远端同步文件失败，S3 服务返回状态码 {status}")),
+    }
+}
+
+pub async fn get_remote_state(prepared: &PreparedManualSync) -> Result<RemoteSyncState, String> {
+    let (todo_object_exists, todo_etag) = get_object_state(prepared, &prepared.object_key).await?;
+    let (note_object_exists, note_etag) =
+        get_object_state(prepared, &prepared.note_object_key).await?;
+    Ok(RemoteSyncState {
+        todo_object_exists,
+        todo_etag,
+        note_object_exists,
+        note_etag,
+    })
+}
+
+pub async fn download_note_remote(
+    prepared: &PreparedManualSync,
+) -> Result<RemoteNoteSyncObject, String> {
+    let response = prepared
+        .bucket
+        .get_object(&prepared.note_object_key)
+        .await
+        .map_err(|error| format!("下载便签同步文件失败：{error}"))?;
+
+    match response.status_code() {
+        200..=299 => {
+            let etag = response
+                .headers()
+                .into_iter()
+                .find_map(|(name, value)| name.eq_ignore_ascii_case("etag").then_some(value))
+                .ok_or_else(|| "远端便签同步文件缺少 ETag，无法安全写入".to_string())?;
+            let document = serde_json::from_slice::<NoteSyncDocument>(response.as_slice())
+                .map_err(|error| format!("远端便签同步文件格式无效：{error}"))?;
+            note_sync::validate_document(&document)?;
+            Ok(RemoteNoteSyncObject {
+                document: Some(document),
                 etag: Some(etag),
             })
         }
-        404 => Ok(RemoteSyncState {
-            object_exists: false,
+        404 => Ok(RemoteNoteSyncObject {
+            document: None,
             etag: None,
         }),
-        401 | 403 => Err("连接失败：凭据无效或没有 Bucket 访问权限".to_string()),
-        _ => Err(format!("检查远端同步文件失败，S3 服务返回状态码 {status}")),
+        401 | 403 => Err("下载便签失败：凭据无效或没有对象读取权限".to_string()),
+        status => Err(format!("下载便签同步文件失败，S3 服务返回状态码 {status}")),
     }
 }
 
@@ -313,6 +367,52 @@ pub async fn upload_document(
         .map_err(|error| format!("上传同步文件失败：{error}"))?;
 
     classify_upload_status(response.status_code())
+}
+
+pub async fn upload_note_document(
+    prepared: &PreparedManualSync,
+    document: &NoteSyncDocument,
+    remote: &RemoteNoteSyncObject,
+) -> Result<UploadOutcome, String> {
+    let content = serde_json::to_vec_pretty(document)
+        .map_err(|error| format!("生成便签同步文件失败：{error}"))?;
+    let (header_name, header_value) = upload_condition(remote.etag.as_deref());
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        HeaderName::from_static(header_name),
+        HeaderValue::from_str(header_value)
+            .map_err(|error| format!("创建便签同步条件请求失败：{error}"))?,
+    );
+    let response = prepared
+        .bucket
+        .put_object_builder(&prepared.note_object_key, &content)
+        .with_content_type("application/json")
+        .with_headers(headers)
+        .execute()
+        .await
+        .map_err(|error| format!("上传便签同步文件失败：{error}"))?;
+
+    classify_upload_status(response.status_code())
+}
+
+pub(crate) fn derive_note_object_key(object_key: &str) -> String {
+    if object_key == "todos.json" {
+        return "notes.json".to_string();
+    }
+    if let Some(prefix) = object_key.strip_suffix("/todos.json") {
+        return format!("{prefix}/notes.json");
+    }
+    let slash_index = object_key.rfind('/');
+    if let Some(extension_index) = object_key.rfind('.') {
+        if slash_index.is_none_or(|index| extension_index > index) {
+            return format!(
+                "{}.notes{}",
+                &object_key[..extension_index],
+                &object_key[extension_index..]
+            );
+        }
+    }
+    format!("{object_key}.notes.json")
 }
 
 fn upload_condition(etag: Option<&str>) -> (&'static str, &str) {
@@ -574,6 +674,20 @@ mod tests {
         );
         assert_eq!(classify_upload_status(200).unwrap(), UploadOutcome::Success);
         assert!(classify_upload_status(500).is_err());
+    }
+
+    #[test]
+    fn derives_note_object_key_from_supported_todo_keys() {
+        assert_eq!(
+            derive_note_object_key("eggdone/todos.json"),
+            "eggdone/notes.json"
+        );
+        assert_eq!(derive_note_object_key("backup.json"), "backup.notes.json");
+        assert_eq!(derive_note_object_key("backup"), "backup.notes.json");
+        assert_eq!(
+            derive_note_object_key("egg.done/backup"),
+            "egg.done/backup.notes.json"
+        );
     }
 
     #[test]

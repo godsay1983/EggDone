@@ -41,7 +41,8 @@ let foreground = false;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let remoteCheckRunning = false;
 let remoteStateInitialized = false;
-let knownRemoteEtag: string | null = null;
+let knownTodoRemoteEtag: string | null = null;
+let knownNoteRemoteEtag: string | null = null;
 
 export async function initializeAutoSync() {
   if (initialized) return;
@@ -57,7 +58,8 @@ export async function initializeAutoSync() {
 export function configureAutoSync(settings: SyncSettings) {
   enabled = settings.enabled && settings.credentialsConfigured;
   remoteStateInitialized = false;
-  knownRemoteEtag = null;
+  knownTodoRemoteEtag = null;
+  knownNoteRemoteEtag = null;
   if (!enabled) {
     clearDebounce();
     stopForegroundPolling();
@@ -141,11 +143,14 @@ async function performSyncWithRetry(): Promise<ManualSyncResult> {
       const result = await syncNow();
       syncStatus.set({
         kind: "synced",
-        message: result.conflictRetried ? "冲突已合并，同步完成" : "同步完成",
+        message: result.conflictRetried
+          ? `冲突已合并：任务 ${result.todoCount}，便签 ${result.noteCount}`
+          : `同步完成：任务 ${result.todoCount}，便签 ${result.noteCount}`,
         updatedAt: Date.now(),
       });
-      knownRemoteEtag = result.remoteEtag;
-      remoteStateInitialized = result.remoteEtag !== null;
+      knownTodoRemoteEtag = result.todoRemoteEtag;
+      knownNoteRemoteEtag = result.noteRemoteEtag;
+      remoteStateInitialized = true;
       return result;
     } catch (reason) {
       lastError = reason;
@@ -171,10 +176,13 @@ async function checkRemoteAndSync() {
     const remote = await getRemoteSyncState();
     const changed =
       !remoteStateInitialized ||
-      remote.objectExists !== (knownRemoteEtag !== null) ||
-      remote.etag !== knownRemoteEtag;
+      remote.todoObjectExists !== (knownTodoRemoteEtag !== null) ||
+      remote.todoEtag !== knownTodoRemoteEtag ||
+      remote.noteObjectExists !== (knownNoteRemoteEtag !== null) ||
+      remote.noteEtag !== knownNoteRemoteEtag;
     remoteStateInitialized = true;
-    knownRemoteEtag = remote.etag;
+    knownTodoRemoteEtag = remote.todoEtag;
+    knownNoteRemoteEtag = remote.noteEtag;
     if (changed) {
       await runAutomaticSync();
     }

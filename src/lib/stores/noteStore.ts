@@ -1,6 +1,7 @@
 import { derived, writable } from "svelte/store";
 
 import { noteApi } from "$lib/api/noteApi";
+import { scheduleAutoSync } from "$lib/sync/autoSync";
 import type { Note, NoteColor } from "$lib/types";
 
 const AUTO_SAVE_DELAY_MS = 600;
@@ -33,7 +34,7 @@ const initialState: NoteState = {
 
 export function createNoteStore(
   api = noteApi,
-  onChanged: () => void = () => undefined,
+  onChanged: () => void = scheduleAutoSync,
   autoSaveDelayMs = AUTO_SAVE_DELAY_MS,
 ) {
   const store = writable<NoteState>({ ...initialState });

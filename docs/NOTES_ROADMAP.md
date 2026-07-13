@@ -48,13 +48,13 @@
 
 ## D4：S3 / MinIO 同步
 
-- [ ] 新增 NoteSyncDocument 构建、校验和合并。
-- [ ] 实现 `notes.json` 下载、ETag、`If-Match` 上传和冲突重试。
-- [ ] 远端 404 时按空文档处理并创建对象。
-- [ ] Todo 和 Note 共用同步互斥锁，分别维护 dirty 和 ETag。
-- [ ] 前台恢复、60 秒检查、手动同步和下拉刷新覆盖 Note。
-- [ ] 同步状态详情区分 Todo 和 Note 结果。
-- [ ] 增加跨端 fixture 测试。
+- [x] 新增 NoteSyncDocument 构建、校验和合并。
+- [x] 实现 `notes.json` 下载、ETag、`If-Match` 上传和冲突重试。
+- [x] 远端 404 时按空文档处理并创建对象。
+- [x] Todo 和 Note 共用同步互斥锁，分别维护 dirty 和 ETag。
+- [x] 前台恢复、60 秒检查、手动同步和下拉刷新覆盖 Note。
+- [x] 同步状态详情区分 Todo 和 Note 结果。
+- [x] 增加跨端 fixture 测试。
 
 完成条件：桌面创建的便签可被鸿蒙端读取，冲突重试后两端结果一致。
 
@@ -70,10 +70,10 @@
 
 ## D6：回归与发布
 
-- [ ] 运行 `pnpm check`。
-- [ ] 运行 `pnpm build`。
-- [ ] 运行 `cargo fmt -- --check`。
-- [ ] 运行 `cargo check` 和相关 Rust 测试。
+- [x] 运行 `pnpm check`。
+- [x] 运行 `pnpm build`。
+- [x] 运行 `cargo fmt -- --check`。
+- [x] 运行 `cargo check` 和相关 Rust 测试。
 - [ ] Windows 手动验证托盘显隐、失焦隐藏和便签自动保存。
 - [ ] 验证亮色、暗色和不同面板宽度。
 - [ ] 执行桌面创建、鸿蒙编辑、桌面删除的完整同步链路。

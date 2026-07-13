@@ -1,6 +1,7 @@
 mod commands;
 mod data_exchange;
 mod db;
+mod note_sync;
 mod notes;
 mod panel_position;
 mod reminders;

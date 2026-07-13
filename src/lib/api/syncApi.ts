@@ -27,13 +27,17 @@ export interface ConnectionTestResult {
 export interface ManualSyncResult {
   message: string;
   todoCount: number;
+  noteCount: number;
   conflictRetried: boolean;
-  remoteEtag: string | null;
+  todoRemoteEtag: string | null;
+  noteRemoteEtag: string | null;
 }
 
 export interface RemoteSyncState {
-  objectExists: boolean;
-  etag: string | null;
+  todoObjectExists: boolean;
+  todoEtag: string | null;
+  noteObjectExists: boolean;
+  noteEtag: string | null;
 }
 
 export function getSyncSettings(): Promise<SyncSettings> {

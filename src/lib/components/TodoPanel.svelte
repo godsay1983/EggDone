@@ -383,6 +383,7 @@
         void todos.refresh();
       }).then((unlisten) => unlisteners.push(unlisten));
       void listen("notes-changed", () => {
+        notes.markSynced();
         void notes.refresh();
       }).then((unlisten) => unlisteners.push(unlisten));
     }

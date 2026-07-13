@@ -41,8 +41,10 @@ describe("auto sync", () => {
     vi.mocked(syncApi.syncNow).mockResolvedValue({
       message: "同步完成",
       todoCount: 1,
+      noteCount: 1,
       conflictRetried: false,
-      remoteEtag: "\"etag-1\"",
+      todoRemoteEtag: "\"etag-1\"",
+      noteRemoteEtag: "\"note-etag-1\"",
     });
 
     scheduleAutoSync();
@@ -62,8 +64,10 @@ describe("auto sync", () => {
       .mockResolvedValueOnce({
         message: "同步完成",
         todoCount: 2,
+        noteCount: 1,
         conflictRetried: false,
-        remoteEtag: "\"etag-2\"",
+        todoRemoteEtag: "\"etag-2\"",
+        noteRemoteEtag: "\"note-etag-2\"",
       });
 
     const resultPromise = runManualSync();
@@ -89,14 +93,18 @@ describe("auto sync", () => {
     vi.useFakeTimers();
     configureAutoSync(enabledSettings);
     vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue({
-      objectExists: true,
-      etag: "\"etag-remote\"",
+      todoObjectExists: true,
+      todoEtag: "\"etag-remote\"",
+      noteObjectExists: true,
+      noteEtag: "\"note-etag-remote\"",
     });
     vi.mocked(syncApi.syncNow).mockResolvedValue({
       message: "同步完成",
       todoCount: 1,
+      noteCount: 1,
       conflictRetried: false,
-      remoteEtag: "\"etag-remote\"",
+      todoRemoteEtag: "\"etag-remote\"",
+      noteRemoteEtag: "\"note-etag-remote\"",
     });
 
     setAutoSyncForeground(true);
