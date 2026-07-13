@@ -35,3 +35,18 @@ export interface TodoGroup {
   updated_at: number;
   deleted_at: number | null;
 }
+
+export type NoteColor = "default" | "yellow" | "pink" | "green" | "blue";
+
+export interface Note {
+  id: number;
+  uuid: string;
+  title: string;
+  content: string;
+  color: NoteColor;
+  pinned: boolean;
+  created_at: number;
+  updated_at: number;
+  deleted_at: number | null;
+  updated_by: string;
+}
