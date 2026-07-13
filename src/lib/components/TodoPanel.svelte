@@ -16,6 +16,7 @@
     remainingCount,
     todos,
   } from "$lib/stores/todoStore";
+  import { notes, visibleNotes } from "$lib/stores/noteStore";
   import {
     initializeAutoSync,
     setAutoSyncForeground,
@@ -26,6 +27,8 @@
     RepeatEditScope,
     Todo,
     TodoGroup,
+    Note,
+    NoteColor,
   } from "$lib/types";
   import { movePreviewByPointer } from "$lib/utils/reorderPreview";
   import { isDueTodayOrOverdue, localDateString } from "$lib/utils/todoDates";
@@ -54,8 +57,13 @@
   import DataManager from "./DataManager.svelte";
   import SettingsPanel from "./SettingsPanel.svelte";
   import TodoItem from "./TodoItem.svelte";
+  import NoteEditor from "./NoteEditor.svelte";
+  import NoteList from "./NoteList.svelte";
 
   type Theme = "light" | "dark";
+  type MainView = TodoListView | "notes";
+  const NOTE_DRAFT_UUID = "__new_note_draft__";
+  const NOTE_DRAFT_SAVE_DELAY_MS = 600;
   type GroupColor = "yellow" | "green" | "blue" | "peach" | "lavender" | "gray";
   type GroupDropTarget = string | null;
   type FocusTodoPayload = { uuid: string };
@@ -161,7 +169,13 @@
   let summaryMenuOpen = false;
   let searchQuery = "";
   let showCompleted = true;
-  let listView: TodoListView = "all";
+  let listView: MainView = "all";
+  let selectedNoteUuid: string | null = null;
+  let noteDraft: Note | null = null;
+  let noteDraftSaveTimer: ReturnType<typeof setTimeout> | null = null;
+  let noteDraftCreatePromise: Promise<Note | null> | null = null;
+  let deletedNote: Note | null = null;
+  let noteUndoTimer: ReturnType<typeof setTimeout> | null = null;
   let selectedQuadrant: QuadrantKey | "all" = "all";
   let selectedAgendaDate: string | null = null;
   let agendaWeekStartAt = startOfAgendaWeek();
@@ -205,8 +219,13 @@
   $: selectedGroupIndex = $todos.groups.findIndex(
     (group) => group.uuid === selectedGroup,
   );
+  $: selectedNote = noteDraft ?? (selectedNoteUuid === null
+    ? null
+    : $notes.items.find((note) => note.uuid === selectedNoteUuid) ?? null);
+  $: noteEditorSaving =
+    $notes.saving || noteDraftSaveTimer !== null || noteDraftCreatePromise !== null;
   $: filteredTodos = filterTodos($todos.items, searchQuery, showCompleted, {
-    view: listView,
+    view: listView === "notes" ? "all" : listView,
     groupUuid: activeGroupUuid,
   });
   $: renderedTodos = applyPreviewOrder(filteredTodos, previewOrderIds);
@@ -245,6 +264,7 @@
       quickAddResult.priority === 1)
       ? quickAddResult
       : null;
+  $: notes.setSearchQuery(listView === "notes" ? searchQuery : "");
   $: focusDisplayPhase = focusCompletionVisible
     ? "完成"
     : focusPhase === "focus"
@@ -303,6 +323,7 @@
       : 170;
 
     void todos.load();
+    void notes.load();
     function handlePointerDown(event: PointerEvent) {
       if (
         summaryMenuOpen &&
@@ -361,6 +382,9 @@
       void listen("todos-changed", () => {
         void todos.refresh();
       }).then((unlisten) => unlisteners.push(unlisten));
+      void listen("notes-changed", () => {
+        void notes.refresh();
+      }).then((unlisten) => unlisteners.push(unlisten));
     }
 
     return () => {
@@ -371,6 +395,8 @@
       if (undoTimer) clearTimeout(undoTimer);
       if (clearTimer) clearTimeout(clearTimer);
       if (groupDeleteTimer) clearTimeout(groupDeleteTimer);
+      if (noteUndoTimer) clearTimeout(noteUndoTimer);
+      void flushAllNoteChanges().catch(() => undefined);
       clearFocusCompletionTimer();
       window.clearInterval(focusInterval);
       window.removeEventListener(
@@ -422,7 +448,12 @@
     cancelDrag();
   }
 
-  function setListView(view: TodoListView) {
+  function setListView(view: MainView) {
+    if (listView === "notes" && view !== "notes") {
+      void closeNoteEditor();
+      searchQuery = "";
+      showSearch = false;
+    }
     listView = view;
     if (view !== "quadrants") {
       selectedQuadrant = "all";
@@ -434,10 +465,166 @@
       agendaDatePickerOpen = false;
     }
     summaryMenuOpen = false;
-    localStorage.setItem(LAST_LIST_VIEW_KEY, view);
+    if (view !== "notes") localStorage.setItem(LAST_LIST_VIEW_KEY, view);
     selectedTodoId = null;
     clearBatchSelection();
     cancelDrag();
+  }
+
+  async function createNote() {
+    await flushAllNoteChanges();
+    const now = Date.now();
+    noteDraft = {
+      id: 0,
+      uuid: NOTE_DRAFT_UUID,
+      title: "",
+      content: "",
+      color: "default",
+      pinned: false,
+      created_at: now,
+      updated_at: now,
+      deleted_at: null,
+      updated_by: "",
+    };
+    selectedNoteUuid = null;
+  }
+
+  function openNote(note: Note) {
+    discardNoteDraft();
+    selectedNoteUuid = note.uuid;
+  }
+
+  function updateNote(note: Note, nextTitle: string, content: string) {
+    if (note.uuid === NOTE_DRAFT_UUID && noteDraft) {
+      noteDraft = { ...noteDraft, title: nextTitle, content };
+      scheduleNoteDraftSave();
+      return;
+    }
+    notes.scheduleUpdate(note, nextTitle, content);
+  }
+
+  async function closeNoteEditor() {
+    await flushAllNoteChanges();
+    discardNoteDraft();
+    selectedNoteUuid = null;
+  }
+
+  async function pinNote(note: Note, pinned: boolean) {
+    if (note.uuid === NOTE_DRAFT_UUID && noteDraft) {
+      noteDraft = { ...noteDraft, pinned };
+      scheduleNoteDraftSave();
+      return;
+    }
+    await notes.setPinned(note, pinned);
+  }
+
+  async function colorNote(note: Note, color: NoteColor) {
+    if (note.uuid === NOTE_DRAFT_UUID && noteDraft) {
+      noteDraft = { ...noteDraft, color };
+      scheduleNoteDraftSave();
+      return;
+    }
+    await notes.setColor(note, color);
+  }
+
+  async function deleteNote(note: Note) {
+    if (note.uuid === NOTE_DRAFT_UUID) {
+      if (noteDraftCreatePromise) {
+        const created = await noteDraftCreatePromise;
+        if (created) await deleteNote(created);
+        return;
+      }
+      discardNoteDraft();
+      selectedNoteUuid = null;
+      return;
+    }
+    notes.cancelPending();
+    deletedNote = await notes.remove(note);
+    selectedNoteUuid = null;
+    if (noteUndoTimer) clearTimeout(noteUndoTimer);
+    noteUndoTimer = setTimeout(() => (deletedNote = null), 6000);
+  }
+
+  function hasNoteDraftContent(draft: Note) {
+    return draft.title.trim().length > 0 || draft.content.trim().length > 0;
+  }
+
+  function scheduleNoteDraftSave() {
+    if (noteDraftSaveTimer) clearTimeout(noteDraftSaveTimer);
+    noteDraftSaveTimer = null;
+    if (!noteDraft || !hasNoteDraftContent(noteDraft)) return;
+    noteDraftSaveTimer = setTimeout(() => {
+      noteDraftSaveTimer = null;
+      void persistNoteDraft().catch(() => undefined);
+    }, NOTE_DRAFT_SAVE_DELAY_MS);
+  }
+
+  async function persistNoteDraft(): Promise<Note | null> {
+    if (noteDraftCreatePromise) return noteDraftCreatePromise;
+    if (!noteDraft || !hasNoteDraftContent(noteDraft)) return null;
+
+    const task = createNoteFromDraft(noteDraft);
+    noteDraftCreatePromise = task;
+    try {
+      return await task;
+    } finally {
+      noteDraftCreatePromise = null;
+    }
+  }
+
+  async function createNoteFromDraft(initialDraft: Note): Promise<Note> {
+    let created = await notes.add(
+      initialDraft.title,
+      initialDraft.content,
+      initialDraft.color,
+    );
+    const latestDraft = noteDraft ?? initialDraft;
+
+    if (
+      latestDraft.title !== created.title ||
+      latestDraft.content !== created.content
+    ) {
+      notes.scheduleUpdate(created, latestDraft.title, latestDraft.content);
+      created = (await notes.flushPending()) ?? created;
+    }
+    if (latestDraft.color !== created.color) {
+      created = await notes.setColor(created, latestDraft.color);
+    }
+    if (latestDraft.pinned !== created.pinned) {
+      created = await notes.setPinned(created, latestDraft.pinned);
+    }
+
+    noteDraft = null;
+    selectedNoteUuid = created.uuid;
+    return created;
+  }
+
+  async function flushAllNoteChanges() {
+    if (noteDraftSaveTimer) {
+      clearTimeout(noteDraftSaveTimer);
+      noteDraftSaveTimer = null;
+    }
+    if (noteDraftCreatePromise) {
+      await noteDraftCreatePromise;
+    } else if (noteDraft && hasNoteDraftContent(noteDraft)) {
+      await persistNoteDraft();
+    }
+    await notes.flushPending();
+  }
+
+  function discardNoteDraft() {
+    if (noteDraftSaveTimer) clearTimeout(noteDraftSaveTimer);
+    noteDraftSaveTimer = null;
+    noteDraft = null;
+  }
+
+  async function undoNoteDelete() {
+    if (!deletedNote) return;
+    const note = deletedNote;
+    deletedNote = null;
+    if (noteUndoTimer) clearTimeout(noteUndoTimer);
+    noteUndoTimer = null;
+    await notes.restore(note);
   }
 
   function setDefaultListViewMode(mode: DefaultListViewMode) {
@@ -1045,6 +1232,26 @@
   }
 
   function handlePanelKeydown(event: KeyboardEvent) {
+    if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLocaleLowerCase() === "n") {
+      event.preventDefault();
+      setListView("notes");
+      void createNote();
+      return;
+    }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === "f") {
+      event.preventDefault();
+      if (selectedNote) {
+        void closeNoteEditor().then(() => toggleSearch());
+      } else {
+        void toggleSearch();
+      }
+      return;
+    }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === "s" && selectedNote) {
+      event.preventDefault();
+      void flushAllNoteChanges();
+      return;
+    }
     if (shouldIgnoreKeyboardNavigation(event)) return;
     if (event.key === "ArrowDown" || event.key === "j") {
       event.preventDefault();
@@ -1669,20 +1876,28 @@
     </div>
   </header>
 
-  <form class="quick-add" onsubmit={(event) => { event.preventDefault(); void addTodo(); }}>
-    <input
-      bind:this={inputElement}
-      bind:value={title}
-      maxlength="200"
-      placeholder={`准备完成什么？${groupLabel(selectedGroup, $todos.groups)} · 回车添加`}
-      aria-label="新任务内容"
-      autocomplete="off"
-    />
-    <button type="submit" disabled={!title.trim() || adding} aria-label="添加任务">
-      {adding ? "…" : "+"}
-    </button>
-  </form>
-  {#if quickAddPreview}
+  {#if selectedNote === null}
+    {#if listView === "notes"}
+      <button class="quick-add note-quick-add" type="button" onclick={() => void createNote()}>
+        <span>新建便签</span><strong>+</strong>
+      </button>
+    {:else}
+      <form class="quick-add" onsubmit={(event) => { event.preventDefault(); void addTodo(); }}>
+        <input
+          bind:this={inputElement}
+          bind:value={title}
+          maxlength="200"
+          placeholder={`准备完成什么？${groupLabel(selectedGroup, $todos.groups)} · 回车添加`}
+          aria-label="新任务内容"
+          autocomplete="off"
+        />
+        <button type="submit" disabled={!title.trim() || adding} aria-label="添加任务">
+          {adding ? "…" : "+"}
+        </button>
+      </form>
+    {/if}
+  {/if}
+  {#if quickAddPreview && listView !== "notes"}
     <div class="quick-add-preview" role="status">
       <span>
         将创建“{quickAddPreview.title}”
@@ -1694,6 +1909,7 @@
     </div>
   {/if}
 
+  {#if listView !== "notes"}
   <section class="group-filter" aria-label="任务分组">
     {#if groupScrollOverflowing}
       <button
@@ -1820,6 +2036,7 @@
       </button>
     {/if}
   </section>
+  {/if}
 
   {#if managingGroup && selectedGroupObject}
     <form
@@ -1913,7 +2130,7 @@
     </form>
   {/if}
 
-  {#if showSearch}
+  {#if showSearch && selectedNote === null}
     <div class="todo-search">
       <svg viewBox="0 0 20 20" aria-hidden="true">
         <circle cx="8.5" cy="8.5" r="4.5" />
@@ -1924,8 +2141,8 @@
         bind:value={searchQuery}
         type="search"
         maxlength="200"
-        placeholder="搜索任务"
-        aria-label="搜索任务"
+        placeholder={listView === "notes" ? "搜索便签" : "搜索任务"}
+        aria-label={listView === "notes" ? "搜索便签" : "搜索任务"}
         autocomplete="off"
         onkeydown={handleSearchKeydown}
       />
@@ -1943,6 +2160,7 @@
     </div>
   {/if}
 
+  {#if selectedNote === null}
   <section class="summary">
     <div class="view-switch" aria-label="任务视图">
       <button
@@ -1977,9 +2195,17 @@
       >
         日历
       </button>
+      <button
+        class:active={listView === "notes"}
+        type="button"
+        aria-pressed={listView === "notes"}
+        onclick={() => setListView("notes")}
+      >
+        便签
+      </button>
     </div>
     <div bind:this={summaryActionsElement} class="summary-actions">
-      <span class="count">{$remainingCount} 项未完成</span>
+      <span class="count">{listView === "notes" ? `${$notes.items.length} 张便签` : `${$remainingCount} 项未完成`}</span>
       <button
         class:active={summaryMenuOpen || showSearch || batchMode}
         class="summary-menu-button"
@@ -1999,9 +2225,9 @@
             role="menuitem"
             onclick={() => void toggleSearch()}
           >
-            {showSearch ? "关闭搜索" : "搜索任务"}
+            {showSearch ? "关闭搜索" : listView === "notes" ? "搜索便签" : "搜索任务"}
           </button>
-          {#if $completedCount > 0 && listView === "all"}
+          {#if listView !== "notes" && $completedCount > 0 && listView === "all"}
             <button
               class:active={!showCompleted}
               type="button"
@@ -2011,7 +2237,7 @@
               {showCompleted ? "隐藏已完成" : "显示已完成"}
             </button>
           {/if}
-          {#if $completedCount > 0}
+          {#if listView !== "notes" && $completedCount > 0}
             <button
               type="button"
               role="menuitem"
@@ -2028,7 +2254,7 @@
               {confirmingClear ? "确认清除？" : "清除已完成"}
             </button>
           {/if}
-          {#if renderedTodos.length > 0}
+          {#if listView !== "notes" && renderedTodos.length > 0}
             <button
               class:active={batchMode}
               type="button"
@@ -2042,8 +2268,9 @@
       {/if}
     </div>
   </section>
+  {/if}
 
-  {#if batchMode && renderedTodos.length > 0}
+  {#if listView !== "notes" && batchMode && renderedTodos.length > 0}
     <section class="batch-toolbar" aria-label="批量操作">
       <span>{batchSelectionCount > 0 ? `已选 ${batchSelectionCount}` : "选择任务"}</span>
       <button
@@ -2096,6 +2323,30 @@
     </section>
   {/if}
 
+  {#if selectedNote}
+    <NoteEditor
+      note={selectedNote}
+      draft={selectedNote.uuid === NOTE_DRAFT_UUID}
+      saving={noteEditorSaving}
+      error={$notes.error}
+      onChange={updateNote}
+      onDone={closeNoteEditor}
+      onPin={pinNote}
+      onColor={colorNote}
+      onDelete={deleteNote}
+    />
+  {:else if listView === "notes"}
+    <NoteList
+      items={$visibleNotes}
+      loading={$notes.loading}
+      error={$notes.error}
+      searchActive={searchQuery.trim().length > 0}
+      onOpen={openNote}
+      onPin={pinNote}
+      onColor={colorNote}
+      onDelete={deleteNote}
+    />
+  {:else}
   <section class="todo-list" aria-live="polite">
     {#if $todos.loading}
       <div class="status">正在唤醒拖拖蛋…</div>
@@ -2432,6 +2683,7 @@
       {/if}
     {/if}
   </section>
+  {/if}
 
   <footer>
     <span>一步一点，不着急</span>
@@ -2489,6 +2741,13 @@
         : `已删除 ${undoTodos.length} 个重复任务`}
     </span>
     <button type="button" onclick={() => void undoDelete()}>撤销</button>
+  </div>
+{/if}
+
+{#if deletedNote}
+  <div class="undo-toast" role="status">
+    <span>已删除“{deletedNote.title || "无标题便签"}”</span>
+    <button type="button" onclick={() => void undoNoteDelete()}>撤销</button>
   </div>
 {/if}
 
