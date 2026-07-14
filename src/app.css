@@ -901,6 +901,34 @@ footer {
   color: #a15f52;
 }
 
+.note-editor header button,
+.note-editor footer > button {
+  border: 1px solid #d9c5a5;
+  color: #5a4632;
+  background: #f3e8d2;
+}
+
+.note-editor button.danger {
+  border-color: #e6b9b0;
+  color: #8b2f27;
+  background: #fbe5df;
+}
+
+.note-editor header button:hover,
+.note-editor footer > button:hover {
+  background: #ead9b8;
+}
+
+.note-editor button.danger:hover {
+  background: #f4d3cc;
+}
+
+.note-editor header button:focus-visible,
+.note-editor footer > button:focus-visible {
+  outline: 2px solid #8d6b22;
+  outline-offset: 2px;
+}
+
 .note-color-picker {
   display: flex;
   align-items: center;
@@ -969,8 +997,13 @@ footer {
 }
 
 .note-editor header button.primary {
-  color: #5c491a;
-  background: #f2c443;
+  border-color: #e1aa30;
+  color: #3b2f24;
+  background: #f6b93b;
+}
+
+.note-editor header button.primary:hover {
+  background: #edac2f;
 }
 
 .note-editor > input,
@@ -4502,11 +4535,46 @@ html[data-theme="dark"] .note-card-body small {
   color: #978b7b;
 }
 
-html[data-theme="dark"] .note-card-actions button,
-html[data-theme="dark"] .note-editor header button,
-html[data-theme="dark"] .note-editor footer > button {
+html[data-theme="dark"] .note-card-actions button {
   color: #d2c6b5;
   background: rgb(255 255 255 / 8%);
+}
+
+html[data-theme="dark"] .note-editor header button,
+html[data-theme="dark"] .note-editor footer > button {
+  border-color: #6c5947;
+  color: #fff1d6;
+  background: #4a3d31;
+}
+
+html[data-theme="dark"] .note-editor button.danger {
+  border-color: #7a4640;
+  color: #ffd6cf;
+  background: #5a312d;
+}
+
+html[data-theme="dark"] .note-editor header button:hover,
+html[data-theme="dark"] .note-editor footer > button:hover {
+  background: #5b4b3d;
+}
+
+html[data-theme="dark"] .note-editor button.danger:hover {
+  background: #6b3a34;
+}
+
+html[data-theme="dark"] .note-editor header button:focus-visible,
+html[data-theme="dark"] .note-editor footer > button:focus-visible {
+  outline-color: #f6c15a;
+}
+
+html[data-theme="dark"] .note-editor header button.primary {
+  border-color: #c59632;
+  color: #3b2f24;
+  background: #f6c15a;
+}
+
+html[data-theme="dark"] .note-editor header button.primary:hover {
+  background: #e8b348;
 }
 
 html[data-theme="dark"] .note-card > .note-color-picker {

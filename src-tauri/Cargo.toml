@@ -1,6 +1,6 @@
 [package]
 name = "eggdone"
-version = "1.0.2"
+version = "1.0.3"
 description = "EggDone tray Todo application"
 authors = ["EggDone Contributors"]
 edition = "2021"
