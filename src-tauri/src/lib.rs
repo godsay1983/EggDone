@@ -1,6 +1,7 @@
 mod commands;
 mod data_exchange;
 mod db;
+mod note_asset_store;
 mod note_attachment_sync;
 mod note_attachments;
 mod note_sync;
@@ -52,6 +53,8 @@ pub fn run() {
         .setup(|app| {
             let database = db::Database::open(app.handle())?;
             app.manage(database);
+            let note_asset_store = note_asset_store::NoteAssetStore::from_app(app.handle())?;
+            app.manage(note_asset_store);
             // Tauri removes a tray icon when its last handle is dropped.
             // Store the handle in application state for the whole process lifetime.
             let tray_icon = tray::create_tray(app.handle())?;
