@@ -96,6 +96,7 @@ pub fn run() {
             commands::delete_note,
             commands::restore_note,
             commands::list_note_attachments,
+            commands::reorder_note_attachments,
             commands::create_note_image_attachment,
             commands::read_note_attachment_preview,
             commands::read_note_attachment_original,

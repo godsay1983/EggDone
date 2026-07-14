@@ -204,6 +204,23 @@ pub fn list_note_attachments(
 }
 
 #[tauri::command]
+pub fn reorder_note_attachments(
+    note_uuid: String,
+    ordered_uuids: Vec<String>,
+    app: AppHandle,
+    database: State<'_, Database>,
+) -> Result<Vec<note_attachments::NoteAttachment>, String> {
+    let result = {
+        let mut connection = lock_database(&database)?;
+        note_attachments::reorder_active_by_note(&mut connection, &note_uuid, &ordered_uuids)
+    };
+    if result.is_ok() {
+        let _ = app.emit_to("main", "note-attachments-changed", note_uuid);
+    }
+    result
+}
+
+#[tauri::command]
 pub fn create_note_image_attachment(
     note_uuid: String,
     display_name: String,

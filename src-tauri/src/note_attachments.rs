@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 use uuid::Uuid;
@@ -155,28 +157,54 @@ pub(crate) fn create_pending(
     require_by_uuid(connection, &input.uuid)
 }
 
-pub(crate) fn set_sort_order(
-    connection: &Connection,
-    uuid: &str,
-    sort_order: i64,
-) -> Result<NoteAttachment, String> {
-    validate_uuid(uuid, "附件 UUID 无效")?;
-    if sort_order < 0 {
-        return Err("附件排序无效".to_string());
+pub(crate) fn reorder_active_by_note(
+    connection: &mut Connection,
+    note_uuid: &str,
+    ordered_uuids: &[String],
+) -> Result<Vec<NoteAttachment>, String> {
+    validate_uuid(note_uuid, "便签 UUID 无效")?;
+    let current = list_active_by_note(connection, note_uuid)?;
+    if current.len() != ordered_uuids.len() {
+        return Err("附件排序列表与当前便签不一致".to_string());
     }
+
+    let current_uuids = current
+        .iter()
+        .map(|attachment| attachment.uuid.as_str())
+        .collect::<HashSet<_>>();
+    let mut seen = HashSet::with_capacity(ordered_uuids.len());
+    for uuid in ordered_uuids {
+        validate_uuid(uuid, "附件 UUID 无效")?;
+        if !current_uuids.contains(uuid.as_str()) || !seen.insert(uuid.as_str()) {
+            return Err("附件排序列表与当前便签不一致".to_string());
+        }
+    }
+
+    if ordered_uuids.is_empty() {
+        return Ok(current);
+    }
+
+    let now = current.iter().fold(now_millis(), |latest, attachment| {
+        latest.max(attachment.updated_at.saturating_add(1))
+    });
     let updated_by = device_id(connection).map_err(database_error)?;
-    let changed = connection
-        .execute(
-            "
-            UPDATE note_attachments
-            SET sort_order = ?1, updated_at = ?2, updated_by = ?3
-            WHERE uuid = ?4 AND deleted_at IS NULL
-            ",
-            params![sort_order, now_millis(), updated_by, uuid],
-        )
-        .map_err(database_error)?;
-    require_changed(changed)?;
-    require_by_uuid(connection, uuid)
+    let transaction = connection.transaction().map_err(database_error)?;
+    for (index, uuid) in ordered_uuids.iter().enumerate() {
+        let changed = transaction
+            .execute(
+                "
+                UPDATE note_attachments
+                SET sort_order = ?1, updated_at = ?2, updated_by = ?3
+                WHERE uuid = ?4 AND note_uuid = ?5 AND deleted_at IS NULL
+                ",
+                params![index as i64 * 1_000, now, updated_by, uuid, note_uuid],
+            )
+            .map_err(database_error)?;
+        require_changed(changed)?;
+    }
+    transaction.commit().map_err(database_error)?;
+
+    list_active_by_note(connection, note_uuid)
 }
 
 pub(crate) fn set_transfer_state(
@@ -463,9 +491,10 @@ mod tests {
 
     const NOTE_ID: &str = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
     const ATTACHMENT_ID: &str = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const SECOND_ATTACHMENT_ID: &str = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 
     #[test]
-    fn creates_sorts_and_tracks_pending_attachment() {
+    fn creates_and_tracks_pending_attachment() {
         let connection = connection();
         insert_note(&connection);
 
@@ -474,9 +503,7 @@ mod tests {
         assert!(!created.remote_uploaded);
         assert_eq!(list_pending_transfers(&connection).unwrap().len(), 1);
 
-        let reordered = set_sort_order(&connection, ATTACHMENT_ID, 3).unwrap();
-        assert_eq!(reordered.sort_order, 3);
-        let protocol_updated_at = reordered.updated_at;
+        let protocol_updated_at = created.updated_at;
         let synced = set_transfer_state(&connection, ATTACHMENT_ID, "synced", None, true).unwrap();
         assert!(synced.remote_uploaded);
         assert_eq!(synced.updated_at, protocol_updated_at);
@@ -514,6 +541,38 @@ mod tests {
                 .deleted_at,
             None
         );
+    }
+
+    #[test]
+    fn reorders_complete_attachment_set_atomically() {
+        let mut connection = connection();
+        insert_note(&connection);
+        create_pending(&connection, &image_input()).unwrap();
+        let mut second = image_input();
+        second.uuid = SECOND_ATTACHMENT_ID.to_string();
+        second.sort_order = 1_000;
+        second.local_original_path = format!("note-assets/{SECOND_ATTACHMENT_ID}/original");
+        second.local_preview_path = Some(format!("note-assets/{SECOND_ATTACHMENT_ID}/preview.jpg"));
+        create_pending(&connection, &second).unwrap();
+
+        let reordered = reorder_active_by_note(
+            &mut connection,
+            NOTE_ID,
+            &[SECOND_ATTACHMENT_ID.to_string(), ATTACHMENT_ID.to_string()],
+        )
+        .unwrap();
+        assert_eq!(reordered[0].uuid, SECOND_ATTACHMENT_ID);
+        assert_eq!(reordered[0].sort_order, 0);
+        assert_eq!(reordered[1].uuid, ATTACHMENT_ID);
+        assert_eq!(reordered[1].sort_order, 1_000);
+
+        let error = reorder_active_by_note(
+            &mut connection,
+            NOTE_ID,
+            &[SECOND_ATTACHMENT_ID.to_string()],
+        )
+        .unwrap_err();
+        assert_eq!(error, "附件排序列表与当前便签不一致");
     }
 
     #[test]

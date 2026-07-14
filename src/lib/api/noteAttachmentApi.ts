@@ -11,6 +11,10 @@ export const noteAttachmentApi = {
     return invoke<NoteAttachment[]>("list_note_attachments", { noteUuid });
   },
 
+  reorder(noteUuid: string, orderedUuids: string[]): Promise<NoteAttachment[]> {
+    return invoke<NoteAttachment[]>("reorder_note_attachments", { noteUuid, orderedUuids });
+  },
+
   async createImage(noteUuid: string, file: File): Promise<NoteAttachment> {
     const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
     return invoke<NoteAttachment>("create_note_image_attachment", {

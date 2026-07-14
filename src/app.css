@@ -1135,6 +1135,13 @@ footer {
   color: #8b2f27;
 }
 
+.note-attachment-grid article > div button:disabled {
+  color: #8d8478;
+  background: rgb(255 255 255 / 34%);
+  cursor: default;
+  opacity: 0.62;
+}
+
 .note-image-viewer {
   position: fixed;
   z-index: 120;

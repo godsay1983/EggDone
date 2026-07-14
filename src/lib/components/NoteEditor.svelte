@@ -16,6 +16,7 @@
   export let attachmentBusy = false;
   export let onAddImages: (files: File[]) => Promise<void>;
   export let onOpenAttachment: (attachment: NoteAttachment) => Promise<string>;
+  export let onMoveAttachment: (attachment: NoteAttachment, direction: -1 | 1) => Promise<void>;
   export let onDeleteAttachment: (attachment: NoteAttachment) => Promise<void>;
   export let onRetryAttachment: (attachment: NoteAttachment) => Promise<void>;
 
@@ -120,7 +121,7 @@
   ></textarea>
   {#if attachments.length > 0}
     <section class="note-attachment-grid" aria-label="便签图片">
-      {#each attachments as attachment (attachment.uuid)}
+      {#each attachments as attachment, index (attachment.uuid)}
         <article class:failed={attachment.transfer_state === "failed"}>
           <button class="note-attachment-preview" type="button" onclick={() => void openAttachment(attachment)}>
             {#if attachmentPreviewUrls[attachment.uuid]}
@@ -132,9 +133,12 @@
           <div>
             <small title={attachment.transfer_error ?? attachment.display_name}>{attachmentState(attachment)}</small>
             {#if attachment.transfer_state === "failed"}
-              <button type="button" onclick={() => void onRetryAttachment(attachment)}>重试</button>
+              <button type="button" disabled={attachmentBusy} onclick={() => void onRetryAttachment(attachment)}>重试</button>
+            {:else}
+              <button type="button" disabled={index === 0 || attachmentBusy} onclick={() => void onMoveAttachment(attachment, -1)}>前移</button>
+              <button type="button" disabled={index === attachments.length - 1 || attachmentBusy} onclick={() => void onMoveAttachment(attachment, 1)}>后移</button>
             {/if}
-            <button class="danger" type="button" onclick={() => void onDeleteAttachment(attachment)}>删除</button>
+            <button class="danger" type="button" disabled={attachmentBusy} onclick={() => void onDeleteAttachment(attachment)}>删除</button>
           </div>
         </article>
       {/each}

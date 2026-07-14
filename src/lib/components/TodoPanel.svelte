@@ -627,6 +627,32 @@
     scheduleAutoSync();
   }
 
+  async function moveNoteAttachment(attachment: NoteAttachment, direction: -1 | 1) {
+    if (noteAttachmentBusy) return;
+    const current = noteAttachmentsByNote[attachment.note_uuid] ?? [];
+    const index = current.findIndex((item) => item.uuid === attachment.uuid);
+    const targetIndex = index + direction;
+    if (index < 0 || targetIndex < 0 || targetIndex >= current.length) return;
+
+    noteAttachmentBusy = true;
+    noteAttachmentError = "";
+    try {
+      const reordered = [...current];
+      [reordered[index], reordered[targetIndex]] = [reordered[targetIndex], reordered[index]];
+      const saved = await noteAttachmentApi.reorder(
+        attachment.note_uuid,
+        reordered.map((item) => item.uuid),
+      );
+      noteAttachmentsByNote = { ...noteAttachmentsByNote, [attachment.note_uuid]: saved };
+      scheduleAutoSync();
+    } catch (reason) {
+      noteAttachmentError = reason instanceof Error ? reason.message : String(reason);
+      await refreshNoteAttachments(attachment.note_uuid);
+    } finally {
+      noteAttachmentBusy = false;
+    }
+  }
+
   function updateNote(note: Note, nextTitle: string, content: string) {
     if (note.uuid === NOTE_DRAFT_UUID && noteDraft) {
       noteDraft = { ...noteDraft, title: nextTitle, content };
@@ -2478,6 +2504,7 @@
       attachmentBusy={noteAttachmentBusy}
       onAddImages={addNoteImages}
       onOpenAttachment={noteAttachmentApi.originalUrl}
+      onMoveAttachment={moveNoteAttachment}
       onDeleteAttachment={deleteNoteAttachment}
       onRetryAttachment={retryNoteAttachment}
     />
