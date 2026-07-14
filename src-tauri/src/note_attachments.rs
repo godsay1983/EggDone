@@ -198,10 +198,10 @@ pub(crate) fn set_transfer_state(
             "
             UPDATE note_attachments
             SET transfer_state = ?1, transfer_error = ?2,
-                remote_uploaded = ?3, updated_at = ?4
-            WHERE uuid = ?5
+                remote_uploaded = ?3
+            WHERE uuid = ?4
             ",
-            params![state, error, remote_uploaded, now_millis(), uuid],
+            params![state, error, remote_uploaded, uuid],
         )
         .map_err(database_error)?;
     if changed == 0 {
@@ -476,8 +476,10 @@ mod tests {
 
         let reordered = set_sort_order(&connection, ATTACHMENT_ID, 3).unwrap();
         assert_eq!(reordered.sort_order, 3);
+        let protocol_updated_at = reordered.updated_at;
         let synced = set_transfer_state(&connection, ATTACHMENT_ID, "synced", None, true).unwrap();
         assert!(synced.remote_uploaded);
+        assert_eq!(synced.updated_at, protocol_updated_at);
         assert_eq!(list_pending_transfers(&connection).unwrap().len(), 0);
     }
 

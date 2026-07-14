@@ -17,6 +17,7 @@ use uuid::Uuid;
 
 use crate::{
     db::{device_id, now_millis},
+    note_attachment_sync::{self, NoteAttachmentSyncDocument},
     note_attachments::{IMAGE_UPLOAD_MAX_BYTES, PREVIEW_MAX_BYTES},
     note_sync::{self, NoteSyncDocument},
     sync::{self, SyncDocument},
@@ -68,6 +69,7 @@ pub struct PreparedManualSync {
     bucket: Box<Bucket>,
     object_key: String,
     note_object_key: String,
+    note_attachment_object_key: String,
     note_asset_prefix: String,
 }
 
@@ -81,6 +83,11 @@ pub struct RemoteNoteSyncObject {
     etag: Option<String>,
 }
 
+pub struct RemoteNoteAttachmentSyncObject {
+    pub document: Option<NoteAttachmentSyncDocument>,
+    etag: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoteSyncState {
@@ -88,6 +95,8 @@ pub struct RemoteSyncState {
     pub todo_etag: Option<String>,
     pub note_object_exists: bool,
     pub note_etag: Option<String>,
+    pub note_attachment_object_exists: bool,
+    pub note_attachment_etag: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -96,9 +105,12 @@ pub struct ManualSyncResult {
     pub message: String,
     pub todo_count: usize,
     pub note_count: usize,
+    pub note_attachment_count: usize,
+    pub pending_attachment_count: usize,
     pub conflict_retried: bool,
     pub todo_remote_etag: Option<String>,
     pub note_remote_etag: Option<String>,
+    pub note_attachment_remote_etag: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -295,6 +307,7 @@ pub fn prepare_manual_sync(connection: &Connection) -> Result<PreparedManualSync
     Ok(PreparedManualSync {
         bucket: build_bucket(&settings, credentials)?,
         note_object_key: derive_note_object_key(&settings.object_key),
+        note_attachment_object_key: derive_note_attachment_object_key(&settings.object_key),
         note_asset_prefix: derive_note_asset_prefix(&settings.object_key),
         object_key: settings.object_key,
     })
@@ -358,12 +371,50 @@ pub async fn get_remote_state(prepared: &PreparedManualSync) -> Result<RemoteSyn
     let (todo_object_exists, todo_etag) = get_object_state(prepared, &prepared.object_key).await?;
     let (note_object_exists, note_etag) =
         get_object_state(prepared, &prepared.note_object_key).await?;
+    let (note_attachment_object_exists, note_attachment_etag) =
+        get_object_state(prepared, &prepared.note_attachment_object_key).await?;
     Ok(RemoteSyncState {
         todo_object_exists,
         todo_etag,
         note_object_exists,
         note_etag,
+        note_attachment_object_exists,
+        note_attachment_etag,
     })
+}
+
+pub async fn download_note_attachment_remote(
+    prepared: &PreparedManualSync,
+) -> Result<RemoteNoteAttachmentSyncObject, String> {
+    let response = prepared
+        .bucket
+        .get_object(&prepared.note_attachment_object_key)
+        .await
+        .map_err(|error| format!("下载附件元数据失败：{error}"))?;
+
+    match response.status_code() {
+        200..=299 => {
+            let etag = response
+                .headers()
+                .into_iter()
+                .find_map(|(name, value)| name.eq_ignore_ascii_case("etag").then_some(value))
+                .ok_or_else(|| "远端附件元数据缺少 ETag，无法安全写入".to_string())?;
+            let document =
+                serde_json::from_slice::<NoteAttachmentSyncDocument>(response.as_slice())
+                    .map_err(|error| format!("远端附件元数据格式无效：{error}"))?;
+            note_attachment_sync::validate_document(&document)?;
+            Ok(RemoteNoteAttachmentSyncObject {
+                document: Some(document),
+                etag: Some(etag),
+            })
+        }
+        404 => Ok(RemoteNoteAttachmentSyncObject {
+            document: None,
+            etag: None,
+        }),
+        401 | 403 => Err("下载附件元数据失败：凭据无效或没有对象读取权限".to_string()),
+        status => Err(format!("下载附件元数据失败，S3 服务返回状态码 {status}")),
+    }
 }
 
 pub async fn download_note_remote(
@@ -447,6 +498,33 @@ pub async fn upload_note_document(
         .execute()
         .await
         .map_err(|error| format!("上传便签同步文件失败：{error}"))?;
+
+    classify_upload_status(response.status_code())
+}
+
+pub async fn upload_note_attachment_document(
+    prepared: &PreparedManualSync,
+    document: &NoteAttachmentSyncDocument,
+    remote: &RemoteNoteAttachmentSyncObject,
+) -> Result<UploadOutcome, String> {
+    note_attachment_sync::validate_document(document)?;
+    let content = serde_json::to_vec_pretty(document)
+        .map_err(|error| format!("生成附件元数据失败：{error}"))?;
+    let (header_name, header_value) = upload_condition(remote.etag.as_deref());
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        HeaderName::from_static(header_name),
+        HeaderValue::from_str(header_value)
+            .map_err(|error| format!("创建附件元数据条件请求失败：{error}"))?,
+    );
+    let response = prepared
+        .bucket
+        .put_object_builder(&prepared.note_attachment_object_key, &content)
+        .with_content_type("application/json")
+        .with_headers(headers)
+        .execute()
+        .await
+        .map_err(|error| format!("上传附件元数据失败：{error}"))?;
 
     classify_upload_status(response.status_code())
 }

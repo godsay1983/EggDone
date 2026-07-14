@@ -43,6 +43,7 @@ let remoteCheckRunning = false;
 let remoteStateInitialized = false;
 let knownTodoRemoteEtag: string | null = null;
 let knownNoteRemoteEtag: string | null = null;
+let knownNoteAttachmentRemoteEtag: string | null = null;
 
 export async function initializeAutoSync() {
   if (initialized) return;
@@ -60,6 +61,7 @@ export function configureAutoSync(settings: SyncSettings) {
   remoteStateInitialized = false;
   knownTodoRemoteEtag = null;
   knownNoteRemoteEtag = null;
+  knownNoteAttachmentRemoteEtag = null;
   if (!enabled) {
     clearDebounce();
     stopForegroundPolling();
@@ -144,12 +146,13 @@ async function performSyncWithRetry(): Promise<ManualSyncResult> {
       syncStatus.set({
         kind: "synced",
         message: result.conflictRetried
-          ? `冲突已合并：任务 ${result.todoCount}，便签 ${result.noteCount}`
-          : `同步完成：任务 ${result.todoCount}，便签 ${result.noteCount}`,
+          ? `冲突已合并：任务 ${result.todoCount}，便签 ${result.noteCount}，附件 ${result.noteAttachmentCount}`
+          : `同步完成：任务 ${result.todoCount}，便签 ${result.noteCount}，附件 ${result.noteAttachmentCount}`,
         updatedAt: Date.now(),
       });
       knownTodoRemoteEtag = result.todoRemoteEtag;
       knownNoteRemoteEtag = result.noteRemoteEtag;
+      knownNoteAttachmentRemoteEtag = result.noteAttachmentRemoteEtag;
       remoteStateInitialized = true;
       return result;
     } catch (reason) {
@@ -179,10 +182,13 @@ async function checkRemoteAndSync() {
       remote.todoObjectExists !== (knownTodoRemoteEtag !== null) ||
       remote.todoEtag !== knownTodoRemoteEtag ||
       remote.noteObjectExists !== (knownNoteRemoteEtag !== null) ||
-      remote.noteEtag !== knownNoteRemoteEtag;
+      remote.noteEtag !== knownNoteRemoteEtag ||
+      remote.noteAttachmentObjectExists !== (knownNoteAttachmentRemoteEtag !== null) ||
+      remote.noteAttachmentEtag !== knownNoteAttachmentRemoteEtag;
     remoteStateInitialized = true;
     knownTodoRemoteEtag = remote.todoEtag;
     knownNoteRemoteEtag = remote.noteEtag;
+    knownNoteAttachmentRemoteEtag = remote.noteAttachmentEtag;
     if (changed) {
       await runAutomaticSync();
     }

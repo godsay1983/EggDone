@@ -3,8 +3,11 @@ use std::{
     collections::{BTreeMap, HashSet},
 };
 
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+
+use crate::db::device_id;
 
 pub(crate) const NOTE_ATTACHMENT_SYNC_FORMAT_VERSION: u32 = 1;
 const DISPLAY_NAME_MAX_CHARS: usize = 255;
@@ -39,6 +42,139 @@ pub(crate) struct NoteAttachmentSyncDocument {
     pub device_id: String,
     pub generated_at: i64,
     pub attachments: Vec<SyncNoteAttachment>,
+}
+
+pub(crate) fn build_document(
+    connection: &Connection,
+    generated_at: i64,
+) -> Result<NoteAttachmentSyncDocument, String> {
+    let mut statement = connection
+        .prepare(
+            "SELECT uuid, note_uuid, kind, display_name, mime_type, byte_size, sha256,
+                    preview_mime_type, preview_byte_size, preview_sha256, width, height,
+                    sort_order, created_at, updated_at, deleted_at, updated_by
+             FROM note_attachments
+             WHERE deleted_at IS NOT NULL OR remote_uploaded = 1
+             ORDER BY uuid ASC",
+        )
+        .map_err(database_error)?;
+    let attachments = statement
+        .query_map([], map_sync_attachment)
+        .map_err(database_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(database_error)?;
+    let document = NoteAttachmentSyncDocument {
+        format_version: NOTE_ATTACHMENT_SYNC_FORMAT_VERSION,
+        device_id: device_id(connection).map_err(database_error)?,
+        generated_at,
+        attachments,
+    };
+    validate_document(&document)?;
+    Ok(document)
+}
+
+pub(crate) fn merge_remote_document(
+    connection: &mut Connection,
+    remote: &NoteAttachmentSyncDocument,
+    generated_at: i64,
+) -> Result<NoteAttachmentSyncDocument, String> {
+    let local = build_document(connection, generated_at)?;
+    let merged = merge_documents(&local, remote, generated_at)?;
+    let transaction = connection.transaction().map_err(database_error)?;
+
+    for attachment in &merged.attachments {
+        transaction
+            .execute(
+                "INSERT INTO note_attachments (
+                    uuid, note_uuid, kind, display_name, mime_type, byte_size, sha256,
+                    preview_mime_type, preview_byte_size, preview_sha256, width, height,
+                    sort_order, created_at, updated_at, deleted_at, updated_by,
+                    local_original_path, local_preview_path, transfer_state,
+                    transfer_error, remote_uploaded
+                 ) VALUES (
+                    ?1, ?2, ?3, ?4, ?5, ?6, ?7,
+                    ?8, ?9, ?10, ?11, ?12,
+                    ?13, ?14, ?15, ?16, ?17,
+                    NULL, NULL, CASE WHEN ?16 IS NULL THEN 'remote_only' ELSE 'synced' END,
+                    NULL, 1
+                 )
+                 ON CONFLICT(uuid) DO UPDATE SET
+                    note_uuid = excluded.note_uuid,
+                    kind = excluded.kind,
+                    display_name = excluded.display_name,
+                    mime_type = excluded.mime_type,
+                    byte_size = excluded.byte_size,
+                    sha256 = excluded.sha256,
+                    preview_mime_type = excluded.preview_mime_type,
+                    preview_byte_size = excluded.preview_byte_size,
+                    preview_sha256 = excluded.preview_sha256,
+                    width = excluded.width,
+                    height = excluded.height,
+                    sort_order = excluded.sort_order,
+                    created_at = excluded.created_at,
+                    updated_at = excluded.updated_at,
+                    deleted_at = excluded.deleted_at,
+                    updated_by = excluded.updated_by,
+                    local_original_path = CASE
+                      WHEN note_attachments.sha256 = excluded.sha256
+                      THEN note_attachments.local_original_path ELSE NULL END,
+                    local_preview_path = CASE
+                      WHEN note_attachments.preview_sha256 = excluded.preview_sha256
+                      THEN note_attachments.local_preview_path ELSE NULL END,
+                    transfer_state = CASE
+                      WHEN excluded.deleted_at IS NOT NULL THEN 'synced'
+                      WHEN note_attachments.sha256 = excluded.sha256
+                           AND note_attachments.local_original_path IS NOT NULL THEN 'synced'
+                      ELSE 'remote_only' END,
+                    transfer_error = NULL,
+                    remote_uploaded = 1",
+                params![
+                    attachment.uuid,
+                    attachment.note_uuid,
+                    attachment.kind,
+                    attachment.display_name.trim(),
+                    attachment.mime_type,
+                    attachment.byte_size,
+                    attachment.sha256,
+                    attachment.preview_mime_type,
+                    attachment.preview_byte_size,
+                    attachment.preview_sha256,
+                    attachment.width,
+                    attachment.height,
+                    attachment.sort_order,
+                    attachment.created_at,
+                    attachment.updated_at,
+                    attachment.deleted_at,
+                    attachment.updated_by,
+                ],
+            )
+            .map_err(database_error)?;
+    }
+
+    transaction.commit().map_err(database_error)?;
+    Ok(merged)
+}
+
+pub(crate) fn mark_document_synced(
+    connection: &Connection,
+    document: &NoteAttachmentSyncDocument,
+) -> Result<(), String> {
+    for attachment in &document.attachments {
+        connection
+            .execute(
+                "UPDATE note_attachments
+                 SET transfer_state = CASE
+                       WHEN deleted_at IS NOT NULL THEN 'synced'
+                       WHEN local_original_path IS NULL THEN 'remote_only'
+                       ELSE 'synced' END,
+                     transfer_error = NULL,
+                     remote_uploaded = 1
+                 WHERE uuid = ?1",
+                params![attachment.uuid],
+            )
+            .map_err(database_error)?;
+    }
+    Ok(())
 }
 
 pub(crate) fn validate_document(document: &NoteAttachmentSyncDocument) -> Result<(), String> {
@@ -174,6 +310,32 @@ fn validate_attachment(attachment: &SyncNoteAttachment) -> Result<(), String> {
     Ok(())
 }
 
+fn map_sync_attachment(row: &rusqlite::Row<'_>) -> rusqlite::Result<SyncNoteAttachment> {
+    Ok(SyncNoteAttachment {
+        uuid: row.get(0)?,
+        note_uuid: row.get(1)?,
+        kind: row.get(2)?,
+        display_name: row.get(3)?,
+        mime_type: row.get(4)?,
+        byte_size: row.get(5)?,
+        sha256: row.get(6)?,
+        preview_mime_type: row.get(7)?,
+        preview_byte_size: row.get(8)?,
+        preview_sha256: row.get(9)?,
+        width: row.get(10)?,
+        height: row.get(11)?,
+        sort_order: row.get(12)?,
+        created_at: row.get(13)?,
+        updated_at: row.get(14)?,
+        deleted_at: row.get(15)?,
+        updated_by: row.get(16)?,
+    })
+}
+
+fn database_error(error: rusqlite::Error) -> String {
+    format!("数据库操作失败：{error}")
+}
+
 fn validate_uuid(value: &str, message: &str) -> Result<(), String> {
     Uuid::parse_str(value)
         .map(|_| ())
@@ -229,6 +391,11 @@ fn validate_sha256(value: &str, message: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{
+        db::{configure_connection, migrate},
+        note_attachments::{create_pending, set_transfer_state, NewNoteAttachment},
+    };
+    use rusqlite::{params, Connection};
 
     const DEVICE_A: &str = "11111111-1111-4111-8111-111111111111";
     const DEVICE_B: &str = "22222222-2222-4222-8222-222222222222";
@@ -282,6 +449,72 @@ mod tests {
         assert_eq!(document.attachments.len(), 2);
         assert_eq!(document.attachments[0].mime_type, "image/heic");
         assert_eq!(document.attachments[1].deleted_at, Some(3000));
+    }
+
+    #[test]
+    fn publishes_only_uploaded_binaries_and_applies_remote_rows() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        configure_connection(&connection).unwrap();
+        migrate(&mut connection).unwrap();
+        connection
+            .execute(
+                "INSERT INTO notes (
+                   uuid, title, content, color, pinned, created_at, updated_at,
+                   deleted_at, updated_by
+                 ) VALUES (?1, '附件便签', '正文', 'default', 0, 100, 100, NULL, ?2)",
+                params![
+                    "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+                    crate::db::device_id(&connection).unwrap()
+                ],
+            )
+            .unwrap();
+        let input = NewNoteAttachment {
+            uuid: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa".to_string(),
+            note_uuid: "cccccccc-cccc-4ccc-8ccc-cccccccccccc".to_string(),
+            kind: "image".to_string(),
+            display_name: "会议白板.jpg".to_string(),
+            mime_type: "image/jpeg".to_string(),
+            byte_size: 4096,
+            sha256: "a".repeat(64),
+            preview_mime_type: Some("image/jpeg".to_string()),
+            preview_byte_size: Some(1024),
+            preview_sha256: Some("b".repeat(64)),
+            width: Some(1920),
+            height: Some(1080),
+            sort_order: 0,
+            local_original_path: "note-assets/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/original"
+                .to_string(),
+            local_preview_path: Some(
+                "note-assets/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/preview.jpg".to_string(),
+            ),
+        };
+        create_pending(&connection, &input).unwrap();
+        assert!(build_document(&connection, 1000)
+            .unwrap()
+            .attachments
+            .is_empty());
+
+        set_transfer_state(
+            &connection,
+            "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "uploaded",
+            None,
+            true,
+        )
+        .unwrap();
+        assert_eq!(
+            build_document(&connection, 1001).unwrap().attachments.len(),
+            1
+        );
+
+        let fixture = include_str!("../../docs/fixtures/note-attachments-sync-v1.json");
+        let remote = serde_json::from_str::<NoteAttachmentSyncDocument>(fixture).unwrap();
+        let merged = merge_remote_document(&mut connection, &remote, 5000).unwrap();
+        assert_eq!(merged.attachments.len(), 2);
+        assert_eq!(
+            build_document(&connection, 5001).unwrap().attachments,
+            merged.attachments
+        );
     }
 
     fn document(device_id: &str, value: SyncNoteAttachment) -> NoteAttachmentSyncDocument {

@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::{
     db::{device_id, now_millis, Database},
     note_asset_store::NoteAssetStore,
-    note_sync,
+    note_attachment_sync, note_attachments, note_sync,
     notes::{self, Note},
     reminders,
     s3_sync::{
@@ -733,6 +733,7 @@ pub async fn sync_now(
     app: AppHandle,
     database: State<'_, Database>,
     runtime: State<'_, SyncRuntime>,
+    asset_store: State<'_, NoteAssetStore>,
 ) -> Result<ManualSyncResult, String> {
     let _guard = runtime.acquire()?;
     let prepared = {
@@ -800,19 +801,149 @@ pub async fn sync_now(
         }
     };
 
+    let pending_attachments = {
+        let connection = lock_database(&database)?;
+        note_attachments::list_pending_transfers(&connection)?
+    };
+    let pending_attachment_count_before = pending_attachments.len();
+    for attachment in pending_attachments {
+        {
+            let connection = lock_database(&database)?;
+            note_attachments::set_transfer_state(
+                &connection,
+                &attachment.uuid,
+                "uploading",
+                None,
+                false,
+            )?;
+        }
+        let upload_result: Result<(), String> = async {
+            let original = asset_store.read_asset_file(
+                &attachment.uuid,
+                "original",
+                attachment.byte_size,
+                &attachment.sha256,
+            )?;
+            s3_sync::upload_immutable_asset(
+                &runtime,
+                &prepared,
+                &attachment.uuid,
+                "original",
+                &original,
+                &attachment.mime_type,
+                &attachment.sha256,
+            )
+            .await?;
+            if attachment.kind == "image" {
+                let preview_size = attachment
+                    .preview_byte_size
+                    .ok_or_else(|| "图片附件缺少预览大小".to_string())?;
+                let preview_sha256 = attachment
+                    .preview_sha256
+                    .as_deref()
+                    .ok_or_else(|| "图片附件缺少预览摘要".to_string())?;
+                let preview = asset_store.read_asset_file(
+                    &attachment.uuid,
+                    "preview.jpg",
+                    preview_size,
+                    preview_sha256,
+                )?;
+                s3_sync::upload_immutable_asset(
+                    &runtime,
+                    &prepared,
+                    &attachment.uuid,
+                    "preview.jpg",
+                    &preview,
+                    "image/jpeg",
+                    preview_sha256,
+                )
+                .await?;
+            }
+            Ok(())
+        }
+        .await;
+        let connection = lock_database(&database)?;
+        match upload_result {
+            Ok(()) => {
+                note_attachments::set_transfer_state(
+                    &connection,
+                    &attachment.uuid,
+                    "uploaded",
+                    None,
+                    true,
+                )?;
+            }
+            Err(error) => {
+                note_attachments::set_transfer_state(
+                    &connection,
+                    &attachment.uuid,
+                    "failed",
+                    Some(&error),
+                    false,
+                )?;
+                return Err(format!(
+                    "附件二进制同步失败（待同步 {pending_attachment_count_before} 个）：{error}"
+                ));
+            }
+        }
+    }
+
+    let mut attachment_remote = s3_sync::download_note_attachment_remote(&prepared)
+        .await
+        .map_err(|error| format!("附件元数据同步失败：{error}"))?;
+    let mut attachment_conflict_retried = false;
+    let (note_attachment_count, synced_attachment_document) = loop {
+        let merged = {
+            let mut connection = lock_database(&database)?;
+            match &attachment_remote.document {
+                Some(document) => note_attachment_sync::merge_remote_document(
+                    &mut connection,
+                    document,
+                    now_millis(),
+                )?,
+                None => note_attachment_sync::build_document(&connection, now_millis())?,
+            }
+        };
+        match s3_sync::upload_note_attachment_document(&prepared, &merged, &attachment_remote)
+            .await
+            .map_err(|error| format!("附件元数据同步失败：{error}"))?
+        {
+            UploadOutcome::Success => break (merged.attachments.len(), merged),
+            UploadOutcome::Conflict if !attachment_conflict_retried => {
+                attachment_conflict_retried = true;
+                attachment_remote = s3_sync::download_note_attachment_remote(&prepared)
+                    .await
+                    .map_err(|error| format!("附件元数据同步失败：{error}"))?;
+            }
+            UploadOutcome::Conflict => {
+                return Err("附件元数据持续发生变化，已停止上传并保留本地数据".to_string());
+            }
+        }
+    };
+    let pending_attachment_count = {
+        let connection = lock_database(&database)?;
+        note_attachment_sync::mark_document_synced(&connection, &synced_attachment_document)?;
+        note_attachments::list_pending_transfers(&connection)?.len()
+    };
+    let _ = app.emit_to("main", "notes-changed", ());
+
     let state = s3_sync::get_remote_state(&prepared).await.ok();
-    let conflict_retried = todo_conflict_retried || note_conflict_retried;
+    let conflict_retried =
+        todo_conflict_retried || note_conflict_retried || attachment_conflict_retried;
     Ok(ManualSyncResult {
         message: if conflict_retried {
             "检测到远端更新，重新合并后同步完成".to_string()
         } else {
-            "任务和便签同步完成".to_string()
+            "任务、便签和附件同步完成".to_string()
         },
         todo_count,
         note_count,
+        note_attachment_count,
+        pending_attachment_count,
         conflict_retried,
         todo_remote_etag: state.as_ref().and_then(|value| value.todo_etag.clone()),
-        note_remote_etag: state.and_then(|value| value.note_etag),
+        note_remote_etag: state.as_ref().and_then(|value| value.note_etag.clone()),
+        note_attachment_remote_etag: state.and_then(|value| value.note_attachment_etag),
     })
 }
 

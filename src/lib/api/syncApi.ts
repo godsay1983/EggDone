@@ -29,9 +29,12 @@ export interface ManualSyncResult {
   message: string;
   todoCount: number;
   noteCount: number;
+  noteAttachmentCount: number;
+  pendingAttachmentCount: number;
   conflictRetried: boolean;
   todoRemoteEtag: string | null;
   noteRemoteEtag: string | null;
+  noteAttachmentRemoteEtag: string | null;
 }
 
 export interface RemoteSyncState {
@@ -39,6 +42,8 @@ export interface RemoteSyncState {
   todoEtag: string | null;
   noteObjectExists: boolean;
   noteEtag: string | null;
+  noteAttachmentObjectExists: boolean;
+  noteAttachmentEtag: string | null;
 }
 
 export function getSyncSettings(): Promise<SyncSettings> {
