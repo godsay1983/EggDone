@@ -19,7 +19,7 @@
 
 第一版不提供：
 
-- 富文本、Markdown、图片和附件。
+- 富文本和 Markdown。图片与附件作为后续独立扩展，见 [NOTES_ATTACHMENTS_IMPLEMENTATION_PLAN.md](NOTES_ATTACHMENTS_IMPLEMENTATION_PLAN.md)。
 - 标签、文件夹和便签分享。
 - Todo 与便签互相转换或关联。
 - 多人协作、逐字段合并和版本历史。
@@ -284,4 +284,3 @@ src/lib/noteTypes.ts
 - 任务和便签同步都成功后才显示 `已同步`。
 - `pnpm check`、`pnpm build`、`cargo fmt -- --check` 和 `cargo check` 通过。
 - Windows 下完成真实托盘面板回归；macOS、Linux 不引入平台专属路径。
-
