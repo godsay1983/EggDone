@@ -97,6 +97,7 @@ pub(crate) fn list_pending_transfers(
             "{}
              WHERE deleted_at IS NULL
                AND transfer_state IN ('pending_upload', 'uploading', 'uploaded', 'failed')
+               AND NOT (transfer_state = 'failed' AND remote_uploaded = 1)
              ORDER BY updated_at ASC, uuid ASC",
             select_columns()
         ))
@@ -235,6 +236,81 @@ pub(crate) fn set_transfer_state(
     if changed == 0 {
         return Err("附件不存在".to_string());
     }
+    require_by_uuid(connection, uuid)
+}
+
+pub(crate) fn set_cached_file(
+    connection: &Connection,
+    uuid: &str,
+    file_name: &str,
+    relative_path: &str,
+) -> Result<NoteAttachment, String> {
+    validate_uuid(uuid, "附件 UUID 无效")?;
+    validate_relative_path(relative_path)?;
+    let expected_path = format!("note-assets/{uuid}/{file_name}");
+    if relative_path != expected_path {
+        return Err("附件缓存路径无效".to_string());
+    }
+    let changed = match file_name {
+        "original" => connection.execute(
+            "
+            UPDATE note_attachments
+            SET local_original_path = ?1, transfer_state = 'cached',
+                transfer_error = NULL, remote_uploaded = 1
+            WHERE uuid = ?2 AND deleted_at IS NULL
+            ",
+            params![relative_path, uuid],
+        ),
+        "preview.jpg" => connection.execute(
+            "
+            UPDATE note_attachments
+            SET local_preview_path = ?1,
+                transfer_state = CASE
+                    WHEN local_original_path IS NULL THEN 'remote_only'
+                    ELSE 'cached'
+                END,
+                transfer_error = NULL, remote_uploaded = 1
+            WHERE uuid = ?2 AND deleted_at IS NULL
+            ",
+            params![relative_path, uuid],
+        ),
+        _ => return Err("附件文件名无效".to_string()),
+    }
+    .map_err(database_error)?;
+    require_changed(changed)?;
+    require_by_uuid(connection, uuid)
+}
+
+pub(crate) fn set_download_failed(
+    connection: &Connection,
+    uuid: &str,
+    file_name: &str,
+    error: &str,
+) -> Result<NoteAttachment, String> {
+    validate_uuid(uuid, "附件 UUID 无效")?;
+    let changed = match file_name {
+        "original" => connection.execute(
+            "
+            UPDATE note_attachments
+            SET local_original_path = NULL, transfer_state = 'failed',
+                transfer_error = ?1, remote_uploaded = 1
+            WHERE uuid = ?2 AND deleted_at IS NULL
+            ",
+            params![error, uuid],
+        ),
+        "preview.jpg" => connection.execute(
+            "
+            UPDATE note_attachments
+            SET local_preview_path = NULL, transfer_state = 'failed',
+                transfer_error = ?1, remote_uploaded = 1
+            WHERE uuid = ?2 AND deleted_at IS NULL
+            ",
+            params![error, uuid],
+        ),
+        _ => return Err("附件文件名无效".to_string()),
+    }
+    .map_err(database_error)?;
+    require_changed(changed)?;
     require_by_uuid(connection, uuid)
 }
 
@@ -573,6 +649,47 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(error, "附件排序列表与当前便签不一致");
+    }
+
+    #[test]
+    fn tracks_download_cache_without_requeueing_remote_failures() {
+        let connection = connection();
+        insert_note(&connection);
+        create_pending(&connection, &image_input()).unwrap();
+        set_transfer_state(&connection, ATTACHMENT_ID, "synced", None, true).unwrap();
+        connection
+            .execute(
+                "UPDATE note_attachments
+                 SET local_original_path = NULL, local_preview_path = NULL,
+                     transfer_state = 'remote_only'
+                 WHERE uuid = ?1",
+                params![ATTACHMENT_ID],
+            )
+            .unwrap();
+
+        let preview_path = format!("note-assets/{ATTACHMENT_ID}/preview.jpg");
+        let preview =
+            set_cached_file(&connection, ATTACHMENT_ID, "preview.jpg", &preview_path).unwrap();
+        assert_eq!(preview.transfer_state, "remote_only");
+        assert_eq!(
+            preview.local_preview_path.as_deref(),
+            Some(preview_path.as_str())
+        );
+
+        let failed =
+            set_download_failed(&connection, ATTACHMENT_ID, "original", "网络不可用").unwrap();
+        assert_eq!(failed.transfer_state, "failed");
+        assert!(failed.remote_uploaded);
+        assert!(list_pending_transfers(&connection).unwrap().is_empty());
+
+        let original_path = format!("note-assets/{ATTACHMENT_ID}/original");
+        let cached =
+            set_cached_file(&connection, ATTACHMENT_ID, "original", &original_path).unwrap();
+        assert_eq!(cached.transfer_state, "cached");
+        assert_eq!(
+            cached.local_original_path.as_deref(),
+            Some(original_path.as_str())
+        );
     }
 
     #[test]

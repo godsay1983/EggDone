@@ -79,7 +79,9 @@
   }
 
   function attachmentState(attachment: NoteAttachment) {
-    if (attachment.transfer_state === "failed") return "同步失败";
+    if (attachment.transfer_state === "failed") return "处理失败";
+    if (attachment.transfer_state === "downloading") return "下载中";
+    if (attachment.transfer_state === "cached") return "已缓存";
     if (attachment.transfer_state === "uploading") return "上传中";
     if (attachment.transfer_state === "pending_upload") return "等待同步";
     if (attachment.transfer_state === "remote_only") return "需要下载";

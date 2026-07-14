@@ -267,44 +267,146 @@ pub fn create_note_image_attachment(
 }
 
 #[tauri::command]
-pub fn read_note_attachment_preview(
+pub async fn read_note_attachment_preview(
     uuid: String,
+    app: AppHandle,
     database: State<'_, Database>,
+    runtime: State<'_, SyncRuntime>,
     asset_store: State<'_, NoteAssetStore>,
 ) -> Result<Vec<u8>, String> {
     let attachment = {
         let connection = lock_database(&database)?;
         note_attachments::require_by_uuid(&connection, &uuid)?
     };
-    asset_store.read_asset_file(
-        &attachment.uuid,
+    let expected_size = attachment
+        .preview_byte_size
+        .ok_or_else(|| "附件没有图片预览".to_string())?;
+    let expected_sha256 = attachment
+        .preview_sha256
+        .as_deref()
+        .ok_or_else(|| "附件没有图片预览".to_string())?;
+    read_or_download_note_asset(
+        &attachment,
         "preview.jpg",
-        attachment
-            .preview_byte_size
-            .ok_or_else(|| "附件没有图片预览".to_string())?,
-        attachment
-            .preview_sha256
-            .as_deref()
-            .ok_or_else(|| "附件没有图片预览".to_string())?,
+        expected_size,
+        expected_sha256,
+        &app,
+        &database,
+        &runtime,
+        &asset_store,
     )
+    .await
 }
 
 #[tauri::command]
-pub fn read_note_attachment_original(
+pub async fn read_note_attachment_original(
     uuid: String,
+    app: AppHandle,
     database: State<'_, Database>,
+    runtime: State<'_, SyncRuntime>,
     asset_store: State<'_, NoteAssetStore>,
 ) -> Result<Vec<u8>, String> {
     let attachment = {
         let connection = lock_database(&database)?;
         note_attachments::require_by_uuid(&connection, &uuid)?
     };
-    asset_store.read_asset_file(
-        &attachment.uuid,
+    read_or_download_note_asset(
+        &attachment,
         "original",
         attachment.byte_size,
         &attachment.sha256,
+        &app,
+        &database,
+        &runtime,
+        &asset_store,
     )
+    .await
+}
+
+async fn read_or_download_note_asset(
+    attachment: &note_attachments::NoteAttachment,
+    file_name: &str,
+    expected_size: i64,
+    expected_sha256: &str,
+    app: &AppHandle,
+    database: &State<'_, Database>,
+    runtime: &State<'_, SyncRuntime>,
+    asset_store: &State<'_, NoteAssetStore>,
+) -> Result<Vec<u8>, String> {
+    if let Ok(bytes) =
+        asset_store.read_asset_file(&attachment.uuid, file_name, expected_size, expected_sha256)
+    {
+        return Ok(bytes);
+    }
+    if !attachment.remote_uploaded {
+        return Err("本地附件缺失或校验失败，请重新选择文件".to_string());
+    }
+    let _sync_guard = runtime.acquire()?;
+
+    {
+        let connection = lock_database(database)?;
+        note_attachments::set_transfer_state(
+            &connection,
+            &attachment.uuid,
+            "downloading",
+            None,
+            true,
+        )?;
+    }
+    let _ = app.emit_to(
+        "main",
+        "note-attachments-changed",
+        attachment.note_uuid.clone(),
+    );
+
+    let result: Result<Vec<u8>, String> = async {
+        let prepared = {
+            let connection = lock_database(database)?;
+            s3_sync::prepare_manual_sync(&connection)?
+        };
+        let bytes = s3_sync::download_asset_bytes(
+            runtime,
+            &prepared,
+            &attachment.uuid,
+            file_name,
+            expected_size,
+            expected_sha256,
+        )
+        .await?;
+        let relative_path = asset_store.write_downloaded_asset(
+            &attachment.uuid,
+            file_name,
+            &bytes,
+            expected_size,
+            expected_sha256,
+        )?;
+        let connection = lock_database(database)?;
+        note_attachments::set_cached_file(
+            &connection,
+            &attachment.uuid,
+            file_name,
+            &relative_path,
+        )?;
+        Ok(bytes)
+    }
+    .await;
+
+    if let Err(error) = &result {
+        if let Ok(connection) = lock_database(database) {
+            let _ = note_attachments::set_download_failed(
+                &connection,
+                &attachment.uuid,
+                file_name,
+                error,
+            );
+        }
+    }
+    let _ = app.emit_to(
+        "main",
+        "note-attachments-changed",
+        attachment.note_uuid.clone(),
+    );
+    result
 }
 
 #[tauri::command]
@@ -356,13 +458,16 @@ pub fn retry_note_attachment(
     let result = {
         let connection = lock_database(&database)?;
         let current = note_attachments::require_by_uuid(&connection, &uuid)?;
-        note_attachments::set_transfer_state(
-            &connection,
-            &uuid,
-            "pending_upload",
-            None,
-            current.remote_uploaded,
-        )
+        if current.remote_uploaded {
+            let state = if current.local_original_path.is_some() {
+                "cached"
+            } else {
+                "remote_only"
+            };
+            note_attachments::set_transfer_state(&connection, &uuid, state, None, true)
+        } else {
+            note_attachments::set_transfer_state(&connection, &uuid, "pending_upload", None, false)
+        }
     };
     if let Ok(attachment) = &result {
         let _ = app.emit_to(

@@ -183,6 +183,8 @@
   let noteAttachmentPreviewUrls: Record<string, string> = {};
   let noteAttachmentBusy = false;
   let noteAttachmentError = "";
+  let visibleNotePreviewAttachments: NoteAttachment[] = [];
+  let visibleNotePreviewRequestKey = "";
   let deletedNoteAttachment: NoteAttachment | null = null;
   let noteAttachmentUndoTimer: ReturnType<typeof setTimeout> | null = null;
   let selectedQuadrant: QuadrantKey | "all" = "all";
@@ -233,6 +235,20 @@
     : $notes.items.find((note) => note.uuid === selectedNoteUuid) ?? null);
   $: noteEditorSaving =
     $notes.saving || noteDraftSaveTimer !== null || noteDraftCreatePromise !== null;
+  $: visibleNotePreviewAttachments = listView === "notes"
+    ? $visibleNotes
+        .map((note) => (noteAttachmentsByNote[note.uuid] ?? []).find((attachment) => attachment.kind === "image"))
+        .filter((attachment): attachment is NoteAttachment => attachment !== undefined)
+    : [];
+  $: {
+    const requestKey = visibleNotePreviewAttachments
+      .map((attachment) => `${attachment.uuid}:${attachment.local_preview_path ?? ""}:${attachment.transfer_state}`)
+      .join("|");
+    if (requestKey && requestKey !== visibleNotePreviewRequestKey) {
+      visibleNotePreviewRequestKey = requestKey;
+      void loadAttachmentPreviews(visibleNotePreviewAttachments);
+    }
+  }
   $: filteredTodos = filterTodos($todos.items, searchQuery, showCompleted, {
     view: listView === "notes" ? "all" : listView,
     groupUuid: activeGroupUuid,
@@ -396,7 +412,7 @@
         void notes.refresh().then(() => loadAllNoteAttachments());
       }).then((unlisten) => unlisteners.push(unlisten));
       void listen<string>("note-attachments-changed", (event) => {
-        void refreshNoteAttachments(event.payload);
+        void refreshNoteAttachments(event.payload, selectedNoteUuid === event.payload);
       }).then((unlisten) => unlisteners.push(unlisten));
     }
 
@@ -518,18 +534,17 @@
     const next: Record<string, NoteAttachment[]> = {};
     for (const [uuid, attachments] of results) {
       next[uuid] = attachments;
-      await loadAttachmentPreviews(attachments);
     }
     noteAttachmentsByNote = next;
     releaseUnusedAttachmentPreviews(Object.values(next).flat());
   }
 
-  async function refreshNoteAttachments(noteUuid: string) {
+  async function refreshNoteAttachments(noteUuid: string, loadPreviews = true) {
     if (!noteUuid || noteUuid === NOTE_DRAFT_UUID) return;
     const attachments = await noteAttachmentApi.list(noteUuid);
     noteAttachmentsByNote = { ...noteAttachmentsByNote, [noteUuid]: attachments };
     releaseUnusedAttachmentPreviews(Object.values(noteAttachmentsByNote).flat());
-    await loadAttachmentPreviews(attachments);
+    if (loadPreviews) await loadAttachmentPreviews(attachments);
   }
 
   function releaseUnusedAttachmentPreviews(activeAttachments: NoteAttachment[]) {
@@ -622,9 +637,28 @@
   }
 
   async function retryNoteAttachment(attachment: NoteAttachment) {
-    await noteAttachmentApi.retry(attachment.uuid);
-    await refreshNoteAttachments(attachment.note_uuid);
-    scheduleAutoSync();
+    noteAttachmentError = "";
+    try {
+      if (attachment.remote_uploaded) {
+        await noteAttachmentApi.retry(attachment.uuid);
+        if (attachment.local_preview_path === null) {
+          const url = await noteAttachmentApi.previewUrl(attachment);
+          const previous = noteAttachmentPreviewUrls[attachment.uuid];
+          if (previous) URL.revokeObjectURL(previous);
+          noteAttachmentPreviewUrls = { ...noteAttachmentPreviewUrls, [attachment.uuid]: url };
+        } else {
+          const url = await noteAttachmentApi.originalUrl(attachment);
+          URL.revokeObjectURL(url);
+        }
+      } else {
+        await noteAttachmentApi.retry(attachment.uuid);
+        scheduleAutoSync();
+      }
+      await refreshNoteAttachments(attachment.note_uuid);
+    } catch (reason) {
+      noteAttachmentError = reason instanceof Error ? reason.message : String(reason);
+      await refreshNoteAttachments(attachment.note_uuid).catch(() => undefined);
+    }
   }
 
   async function moveNoteAttachment(attachment: NoteAttachment, direction: -1 | 1) {
