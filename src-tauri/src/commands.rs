@@ -311,6 +311,26 @@ pub fn delete_note_attachment(
 }
 
 #[tauri::command]
+pub fn restore_note_attachment(
+    uuid: String,
+    app: AppHandle,
+    database: State<'_, Database>,
+) -> Result<note_attachments::NoteAttachment, String> {
+    let result = {
+        let connection = lock_database(&database)?;
+        note_attachments::restore(&connection, &uuid)
+    };
+    if let Ok(attachment) = &result {
+        let _ = app.emit_to(
+            "main",
+            "note-attachments-changed",
+            attachment.note_uuid.clone(),
+        );
+    }
+    result
+}
+
+#[tauri::command]
 pub fn retry_note_attachment(
     uuid: String,
     app: AppHandle,

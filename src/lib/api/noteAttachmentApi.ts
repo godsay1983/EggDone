@@ -38,6 +38,10 @@ export const noteAttachmentApi = {
     return invoke<NoteAttachment>("delete_note_attachment", { uuid });
   },
 
+  restore(uuid: string): Promise<NoteAttachment> {
+    return invoke<NoteAttachment>("restore_note_attachment", { uuid });
+  },
+
   retry(uuid: string): Promise<NoteAttachment> {
     return invoke<NoteAttachment>("retry_note_attachment", { uuid });
   },

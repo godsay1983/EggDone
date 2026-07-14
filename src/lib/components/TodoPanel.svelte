@@ -183,6 +183,8 @@
   let noteAttachmentPreviewUrls: Record<string, string> = {};
   let noteAttachmentBusy = false;
   let noteAttachmentError = "";
+  let deletedNoteAttachment: NoteAttachment | null = null;
+  let noteAttachmentUndoTimer: ReturnType<typeof setTimeout> | null = null;
   let selectedQuadrant: QuadrantKey | "all" = "all";
   let selectedAgendaDate: string | null = null;
   let agendaWeekStartAt = startOfAgendaWeek();
@@ -407,6 +409,7 @@
       if (clearTimer) clearTimeout(clearTimer);
       if (groupDeleteTimer) clearTimeout(groupDeleteTimer);
       if (noteUndoTimer) clearTimeout(noteUndoTimer);
+      if (noteAttachmentUndoTimer) clearTimeout(noteAttachmentUndoTimer);
       Object.values(noteAttachmentPreviewUrls).forEach((url) => URL.revokeObjectURL(url));
       void flushAllNoteChanges().catch(() => undefined);
       clearFocusCompletionTimer();
@@ -518,13 +521,28 @@
       await loadAttachmentPreviews(attachments);
     }
     noteAttachmentsByNote = next;
+    releaseUnusedAttachmentPreviews(Object.values(next).flat());
   }
 
   async function refreshNoteAttachments(noteUuid: string) {
     if (!noteUuid || noteUuid === NOTE_DRAFT_UUID) return;
     const attachments = await noteAttachmentApi.list(noteUuid);
     noteAttachmentsByNote = { ...noteAttachmentsByNote, [noteUuid]: attachments };
+    releaseUnusedAttachmentPreviews(Object.values(noteAttachmentsByNote).flat());
     await loadAttachmentPreviews(attachments);
+  }
+
+  function releaseUnusedAttachmentPreviews(activeAttachments: NoteAttachment[]) {
+    const activeUuids = new Set(activeAttachments.map((attachment) => attachment.uuid));
+    const nextUrls = { ...noteAttachmentPreviewUrls };
+    let changed = false;
+    for (const [uuid, url] of Object.entries(nextUrls)) {
+      if (activeUuids.has(uuid)) continue;
+      URL.revokeObjectURL(url);
+      delete nextUrls[uuid];
+      changed = true;
+    }
+    if (changed) noteAttachmentPreviewUrls = nextUrls;
   }
 
   async function loadAttachmentPreviews(attachments: NoteAttachment[]) {
@@ -577,9 +595,30 @@
   }
 
   async function deleteNoteAttachment(attachment: NoteAttachment) {
-    await noteAttachmentApi.delete(attachment.uuid);
+    deletedNoteAttachment = await noteAttachmentApi.delete(attachment.uuid);
     await refreshNoteAttachments(attachment.note_uuid);
+    if (noteAttachmentUndoTimer) clearTimeout(noteAttachmentUndoTimer);
+    noteAttachmentUndoTimer = setTimeout(() => {
+      deletedNoteAttachment = null;
+      noteAttachmentUndoTimer = null;
+    }, 6000);
     scheduleAutoSync();
+  }
+
+  async function undoNoteAttachmentDelete() {
+    if (!deletedNoteAttachment) return;
+    const attachment = deletedNoteAttachment;
+    deletedNoteAttachment = null;
+    if (noteAttachmentUndoTimer) clearTimeout(noteAttachmentUndoTimer);
+    noteAttachmentUndoTimer = null;
+    try {
+      await noteAttachmentApi.restore(attachment.uuid);
+      await refreshNoteAttachments(attachment.note_uuid);
+      scheduleAutoSync();
+    } catch (reason) {
+      deletedNoteAttachment = attachment;
+      noteAttachmentError = reason instanceof Error ? reason.message : String(reason);
+    }
   }
 
   async function retryNoteAttachment(attachment: NoteAttachment) {
@@ -2859,6 +2898,13 @@
   <div class="undo-toast" role="status">
     <span>已删除“{deletedNote.title || "无标题便签"}”</span>
     <button type="button" onclick={() => void undoNoteDelete()}>撤销</button>
+  </div>
+{/if}
+
+{#if deletedNoteAttachment}
+  <div class="undo-toast" role="status">
+    <span>已删除图片“{deletedNoteAttachment.display_name}”</span>
+    <button type="button" onclick={() => void undoNoteAttachmentDelete()}>撤销</button>
   </div>
 {/if}
 
