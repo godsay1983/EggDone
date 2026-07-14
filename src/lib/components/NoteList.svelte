@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Note, NoteColor } from "$lib/types";
+  import type { Note, NoteAttachment, NoteColor } from "$lib/types";
   import NoteCard from "./NoteCard.svelte";
 
   export let items: Note[];
@@ -10,6 +10,8 @@
   export let onPin: (note: Note, pinned: boolean) => Promise<void>;
   export let onColor: (note: Note, color: NoteColor) => Promise<void>;
   export let onDelete: (note: Note) => Promise<void>;
+  export let attachmentsByNote: Record<string, NoteAttachment[]> = {};
+  export let attachmentPreviewUrls: Record<string, string> = {};
 </script>
 
 <section class="note-list" aria-live="polite">
@@ -26,7 +28,15 @@
   {:else}
     {#if error}<div class="inline-error" role="alert">{error}</div>{/if}
     {#each items as note (note.uuid)}
-      <NoteCard {note} {onOpen} {onPin} {onColor} {onDelete} />
+      <NoteCard
+        {note}
+        {onOpen}
+        {onPin}
+        {onColor}
+        {onDelete}
+        attachments={attachmentsByNote[note.uuid] ?? []}
+        {attachmentPreviewUrls}
+      />
     {/each}
   {/if}
 </section>

@@ -195,6 +195,149 @@ pub fn restore_note(
 }
 
 #[tauri::command]
+pub fn list_note_attachments(
+    note_uuid: String,
+    database: State<'_, Database>,
+) -> Result<Vec<note_attachments::NoteAttachment>, String> {
+    let connection = lock_database(&database)?;
+    note_attachments::list_active_by_note(&connection, &note_uuid)
+}
+
+#[tauri::command]
+pub fn create_note_image_attachment(
+    note_uuid: String,
+    display_name: String,
+    bytes: Vec<u8>,
+    app: AppHandle,
+    database: State<'_, Database>,
+    asset_store: State<'_, NoteAssetStore>,
+) -> Result<note_attachments::NoteAttachment, String> {
+    let attachment_uuid = Uuid::new_v4().to_string();
+    let prepared = asset_store.import_image_bytes(&bytes, &display_name, &attachment_uuid)?;
+    let result = {
+        let connection = lock_database(&database)?;
+        let sort_order = note_attachments::list_active_by_note(&connection, &note_uuid)?
+            .last()
+            .map(|attachment| attachment.sort_order + 1_000)
+            .unwrap_or(0);
+        note_attachments::create_pending(
+            &connection,
+            &note_attachments::NewNoteAttachment {
+                uuid: attachment_uuid.clone(),
+                note_uuid: note_uuid.clone(),
+                kind: "image".to_string(),
+                display_name: prepared.display_name,
+                mime_type: prepared.mime_type,
+                byte_size: prepared.byte_size,
+                sha256: prepared.sha256,
+                preview_mime_type: Some(prepared.preview_mime_type),
+                preview_byte_size: Some(prepared.preview_byte_size),
+                preview_sha256: Some(prepared.preview_sha256),
+                width: Some(prepared.width),
+                height: Some(prepared.height),
+                sort_order,
+                local_original_path: prepared.local_original_path,
+                local_preview_path: Some(prepared.local_preview_path),
+            },
+        )
+    };
+    if result.is_err() {
+        let _ = asset_store.delete_asset(&attachment_uuid);
+    } else {
+        let _ = app.emit_to("main", "note-attachments-changed", note_uuid);
+    }
+    result
+}
+
+#[tauri::command]
+pub fn read_note_attachment_preview(
+    uuid: String,
+    database: State<'_, Database>,
+    asset_store: State<'_, NoteAssetStore>,
+) -> Result<Vec<u8>, String> {
+    let attachment = {
+        let connection = lock_database(&database)?;
+        note_attachments::require_by_uuid(&connection, &uuid)?
+    };
+    asset_store.read_asset_file(
+        &attachment.uuid,
+        "preview.jpg",
+        attachment
+            .preview_byte_size
+            .ok_or_else(|| "附件没有图片预览".to_string())?,
+        attachment
+            .preview_sha256
+            .as_deref()
+            .ok_or_else(|| "附件没有图片预览".to_string())?,
+    )
+}
+
+#[tauri::command]
+pub fn read_note_attachment_original(
+    uuid: String,
+    database: State<'_, Database>,
+    asset_store: State<'_, NoteAssetStore>,
+) -> Result<Vec<u8>, String> {
+    let attachment = {
+        let connection = lock_database(&database)?;
+        note_attachments::require_by_uuid(&connection, &uuid)?
+    };
+    asset_store.read_asset_file(
+        &attachment.uuid,
+        "original",
+        attachment.byte_size,
+        &attachment.sha256,
+    )
+}
+
+#[tauri::command]
+pub fn delete_note_attachment(
+    uuid: String,
+    app: AppHandle,
+    database: State<'_, Database>,
+) -> Result<note_attachments::NoteAttachment, String> {
+    let result = {
+        let connection = lock_database(&database)?;
+        note_attachments::soft_delete(&connection, &uuid)
+    };
+    if let Ok(attachment) = &result {
+        let _ = app.emit_to(
+            "main",
+            "note-attachments-changed",
+            attachment.note_uuid.clone(),
+        );
+    }
+    result
+}
+
+#[tauri::command]
+pub fn retry_note_attachment(
+    uuid: String,
+    app: AppHandle,
+    database: State<'_, Database>,
+) -> Result<note_attachments::NoteAttachment, String> {
+    let result = {
+        let connection = lock_database(&database)?;
+        let current = note_attachments::require_by_uuid(&connection, &uuid)?;
+        note_attachments::set_transfer_state(
+            &connection,
+            &uuid,
+            "pending_upload",
+            None,
+            current.remote_uploaded,
+        )
+    };
+    if let Ok(attachment) = &result {
+        let _ = app.emit_to(
+            "main",
+            "note-attachments-changed",
+            attachment.note_uuid.clone(),
+        );
+    }
+    result
+}
+
+#[tauri::command]
 pub fn create_todo(
     title: String,
     group_uuid: Option<String>,

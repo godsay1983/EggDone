@@ -877,6 +877,42 @@ footer {
   font-size: 9px;
 }
 
+.note-card-attachment {
+  position: relative;
+  height: 62px;
+  margin: 6px 0 8px;
+  overflow: hidden;
+  border: 1px solid var(--note-border);
+  border-radius: 10px;
+  background: rgb(255 255 255 / 38%);
+}
+
+.note-card-attachment img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.note-card-attachment > span {
+  display: grid;
+  height: 100%;
+  place-items: center;
+  color: #786b58;
+  font-size: 11px;
+}
+
+.note-card-attachment em {
+  position: absolute;
+  right: 6px;
+  bottom: 5px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: #3e3428;
+  background: rgb(255 255 255 / 86%);
+  font-size: 9px;
+  font-style: normal;
+}
+
 .note-card-actions {
   display: flex;
   gap: 4px;
@@ -1006,6 +1042,18 @@ footer {
   background: #edac2f;
 }
 
+.note-file-input {
+  display: none;
+}
+
+.note-editor header button.attachment-trigger {
+  width: 30px;
+  height: 28px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
+}
+
 .note-editor > input,
 .note-editor > textarea {
   width: 100%;
@@ -1013,6 +1061,120 @@ footer {
   outline: 0;
   color: #493f31;
   background: transparent;
+}
+
+.note-attachment-grid {
+  display: grid;
+  max-height: 174px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  overflow-y: auto;
+  padding: 6px 12px 12px;
+}
+
+.note-attachment-grid article {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--note-border);
+  border-radius: 11px;
+  background: rgb(255 255 255 / 42%);
+}
+
+.note-attachment-grid article.failed {
+  border-color: #c96b60;
+}
+
+.note-attachment-preview {
+  display: grid;
+  width: 100%;
+  height: 82px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  color: #756650;
+  background: rgb(255 255 255 / 36%);
+  cursor: pointer;
+  place-items: center;
+}
+
+.note-attachment-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.note-attachment-grid article > div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 6px;
+}
+
+.note-attachment-grid small {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: #685b49;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-attachment-grid article > div button {
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 6px;
+  color: #5a4632;
+  background: rgb(255 255 255 / 70%);
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.note-attachment-grid article > div button.danger {
+  color: #8b2f27;
+}
+
+.note-image-viewer {
+  position: fixed;
+  z-index: 120;
+  display: grid;
+  inset: 0;
+  padding: 18px;
+  background: rgb(31 27 22 / 78%);
+  place-items: center;
+}
+
+.note-image-viewer > div {
+  display: flex;
+  width: min(92vw, 720px);
+  max-height: 88vh;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  background: #fffdf8;
+  box-shadow: 0 22px 70px rgb(0 0 0 / 40%);
+}
+
+.note-image-viewer header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.note-image-viewer img {
+  min-height: 0;
+  max-width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+}
+
+.note-image-viewer a {
+  align-self: flex-end;
+  color: #5f491b;
+  font-size: 11px;
 }
 
 .note-editor > input {
@@ -4533,6 +4695,28 @@ html[data-theme="dark"] .note-editor header span {
 
 html[data-theme="dark"] .note-card-body small {
   color: #978b7b;
+}
+
+html[data-theme="dark"] .note-card-attachment,
+html[data-theme="dark"] .note-attachment-grid article,
+html[data-theme="dark"] .note-attachment-preview {
+  background: rgb(255 255 255 / 7%);
+}
+
+html[data-theme="dark"] .note-attachment-grid small,
+html[data-theme="dark"] .note-attachment-preview {
+  color: #d5c9b7;
+}
+
+html[data-theme="dark"] .note-image-viewer > div {
+  color: #f0e7d9;
+  background: #292621;
+}
+
+@media (max-width: 340px) {
+  .note-attachment-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 html[data-theme="dark"] .note-card-actions button {

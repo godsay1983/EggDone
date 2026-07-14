@@ -1,11 +1,13 @@
 <script lang="ts">
-  import type { Note, NoteColor } from "$lib/types";
+  import type { Note, NoteAttachment, NoteColor } from "$lib/types";
 
   export let note: Note;
   export let onOpen: (note: Note) => void;
   export let onPin: (note: Note, pinned: boolean) => Promise<void>;
   export let onColor: (note: Note, color: NoteColor) => Promise<void>;
   export let onDelete: (note: Note) => Promise<void>;
+  export let attachments: NoteAttachment[] = [];
+  export let attachmentPreviewUrls: Record<string, string> = {};
 
   const colors: NoteColor[] = ["default", "yellow", "pink", "green", "blue"];
   let menuOpen = false;
@@ -21,6 +23,16 @@
       {#if note.pinned}<span title="已置顶">置顶</span>{/if}
     </div>
     <p>{preview}</p>
+    {#if attachments.length > 0}
+      <div class="note-card-attachment">
+        {#if attachmentPreviewUrls[attachments[0].uuid]}
+          <img src={attachmentPreviewUrls[attachments[0].uuid]} alt="" aria-hidden="true" />
+        {:else}
+          <span>图片</span>
+        {/if}
+        <em>{attachments.length} 张图片</em>
+      </div>
+    {/if}
     <small>{new Date(note.updated_at).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</small>
   </button>
   <div class="note-card-actions">

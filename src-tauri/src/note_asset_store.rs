@@ -86,6 +86,35 @@ impl NoteAssetStore {
         result
     }
 
+    pub(crate) fn import_image_bytes(
+        &self,
+        bytes: &[u8],
+        display_name: &str,
+        attachment_uuid: &str,
+    ) -> Result<PreparedImageAsset, String> {
+        validate_uuid(attachment_uuid)?;
+        validate_display_name(display_name)?;
+        if bytes.is_empty() {
+            return Err("图片文件为空".to_string());
+        }
+        if bytes.len() as i64 > IMAGE_UPLOAD_MAX_BYTES {
+            return Err("图片不能超过 10 MiB".to_string());
+        }
+
+        let asset_root = self.app_data_root.join(ASSET_DIRECTORY);
+        fs::create_dir_all(&asset_root).map_err(|error| format!("创建附件目录失败：{error}"))?;
+        let source = asset_root.join(format!(".import-{attachment_uuid}-{}", Uuid::new_v4()));
+        write_new_file(&source, bytes)?;
+        let result = self
+            .import_image(&source, attachment_uuid)
+            .map(|mut prepared| {
+                prepared.display_name = display_name.to_string();
+                prepared
+            });
+        let _ = fs::remove_file(source);
+        result
+    }
+
     pub(crate) fn verify_local_file(
         &self,
         relative_path: &str,
@@ -354,13 +383,20 @@ fn display_name(source: &Path) -> Result<String, String> {
         .file_name()
         .and_then(|name| name.to_str())
         .ok_or_else(|| "图片文件名无效".to_string())?;
+    validate_display_name(value)?;
+    Ok(value.to_string())
+}
+
+fn validate_display_name(value: &str) -> Result<(), String> {
     if value.trim().is_empty()
         || value.chars().count() > 255
-        || value.chars().any(|character| character.is_control())
+        || value
+            .chars()
+            .any(|character| character.is_control() || matches!(character, '/' | '\\'))
     {
         return Err("图片文件名无效".to_string());
     }
-    Ok(value.to_string())
+    Ok(())
 }
 
 fn mime_type(format: ImageFormat) -> &'static str {

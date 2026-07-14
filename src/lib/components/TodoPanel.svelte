@@ -17,8 +17,10 @@
     todos,
   } from "$lib/stores/todoStore";
   import { notes, visibleNotes } from "$lib/stores/noteStore";
+  import { noteAttachmentApi } from "$lib/api/noteAttachmentApi";
   import {
     initializeAutoSync,
+    scheduleAutoSync,
     setAutoSyncForeground,
     syncStatus,
   } from "$lib/sync/autoSync";
@@ -28,6 +30,7 @@
     Todo,
     TodoGroup,
     Note,
+    NoteAttachment,
     NoteColor,
   } from "$lib/types";
   import { movePreviewByPointer } from "$lib/utils/reorderPreview";
@@ -176,6 +179,10 @@
   let noteDraftCreatePromise: Promise<Note | null> | null = null;
   let deletedNote: Note | null = null;
   let noteUndoTimer: ReturnType<typeof setTimeout> | null = null;
+  let noteAttachmentsByNote: Record<string, NoteAttachment[]> = {};
+  let noteAttachmentPreviewUrls: Record<string, string> = {};
+  let noteAttachmentBusy = false;
+  let noteAttachmentError = "";
   let selectedQuadrant: QuadrantKey | "all" = "all";
   let selectedAgendaDate: string | null = null;
   let agendaWeekStartAt = startOfAgendaWeek();
@@ -323,7 +330,7 @@
       : 170;
 
     void todos.load();
-    void notes.load();
+    void notes.load().then(() => loadAllNoteAttachments());
     function handlePointerDown(event: PointerEvent) {
       if (
         summaryMenuOpen &&
@@ -384,7 +391,10 @@
       }).then((unlisten) => unlisteners.push(unlisten));
       void listen("notes-changed", () => {
         notes.markSynced();
-        void notes.refresh();
+        void notes.refresh().then(() => loadAllNoteAttachments());
+      }).then((unlisten) => unlisteners.push(unlisten));
+      void listen<string>("note-attachments-changed", (event) => {
+        void refreshNoteAttachments(event.payload);
       }).then((unlisten) => unlisteners.push(unlisten));
     }
 
@@ -397,6 +407,7 @@
       if (clearTimer) clearTimeout(clearTimer);
       if (groupDeleteTimer) clearTimeout(groupDeleteTimer);
       if (noteUndoTimer) clearTimeout(noteUndoTimer);
+      Object.values(noteAttachmentPreviewUrls).forEach((url) => URL.revokeObjectURL(url));
       void flushAllNoteChanges().catch(() => undefined);
       clearFocusCompletionTimer();
       window.clearInterval(focusInterval);
@@ -493,6 +504,88 @@
   function openNote(note: Note) {
     discardNoteDraft();
     selectedNoteUuid = note.uuid;
+    void refreshNoteAttachments(note.uuid);
+  }
+
+  async function loadAllNoteAttachments() {
+    const items = $notes.items;
+    const results = await Promise.all(
+      items.map(async (note) => [note.uuid, await noteAttachmentApi.list(note.uuid)] as const),
+    );
+    const next: Record<string, NoteAttachment[]> = {};
+    for (const [uuid, attachments] of results) {
+      next[uuid] = attachments;
+      await loadAttachmentPreviews(attachments);
+    }
+    noteAttachmentsByNote = next;
+  }
+
+  async function refreshNoteAttachments(noteUuid: string) {
+    if (!noteUuid || noteUuid === NOTE_DRAFT_UUID) return;
+    const attachments = await noteAttachmentApi.list(noteUuid);
+    noteAttachmentsByNote = { ...noteAttachmentsByNote, [noteUuid]: attachments };
+    await loadAttachmentPreviews(attachments);
+  }
+
+  async function loadAttachmentPreviews(attachments: NoteAttachment[]) {
+    for (const attachment of attachments) {
+      if (attachment.kind !== "image" || noteAttachmentPreviewUrls[attachment.uuid]) continue;
+      try {
+        const url = await noteAttachmentApi.previewUrl(attachment);
+        noteAttachmentPreviewUrls = { ...noteAttachmentPreviewUrls, [attachment.uuid]: url };
+      } catch {
+        // Remote-only previews are downloaded on demand in DA6.
+      }
+    }
+  }
+
+  function attachmentDraftTitle(fileName: string) {
+    const withoutExtension = fileName.replace(/\.[^.]+$/, "").trim();
+    return withoutExtension || "图片便签";
+  }
+
+  async function ensureNoteForImages(firstFile: File): Promise<Note | null> {
+    if (noteDraft) {
+      if (!hasNoteDraftContent(noteDraft)) {
+        noteDraft = { ...noteDraft, title: attachmentDraftTitle(firstFile.name) };
+      }
+      return persistNoteDraft();
+    }
+    await flushAllNoteChanges();
+    return selectedNote;
+  }
+
+  async function addNoteImages(files: File[]) {
+    if (files.length === 0 || noteAttachmentBusy) return;
+    noteAttachmentBusy = true;
+    noteAttachmentError = "";
+    try {
+      const note = await ensureNoteForImages(files[0]);
+      if (!note) throw new Error("请先保存便签后再添加图片");
+      const existing = noteAttachmentsByNote[note.uuid] ?? [];
+      const available = Math.max(0, 9 - existing.length);
+      for (const file of files.slice(0, available)) {
+        await noteAttachmentApi.createImage(note.uuid, file);
+      }
+      await refreshNoteAttachments(note.uuid);
+      scheduleAutoSync();
+    } catch (reason) {
+      noteAttachmentError = reason instanceof Error ? reason.message : String(reason);
+    } finally {
+      noteAttachmentBusy = false;
+    }
+  }
+
+  async function deleteNoteAttachment(attachment: NoteAttachment) {
+    await noteAttachmentApi.delete(attachment.uuid);
+    await refreshNoteAttachments(attachment.note_uuid);
+    scheduleAutoSync();
+  }
+
+  async function retryNoteAttachment(attachment: NoteAttachment) {
+    await noteAttachmentApi.retry(attachment.uuid);
+    await refreshNoteAttachments(attachment.note_uuid);
+    scheduleAutoSync();
   }
 
   function updateNote(note: Note, nextTitle: string, content: string) {
@@ -2335,12 +2428,19 @@
       note={selectedNote}
       draft={selectedNote.uuid === NOTE_DRAFT_UUID}
       saving={noteEditorSaving}
-      error={$notes.error}
+      error={noteAttachmentError || $notes.error}
       onChange={updateNote}
       onDone={closeNoteEditor}
       onPin={pinNote}
       onColor={colorNote}
       onDelete={deleteNote}
+      attachments={selectedNote.uuid === NOTE_DRAFT_UUID ? [] : (noteAttachmentsByNote[selectedNote.uuid] ?? [])}
+      attachmentPreviewUrls={noteAttachmentPreviewUrls}
+      attachmentBusy={noteAttachmentBusy}
+      onAddImages={addNoteImages}
+      onOpenAttachment={noteAttachmentApi.originalUrl}
+      onDeleteAttachment={deleteNoteAttachment}
+      onRetryAttachment={retryNoteAttachment}
     />
   {:else if listView === "notes"}
     <NoteList
@@ -2352,6 +2452,8 @@
       onPin={pinNote}
       onColor={colorNote}
       onDelete={deleteNote}
+      attachmentsByNote={noteAttachmentsByNote}
+      attachmentPreviewUrls={noteAttachmentPreviewUrls}
     />
   {:else}
   <section class="todo-list" aria-live="polite">
