@@ -5,12 +5,13 @@ use uuid::Uuid;
 
 use crate::{
     db::{device_id, now_millis, Database},
+    note_asset_store::NoteAssetStore,
     note_sync,
     notes::{self, Note},
     reminders,
     s3_sync::{
-        self, ConnectionTestResult, ManualSyncResult, SaveSyncSettings, SyncRuntime, SyncSettings,
-        UploadOutcome,
+        self, AssetUploadOutcome, ConnectionTestResult, ManualSyncResult, SaveSyncSettings,
+        SyncRuntime, SyncSettings, UploadOutcome,
     },
     schedule::{local_date_from_timestamp, timestamp_for_local_date},
     sync::{self, SyncDocument},
@@ -636,6 +637,95 @@ pub async fn get_remote_sync_state(
         s3_sync::prepare_manual_sync(&connection)?
     };
     s3_sync::get_remote_state(&prepared).await
+}
+
+#[tauri::command]
+pub async fn upload_note_asset(
+    attachment_uuid: String,
+    file_name: String,
+    content_type: String,
+    expected_size: i64,
+    expected_sha256: String,
+    database: State<'_, Database>,
+    runtime: State<'_, SyncRuntime>,
+    asset_store: State<'_, NoteAssetStore>,
+) -> Result<AssetUploadOutcome, String> {
+    let bytes = asset_store.read_asset_file(
+        &attachment_uuid,
+        &file_name,
+        expected_size,
+        &expected_sha256,
+    )?;
+    let prepared = {
+        let connection = lock_database(&database)?;
+        s3_sync::prepare_manual_sync(&connection)?
+    };
+    s3_sync::upload_immutable_asset(
+        &runtime,
+        &prepared,
+        &attachment_uuid,
+        &file_name,
+        &bytes,
+        &content_type,
+        &expected_sha256,
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn download_note_asset(
+    attachment_uuid: String,
+    file_name: String,
+    expected_size: i64,
+    expected_sha256: String,
+    database: State<'_, Database>,
+    runtime: State<'_, SyncRuntime>,
+    asset_store: State<'_, NoteAssetStore>,
+) -> Result<String, String> {
+    let prepared = {
+        let connection = lock_database(&database)?;
+        s3_sync::prepare_manual_sync(&connection)?
+    };
+    let bytes = s3_sync::download_asset_bytes(
+        &runtime,
+        &prepared,
+        &attachment_uuid,
+        &file_name,
+        expected_size,
+        &expected_sha256,
+    )
+    .await?;
+    asset_store.write_downloaded_asset(
+        &attachment_uuid,
+        &file_name,
+        &bytes,
+        expected_size,
+        &expected_sha256,
+    )
+}
+
+#[tauri::command]
+pub async fn delete_remote_note_asset(
+    attachment_uuid: String,
+    file_name: String,
+    expected_size: i64,
+    expected_sha256: String,
+    database: State<'_, Database>,
+    runtime: State<'_, SyncRuntime>,
+) -> Result<bool, String> {
+    let prepared = {
+        let connection = lock_database(&database)?;
+        s3_sync::prepare_manual_sync(&connection)?
+    };
+    s3_sync::delete_asset_if_matches(
+        &runtime,
+        &prepared,
+        &attachment_uuid,
+        &file_name,
+        expected_size,
+        &expected_sha256,
+    )
+    .await
 }
 
 #[tauri::command]

@@ -1,14 +1,23 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::{
+    collections::HashSet,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Mutex,
+    },
+};
 
 use http::{HeaderMap, HeaderName, HeaderValue};
 use keyring::{Entry, Error as KeyringError};
 use rusqlite::{params, Connection};
 use s3::{bucket::Bucket, creds::Credentials, region::Region};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use url::Url;
+use uuid::Uuid;
 
 use crate::{
     db::{device_id, now_millis},
+    note_attachments::{IMAGE_UPLOAD_MAX_BYTES, PREVIEW_MAX_BYTES},
     note_sync::{self, NoteSyncDocument},
     sync::{self, SyncDocument},
 };
@@ -59,6 +68,7 @@ pub struct PreparedManualSync {
     bucket: Box<Bucket>,
     object_key: String,
     note_object_key: String,
+    note_asset_prefix: String,
 }
 
 pub struct RemoteSyncObject {
@@ -97,13 +107,34 @@ pub enum UploadOutcome {
     Conflict,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RemoteAssetState {
+    pub exists: bool,
+    pub content_length: Option<i64>,
+    pub content_type: Option<String>,
+    pub sha256: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum AssetUploadOutcome {
+    Uploaded,
+    AlreadyPresent,
+}
+
 #[derive(Default)]
 pub struct SyncRuntime {
     in_progress: AtomicBool,
+    active_asset_uuids: Mutex<HashSet<String>>,
 }
 
 pub struct SyncGuard<'a> {
     runtime: &'a SyncRuntime,
+}
+
+pub struct AssetTransferGuard<'a> {
+    runtime: &'a SyncRuntime,
+    attachment_uuid: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -222,11 +253,34 @@ impl SyncRuntime {
             .map(|_| SyncGuard { runtime: self })
             .map_err(|_| "同步正在进行，请稍候".to_string())
     }
+
+    pub fn acquire_asset(&self, attachment_uuid: &str) -> Result<AssetTransferGuard<'_>, String> {
+        validate_asset_uuid(attachment_uuid)?;
+        let mut active = self
+            .active_asset_uuids
+            .lock()
+            .map_err(|_| "附件传输状态不可用，请重试".to_string())?;
+        if !active.insert(attachment_uuid.to_string()) {
+            return Err("该附件正在传输，请稍候".to_string());
+        }
+        Ok(AssetTransferGuard {
+            runtime: self,
+            attachment_uuid: attachment_uuid.to_string(),
+        })
+    }
 }
 
 impl Drop for SyncGuard<'_> {
     fn drop(&mut self) {
         self.runtime.in_progress.store(false, Ordering::Release);
+    }
+}
+
+impl Drop for AssetTransferGuard<'_> {
+    fn drop(&mut self) {
+        if let Ok(mut active) = self.runtime.active_asset_uuids.lock() {
+            active.remove(&self.attachment_uuid);
+        }
     }
 }
 
@@ -241,6 +295,7 @@ pub fn prepare_manual_sync(connection: &Connection) -> Result<PreparedManualSync
     Ok(PreparedManualSync {
         bucket: build_bucket(&settings, credentials)?,
         note_object_key: derive_note_object_key(&settings.object_key),
+        note_asset_prefix: derive_note_asset_prefix(&settings.object_key),
         object_key: settings.object_key,
     })
 }
@@ -394,6 +449,244 @@ pub async fn upload_note_document(
         .map_err(|error| format!("上传便签同步文件失败：{error}"))?;
 
     classify_upload_status(response.status_code())
+}
+
+pub async fn head_asset_object(
+    prepared: &PreparedManualSync,
+    attachment_uuid: &str,
+    file_name: &str,
+) -> Result<RemoteAssetState, String> {
+    let object_key = asset_object_key(prepared, attachment_uuid, file_name)?;
+    let (headers, status) = prepared
+        .bucket
+        .head_object(&object_key)
+        .await
+        .map_err(|error| format!("检查远端附件失败，请检查网络后重试：{error}"))?;
+    match status {
+        200..=299 => Ok(RemoteAssetState {
+            exists: true,
+            content_length: headers.content_length,
+            content_type: headers.content_type,
+            sha256: metadata_value(headers.metadata.as_ref(), "sha256"),
+        }),
+        404 => Ok(RemoteAssetState {
+            exists: false,
+            content_length: None,
+            content_type: None,
+            sha256: None,
+        }),
+        401 | 403 => Err("检查远端附件失败：凭据无效或没有对象读取权限".to_string()),
+        _ => Err(format!("检查远端附件失败，S3 服务返回状态码 {status}")),
+    }
+}
+
+pub async fn upload_immutable_asset(
+    runtime: &SyncRuntime,
+    prepared: &PreparedManualSync,
+    attachment_uuid: &str,
+    file_name: &str,
+    content: &[u8],
+    content_type: &str,
+    expected_sha256: &str,
+) -> Result<AssetUploadOutcome, String> {
+    validate_asset_payload(file_name, content, content_type, expected_sha256)?;
+    let _guard = runtime.acquire_asset(attachment_uuid)?;
+    let object_key = asset_object_key(prepared, attachment_uuid, file_name)?;
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        HeaderName::from_static("if-none-match"),
+        HeaderValue::from_static("*"),
+    );
+    let response = prepared
+        .bucket
+        .put_object_builder(&object_key, content)
+        .with_content_type(content_type)
+        .with_headers(headers)
+        .with_metadata("sha256", expected_sha256)
+        .map_err(|error| format!("创建附件上传请求失败：{error}"))?
+        .execute()
+        .await
+        .map_err(|error| format!("上传附件失败，请检查网络后重试：{error}"))?;
+    match response.status_code() {
+        200..=299 => Ok(AssetUploadOutcome::Uploaded),
+        409 | 412 => {
+            let remote = head_asset_object(prepared, attachment_uuid, file_name).await?;
+            if asset_matches(&remote, content.len() as i64, content_type, expected_sha256) {
+                Ok(AssetUploadOutcome::AlreadyPresent)
+            } else {
+                Err("远端已有同名附件但内容不同，请重新同步元数据后重试".to_string())
+            }
+        }
+        401 | 403 => Err("上传附件失败：凭据无效或没有对象写入权限".to_string()),
+        status => Err(format!("上传附件失败，S3 服务返回状态码 {status}")),
+    }
+}
+
+pub async fn download_asset_bytes(
+    runtime: &SyncRuntime,
+    prepared: &PreparedManualSync,
+    attachment_uuid: &str,
+    file_name: &str,
+    expected_size: i64,
+    expected_sha256: &str,
+) -> Result<Vec<u8>, String> {
+    validate_asset_identity(file_name, expected_size, expected_sha256)?;
+    let _guard = runtime.acquire_asset(attachment_uuid)?;
+    let object_key = asset_object_key(prepared, attachment_uuid, file_name)?;
+    let response = prepared
+        .bucket
+        .get_object(&object_key)
+        .await
+        .map_err(|error| format!("下载附件失败，请检查网络后重试：{error}"))?;
+    match response.status_code() {
+        200..=299 => {
+            let bytes = response.to_vec();
+            if bytes.len() as i64 != expected_size {
+                return Err("下载附件失败：文件大小与同步元数据不一致".to_string());
+            }
+            if sha256_hex(&bytes) != expected_sha256 {
+                return Err("下载附件失败：SHA-256 校验不通过，请重试".to_string());
+            }
+            Ok(bytes)
+        }
+        404 => Err("下载附件失败：远端文件不存在，可稍后重试同步".to_string()),
+        401 | 403 => Err("下载附件失败：凭据无效或没有对象读取权限".to_string()),
+        status => Err(format!("下载附件失败，S3 服务返回状态码 {status}")),
+    }
+}
+
+pub async fn delete_asset_if_matches(
+    runtime: &SyncRuntime,
+    prepared: &PreparedManualSync,
+    attachment_uuid: &str,
+    file_name: &str,
+    expected_size: i64,
+    expected_sha256: &str,
+) -> Result<bool, String> {
+    validate_asset_identity(file_name, expected_size, expected_sha256)?;
+    let _guard = runtime.acquire_asset(attachment_uuid)?;
+    let remote = head_asset_object(prepared, attachment_uuid, file_name).await?;
+    if !remote.exists {
+        return Ok(false);
+    }
+    if !asset_matches_without_type(&remote, expected_size, expected_sha256) {
+        return Err("拒绝删除远端附件：对象大小或 SHA-256 与元数据不一致".to_string());
+    }
+    let object_key = asset_object_key(prepared, attachment_uuid, file_name)?;
+    let response = prepared
+        .bucket
+        .delete_object(&object_key)
+        .await
+        .map_err(|error| format!("删除远端附件失败，请检查网络后重试：{error}"))?;
+    match response.status_code() {
+        200..=299 | 404 => Ok(true),
+        401 | 403 => Err("删除远端附件失败：凭据无效或没有对象删除权限".to_string()),
+        status => Err(format!("删除远端附件失败，S3 服务返回状态码 {status}")),
+    }
+}
+
+fn asset_object_key(
+    prepared: &PreparedManualSync,
+    attachment_uuid: &str,
+    file_name: &str,
+) -> Result<String, String> {
+    validate_asset_uuid(attachment_uuid)?;
+    validate_asset_file_name(file_name)?;
+    Ok(format!(
+        "{}{attachment_uuid}/{file_name}",
+        prepared.note_asset_prefix
+    ))
+}
+
+fn validate_asset_payload(
+    file_name: &str,
+    content: &[u8],
+    content_type: &str,
+    expected_sha256: &str,
+) -> Result<(), String> {
+    validate_asset_identity(file_name, content.len() as i64, expected_sha256)?;
+    if content_type.is_empty() || content_type.len() > 100 || content_type.contains(['\r', '\n']) {
+        return Err("附件 Content-Type 无效".to_string());
+    }
+    if sha256_hex(content) != expected_sha256 {
+        return Err("附件内容与 SHA-256 元数据不一致".to_string());
+    }
+    Ok(())
+}
+
+fn validate_asset_identity(
+    file_name: &str,
+    expected_size: i64,
+    expected_sha256: &str,
+) -> Result<(), String> {
+    validate_asset_file_name(file_name)?;
+    let maximum = if file_name == "preview.jpg" {
+        PREVIEW_MAX_BYTES
+    } else {
+        IMAGE_UPLOAD_MAX_BYTES
+    };
+    if expected_size <= 0 || expected_size > maximum {
+        return Err("附件大小无效".to_string());
+    }
+    if expected_sha256.len() != 64
+        || !expected_sha256
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err("附件 SHA-256 无效".to_string());
+    }
+    Ok(())
+}
+
+fn validate_asset_uuid(value: &str) -> Result<(), String> {
+    Uuid::parse_str(value)
+        .map(|_| ())
+        .map_err(|_| "附件 UUID 无效".to_string())
+}
+
+fn validate_asset_file_name(value: &str) -> Result<(), String> {
+    match value {
+        "original" | "preview.jpg" => Ok(()),
+        _ => Err("附件对象类型无效".to_string()),
+    }
+}
+
+fn metadata_value(
+    metadata: Option<&std::collections::HashMap<String, String>>,
+    name: &str,
+) -> Option<String> {
+    metadata.and_then(|values| {
+        values
+            .iter()
+            .find_map(|(key, value)| key.eq_ignore_ascii_case(name).then(|| value.to_lowercase()))
+    })
+}
+
+fn asset_matches(
+    remote: &RemoteAssetState,
+    expected_size: i64,
+    expected_content_type: &str,
+    expected_sha256: &str,
+) -> bool {
+    asset_matches_without_type(remote, expected_size, expected_sha256)
+        && remote
+            .content_type
+            .as_deref()
+            .is_some_and(|value| value.eq_ignore_ascii_case(expected_content_type))
+}
+
+fn asset_matches_without_type(
+    remote: &RemoteAssetState,
+    expected_size: i64,
+    expected_sha256: &str,
+) -> bool {
+    remote.exists
+        && remote.content_length == Some(expected_size)
+        && remote.sha256.as_deref() == Some(expected_sha256)
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    format!("{:x}", Sha256::digest(bytes))
 }
 
 pub(crate) fn derive_note_object_key(object_key: &str) -> String {
@@ -763,5 +1056,45 @@ mod tests {
         assert!(runtime.acquire().is_err());
         drop(guard);
         assert!(runtime.acquire().is_ok());
+    }
+
+    #[test]
+    fn asset_runtime_deduplicates_each_attachment_uuid() {
+        let runtime = SyncRuntime::default();
+        let first_uuid = "6cb653ce-b48f-42d0-8409-d8df81ced98c";
+        let second_uuid = "c04710a9-e9bc-49fd-9e30-4787044356d0";
+        let first = runtime.acquire_asset(first_uuid).unwrap();
+        assert!(runtime.acquire_asset(first_uuid).is_err());
+        let second = runtime.acquire_asset(second_uuid).unwrap();
+        drop(first);
+        assert!(runtime.acquire_asset(first_uuid).is_ok());
+        drop(second);
+    }
+
+    #[test]
+    fn validates_asset_payload_and_remote_identity() {
+        let bytes = b"eggdone attachment";
+        let sha256 = sha256_hex(bytes);
+        validate_asset_payload("original", bytes, "image/jpeg", &sha256).unwrap();
+        assert!(validate_asset_payload("preview.png", bytes, "image/png", &sha256).is_err());
+        assert!(validate_asset_payload("original", bytes, "image/jpeg", &"0".repeat(64)).is_err());
+
+        let remote = RemoteAssetState {
+            exists: true,
+            content_length: Some(bytes.len() as i64),
+            content_type: Some("image/jpeg".to_string()),
+            sha256: Some(sha256.clone()),
+        };
+        assert!(asset_matches(
+            &remote,
+            bytes.len() as i64,
+            "IMAGE/JPEG",
+            &sha256
+        ));
+        assert!(!asset_matches_without_type(
+            &remote,
+            bytes.len() as i64 + 1,
+            &sha256
+        ));
     }
 }

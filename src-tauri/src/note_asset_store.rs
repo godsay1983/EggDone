@@ -103,6 +103,62 @@ impl NoteAssetStore {
         Ok(size == expected_size && sha256 == expected_sha256)
     }
 
+    pub(crate) fn read_asset_file(
+        &self,
+        attachment_uuid: &str,
+        file_name: &str,
+        expected_size: i64,
+        expected_sha256: &str,
+    ) -> Result<Vec<u8>, String> {
+        let relative_path = validated_asset_relative_path(attachment_uuid, file_name)?;
+        if !self.verify_local_file(&relative_path, expected_size, expected_sha256)? {
+            return Err("本地附件缺失或校验失败，请重新选择文件".to_string());
+        }
+        fs::read(self.resolve_relative_path(&relative_path)?)
+            .map_err(|error| format!("读取本地附件失败：{error}"))
+    }
+
+    pub(crate) fn write_downloaded_asset(
+        &self,
+        attachment_uuid: &str,
+        file_name: &str,
+        bytes: &[u8],
+        expected_size: i64,
+        expected_sha256: &str,
+    ) -> Result<String, String> {
+        let relative_path = validated_asset_relative_path(attachment_uuid, file_name)?;
+        if bytes.len() as i64 != expected_size || sha256_bytes(bytes) != expected_sha256 {
+            return Err("下载附件校验失败，未写入本地缓存".to_string());
+        }
+        let final_path = self.resolve_relative_path(&relative_path)?;
+        if self.verify_local_file(&relative_path, expected_size, expected_sha256)? {
+            return Ok(relative_path);
+        }
+        let directory = final_path
+            .parent()
+            .ok_or_else(|| "附件目标目录无效".to_string())?;
+        fs::create_dir_all(directory).map_err(|error| format!("创建附件目录失败：{error}"))?;
+        let staging_path = directory.join(format!(".{file_name}.download-{}", Uuid::new_v4()));
+        let result = (|| {
+            write_new_file(&staging_path, bytes)?;
+            let (size, sha256) = hash_file(&staging_path, expected_size)?;
+            if size != expected_size || sha256 != expected_sha256 {
+                return Err("下载附件临时文件校验失败".to_string());
+            }
+            if final_path.exists() {
+                fs::remove_file(&final_path)
+                    .map_err(|error| format!("替换损坏附件失败：{error}"))?;
+            }
+            fs::rename(&staging_path, &final_path)
+                .map_err(|error| format!("保存下载附件失败：{error}"))?;
+            Ok(relative_path.clone())
+        })();
+        if result.is_err() {
+            let _ = fs::remove_file(staging_path);
+        }
+        result
+    }
+
     pub(crate) fn delete_asset(&self, attachment_uuid: &str) -> Result<(), String> {
         validate_uuid(attachment_uuid)?;
         let directory = self
@@ -358,6 +414,14 @@ fn relative_asset_path(attachment_uuid: &str, file_name: &str) -> String {
     format!("{ASSET_DIRECTORY}/{attachment_uuid}/{file_name}")
 }
 
+fn validated_asset_relative_path(attachment_uuid: &str, file_name: &str) -> Result<String, String> {
+    validate_uuid(attachment_uuid)?;
+    if file_name != ORIGINAL_FILE_NAME && file_name != PREVIEW_FILE_NAME {
+        return Err("附件对象类型无效".to_string());
+    }
+    Ok(relative_asset_path(attachment_uuid, file_name))
+}
+
 fn validate_uuid(value: &str) -> Result<(), String> {
     Uuid::parse_str(value)
         .map(|_| ())
@@ -470,5 +534,36 @@ mod tests {
         assert!(store.delete_asset("../outside").is_err());
         store.delete_asset(uuid).unwrap();
         assert!(!directory.exists());
+    }
+
+    #[test]
+    fn writes_verified_downloads_and_reuses_valid_cache() {
+        let root = TestDirectory::new();
+        let app_data = root.0.join("app-data");
+        fs::create_dir(&app_data).unwrap();
+        let store = NoteAssetStore::for_root(app_data.clone());
+        let uuid = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+        let bytes = b"downloaded eggdone image";
+        let sha256 = sha256_bytes(bytes);
+
+        let relative = store
+            .write_downloaded_asset(uuid, "original", bytes, bytes.len() as i64, &sha256)
+            .unwrap();
+        assert_eq!(relative, format!("note-assets/{uuid}/original"));
+        assert_eq!(
+            store
+                .read_asset_file(uuid, "original", bytes.len() as i64, &sha256)
+                .unwrap(),
+            bytes
+        );
+        assert_eq!(
+            store
+                .write_downloaded_asset(uuid, "original", bytes, bytes.len() as i64, &sha256)
+                .unwrap(),
+            relative
+        );
+        assert!(store
+            .write_downloaded_asset(uuid, "preview.png", bytes, bytes.len() as i64, &sha256)
+            .is_err());
     }
 }
