@@ -416,6 +416,42 @@ pub(crate) fn derive_note_object_key(object_key: &str) -> String {
     format!("{object_key}.notes.json")
 }
 
+pub(crate) fn derive_note_attachment_object_key(object_key: &str) -> String {
+    if object_key == "todos.json" {
+        return "note-attachments.json".to_string();
+    }
+    if let Some(prefix) = object_key.strip_suffix("/todos.json") {
+        return format!("{prefix}/note-attachments.json");
+    }
+    let slash_index = object_key.rfind('/');
+    if let Some(extension_index) = object_key.rfind('.') {
+        if slash_index.is_none_or(|index| extension_index > index) {
+            return format!(
+                "{}.note-attachments{}",
+                &object_key[..extension_index],
+                &object_key[extension_index..]
+            );
+        }
+    }
+    format!("{object_key}.note-attachments.json")
+}
+
+pub(crate) fn derive_note_asset_prefix(object_key: &str) -> String {
+    if object_key == "todos.json" {
+        return "note-assets/v1/".to_string();
+    }
+    if let Some(prefix) = object_key.strip_suffix("/todos.json") {
+        return format!("{prefix}/note-assets/v1/");
+    }
+    let slash_index = object_key.rfind('/');
+    if let Some(extension_index) = object_key.rfind('.') {
+        if slash_index.is_none_or(|index| extension_index > index) {
+            return format!("{}.note-assets/v1/", &object_key[..extension_index]);
+        }
+    }
+    format!("{object_key}.note-assets/v1/")
+}
+
 fn upload_condition(etag: Option<&str>) -> (&'static str, &str) {
     match etag {
         Some(value) => ("if-match", value),
@@ -689,6 +725,34 @@ mod tests {
         assert_eq!(
             derive_note_object_key("egg.done/backup"),
             "egg.done/backup.notes.json"
+        );
+    }
+
+    #[test]
+    fn derives_note_attachment_keys_from_supported_todo_keys() {
+        assert_eq!(
+            derive_note_attachment_object_key("eggdone/todos.json"),
+            "eggdone/note-attachments.json"
+        );
+        assert_eq!(
+            derive_note_attachment_object_key("backup.json"),
+            "backup.note-attachments.json"
+        );
+        assert_eq!(
+            derive_note_attachment_object_key("folder/backup"),
+            "folder/backup.note-attachments.json"
+        );
+        assert_eq!(
+            derive_note_asset_prefix("eggdone/todos.json"),
+            "eggdone/note-assets/v1/"
+        );
+        assert_eq!(
+            derive_note_asset_prefix("backup.json"),
+            "backup.note-assets/v1/"
+        );
+        assert_eq!(
+            derive_note_asset_prefix("folder/backup"),
+            "folder/backup.note-assets/v1/"
         );
     }
 

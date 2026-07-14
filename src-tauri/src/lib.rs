@@ -1,6 +1,8 @@
 mod commands;
 mod data_exchange;
 mod db;
+mod note_attachment_sync;
+mod note_attachments;
 mod note_sync;
 mod notes;
 mod panel_position;

@@ -9,7 +9,7 @@ use rusqlite::{params, Connection, Transaction};
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
-const CURRENT_SCHEMA_VERSION: i64 = 14;
+const CURRENT_SCHEMA_VERSION: i64 = 15;
 const DEVICE_ID_KEY: &str = "device_id";
 
 pub struct Database {
@@ -77,6 +77,7 @@ pub(crate) fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {
     apply_migration(connection, 12, add_todo_archive)?;
     apply_migration(connection, 13, add_todo_priority)?;
     apply_migration(connection, 14, add_notes)?;
+    apply_migration(connection, 15, add_note_attachments)?;
 
     debug_assert_eq!(schema_version(connection)?, CURRENT_SCHEMA_VERSION);
     Ok(())
@@ -434,6 +435,84 @@ fn add_notes(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
     )
 }
 
+fn add_note_attachments(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
+    transaction.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS note_attachments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            uuid TEXT NOT NULL UNIQUE,
+            note_uuid TEXT NOT NULL,
+            kind TEXT NOT NULL CHECK(kind IN ('image', 'file')),
+            display_name TEXT NOT NULL CHECK(length(trim(display_name)) > 0),
+            mime_type TEXT NOT NULL,
+            byte_size INTEGER NOT NULL CHECK(byte_size > 0),
+            sha256 TEXT NOT NULL,
+            preview_mime_type TEXT,
+            preview_byte_size INTEGER,
+            preview_sha256 TEXT,
+            width INTEGER,
+            height INTEGER,
+            sort_order INTEGER NOT NULL DEFAULT 0 CHECK(sort_order >= 0),
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            deleted_at INTEGER,
+            updated_by TEXT NOT NULL,
+            local_original_path TEXT,
+            local_preview_path TEXT,
+            transfer_state TEXT NOT NULL DEFAULT 'pending_upload'
+                CHECK(transfer_state IN (
+                    'pending_upload', 'uploading', 'uploaded', 'synced',
+                    'remote_only', 'downloading', 'cached', 'failed'
+                )),
+            transfer_error TEXT,
+            remote_uploaded INTEGER NOT NULL DEFAULT 0 CHECK(remote_uploaded IN (0, 1)),
+            CHECK(
+                (kind = 'image'
+                    AND preview_mime_type = 'image/jpeg'
+                    AND preview_byte_size IS NOT NULL
+                    AND preview_sha256 IS NOT NULL
+                    AND width IS NOT NULL
+                    AND height IS NOT NULL)
+                OR
+                (kind = 'file'
+                    AND preview_mime_type IS NULL
+                    AND preview_byte_size IS NULL
+                    AND preview_sha256 IS NULL
+                    AND width IS NULL
+                    AND height IS NULL)
+            )
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_note_attachments_note_order
+            ON note_attachments(note_uuid, deleted_at, sort_order, uuid);
+        CREATE INDEX IF NOT EXISTS idx_note_attachments_transfer
+            ON note_attachments(transfer_state, updated_at);
+
+        CREATE TRIGGER IF NOT EXISTS notes_soft_delete_attachments
+        AFTER UPDATE OF deleted_at ON notes
+        WHEN OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL
+        BEGIN
+            UPDATE note_attachments
+            SET deleted_at = NEW.deleted_at,
+                updated_at = NEW.updated_at,
+                updated_by = NEW.updated_by
+            WHERE note_uuid = NEW.uuid AND deleted_at IS NULL;
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS notes_restore_attachments
+        AFTER UPDATE OF deleted_at ON notes
+        WHEN OLD.deleted_at IS NOT NULL AND NEW.deleted_at IS NULL
+        BEGIN
+            UPDATE note_attachments
+            SET deleted_at = NULL,
+                updated_at = NEW.updated_at,
+                updated_by = NEW.updated_by
+            WHERE note_uuid = NEW.uuid AND deleted_at = OLD.deleted_at;
+        END;
+        ",
+    )
+}
+
 pub(crate) fn device_id(connection: &Connection) -> rusqlite::Result<String> {
     connection.query_row(
         "SELECT value FROM app_metadata WHERE key = ?1",
@@ -517,6 +596,12 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM notes", [], |row| row.get(0))
             .unwrap();
         assert_eq!(note_count, 0);
+        let attachment_count: i64 = connection
+            .query_row("SELECT COUNT(*) FROM note_attachments", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(attachment_count, 0);
     }
 
     #[test]
@@ -599,8 +684,9 @@ mod tests {
         connection
             .execute_batch(
                 "
+            DROP TABLE note_attachments;
             DROP TABLE notes;
-            DELETE FROM schema_migrations WHERE version = 14;
+            DELETE FROM schema_migrations WHERE version >= 14;
             ",
             )
             .unwrap();
@@ -619,7 +705,7 @@ mod tests {
 
         migrate(&mut connection).unwrap();
 
-        assert_eq!(schema_version(&connection).unwrap(), 14);
+        assert_eq!(schema_version(&connection).unwrap(), 15);
         let title: String = connection
             .query_row("SELECT title FROM todos", [], |row| row.get(0))
             .unwrap();
@@ -632,6 +718,49 @@ mod tests {
             )
             .unwrap();
         assert_eq!(note_table_count, 1);
+    }
+
+    #[test]
+    fn upgrades_v14_database_with_attachments_without_touching_notes() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        configure_connection(&connection).unwrap();
+        migrate(&mut connection).unwrap();
+        connection
+            .execute_batch(
+                "
+                DROP TABLE note_attachments;
+                DELETE FROM schema_migrations WHERE version = 15;
+                ",
+            )
+            .unwrap();
+        let identity = device_id(&connection).unwrap();
+        connection
+            .execute(
+                "
+                INSERT INTO notes (
+                    uuid, title, content, color, pinned,
+                    created_at, updated_at, deleted_at, updated_by
+                ) VALUES (?1, '保留便签', '正文', 'yellow', 0, 100, 100, NULL, ?2)
+                ",
+                params!["cccccccc-cccc-4ccc-8ccc-cccccccccccc", identity],
+            )
+            .unwrap();
+
+        migrate(&mut connection).unwrap();
+
+        assert_eq!(schema_version(&connection).unwrap(), 15);
+        let title: String = connection
+            .query_row("SELECT title FROM notes", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(title, "保留便签");
+        let attachment_table_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'note_attachments'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(attachment_table_count, 1);
     }
 
     #[test]

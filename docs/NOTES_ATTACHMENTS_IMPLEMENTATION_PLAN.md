@@ -171,6 +171,8 @@ display_name
 mime_type
 byte_size
 sha256
+preview_mime_type
+preview_byte_size
 preview_sha256
 width
 height
