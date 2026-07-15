@@ -33,6 +33,8 @@
   let viewerLoading = false;
   let viewerError = "";
   let fileActionError = "";
+  let attachmentManagerOpen = false;
+  let addMenuOpen = false;
 
   $: imageAttachments = attachments.filter((attachment) => attachment.kind === "image");
   $: fileAttachments = attachments.filter((attachment) => attachment.kind === "file");
@@ -140,7 +142,18 @@
     if (viewerAttachment && event.key === "Escape") {
       event.stopPropagation();
       closeViewer();
+    } else if (attachmentManagerOpen && event.key === "Escape") {
+      event.stopPropagation();
+      attachmentManagerOpen = false;
     }
+  }
+
+  function attachmentSummary() {
+    if (imageAttachments.length > 0 && fileAttachments.length > 0) {
+      return `${imageAttachments.length} 张图片 · ${fileAttachments.length} 个文件`;
+    }
+    if (imageAttachments.length > 0) return `${imageAttachments.length} 张图片`;
+    return `${fileAttachments.length} 个文件`;
   }
 
   function attachmentState(attachment: NoteAttachment) {
@@ -168,8 +181,21 @@
     <span>{error ? error : saving ? "保存中…" : draft ? "开始输入后自动保存" : "已保存在本机"}</span>
     <input bind:this={imageInput} class="note-file-input" type="file" accept="image/jpeg,image/png,image/webp" multiple onchange={selectImages} />
     <input bind:this={attachmentInput} class="note-file-input" type="file" accept=".pdf,.txt,.md,.markdown,.docx,.xlsx,.pptx,.zip" multiple onchange={selectAttachments} />
-    <button class="attachment-trigger" type="button" title="添加图片" aria-label="添加图片" disabled={attachmentBusy} onclick={() => imageInput.click()}>图片</button>
-    <button class="attachment-trigger" type="button" title="添加附件" aria-label="添加附件" disabled={attachmentBusy} onclick={() => attachmentInput.click()}>附件</button>
+    <div class="note-add-control">
+      <button
+        class="attachment-trigger"
+        type="button"
+        aria-expanded={addMenuOpen}
+        disabled={attachmentBusy}
+        onclick={() => (addMenuOpen = !addMenuOpen)}
+      >添加</button>
+      {#if addMenuOpen}
+        <div class="note-add-menu">
+          <button type="button" onclick={() => { addMenuOpen = false; imageInput.click(); }}>添加图片</button>
+          <button type="button" onclick={() => { addMenuOpen = false; attachmentInput.click(); }}>添加文件</button>
+        </div>
+      {/if}
+    </div>
     <button class="primary" type="button" onclick={() => void onDone()}>完成</button>
   </header>
   <input
@@ -190,72 +216,25 @@
     oninput={changed}
     onpaste={pasteImages}
   ></textarea>
-  {#if imageAttachments.length > 0}
-    <section class="note-attachment-grid" aria-label="便签图片">
-      {#each imageAttachments as attachment (attachment.uuid)}
-        {@const index = attachmentIndex(attachment)}
-        <article class:failed={attachment.transfer_state === "failed"}>
-          <button class="note-attachment-preview" type="button" onclick={() => void openAttachment(attachment)}>
-            {#if attachmentPreviewUrls[attachment.uuid]}
-              <img src={attachmentPreviewUrls[attachment.uuid]} alt={attachment.display_name} />
+  {#if attachments.length > 0}
+    <section class="note-attachment-summary" aria-label="便签附件摘要">
+      <button class="note-attachment-summary-heading" type="button" onclick={() => (attachmentManagerOpen = true)}>
+        <span><strong>附件 {attachments.length}</strong><small>{attachmentSummary()}</small></span>
+        <em>管理</em>
+      </button>
+      <div class="note-attachment-strip">
+        {#each attachments as attachment (attachment.uuid)}
+          <button type="button" title={attachment.display_name} onclick={() => (attachmentManagerOpen = true)}>
+            {#if attachment.kind === "image" && attachmentPreviewUrls[attachment.uuid]}
+              <img src={attachmentPreviewUrls[attachment.uuid]} alt="" aria-hidden="true" />
             {:else}
-              <span>{attachment.transfer_state === "remote_only" ? "下载预览" : "正在准备"}</span>
+              <span>{attachment.kind === "image" ? "图片" : fileKind(attachment)}</span>
+              {#if attachment.kind === "file"}<small>{attachment.display_name}</small>{/if}
             {/if}
+            {#if attachment.transfer_state === "failed"}<em>!</em>{/if}
           </button>
-          <div>
-            <small title={attachment.transfer_error ?? attachment.display_name}>{attachmentState(attachment)}</small>
-            {#if attachment.transfer_state === "failed"}
-              <button type="button" disabled={attachmentBusy} onclick={() => void onRetryAttachment(attachment)}>重试</button>
-            {:else}
-              {#if index > 0}
-                <button
-                  class="attachment-order-button"
-                  type="button"
-                  title="向前移动"
-                  aria-label="向前移动"
-                  disabled={attachmentBusy}
-                  onclick={() => void onMoveAttachment(attachment, -1)}
-                >←</button>
-              {/if}
-              {#if index < attachments.length - 1}
-                <button
-                  class="attachment-order-button"
-                  type="button"
-                  title="向后移动"
-                  aria-label="向后移动"
-                  disabled={attachmentBusy}
-                  onclick={() => void onMoveAttachment(attachment, 1)}
-                >→</button>
-              {/if}
-            {/if}
-            <button class="danger" type="button" disabled={attachmentBusy} onclick={() => void onDeleteAttachment(attachment)}>删除</button>
-          </div>
-        </article>
-      {/each}
-    </section>
-  {/if}
-  {#if fileAttachments.length > 0}
-    <section class="note-file-list" aria-label="便签附件">
-      {#each fileAttachments as attachment (attachment.uuid)}
-        {@const index = attachmentIndex(attachment)}
-        <article class:failed={attachment.transfer_state === "failed"}>
-          <span class="note-file-kind" aria-hidden="true">{fileKind(attachment)}</span>
-          <div class="note-file-info">
-            <strong title={attachment.display_name}>{attachment.display_name}</strong>
-            <small title={attachment.transfer_error ?? attachment.display_name}>{formatBytes(attachment.byte_size)} · {attachmentState(attachment)}</small>
-          </div>
-          {#if attachment.transfer_state === "failed"}
-            <button type="button" disabled={attachmentBusy} onclick={() => void onRetryAttachment(attachment)}>重试</button>
-          {:else}
-            <button type="button" disabled={attachmentBusy} onclick={() => void openFile(attachment)}>打开</button>
-            <button type="button" disabled={attachmentBusy} onclick={() => void saveAttachment(attachment)}>保存</button>
-          {/if}
-          <button class="attachment-order-button" type="button" title="向前移动" aria-label="向前移动" disabled={attachmentBusy || index <= 0} onclick={() => void onMoveAttachment(attachment, -1)}>←</button>
-          <button class="attachment-order-button" type="button" title="向后移动" aria-label="向后移动" disabled={attachmentBusy || index >= attachments.length - 1} onclick={() => void onMoveAttachment(attachment, 1)}>→</button>
-          <button class="danger" type="button" disabled={attachmentBusy} onclick={() => void onDeleteAttachment(attachment)}>删除</button>
-        </article>
-      {/each}
-      {#if fileActionError}<p class="note-file-error">{fileActionError}</p>{/if}
+        {/each}
+      </div>
     </section>
   {/if}
   <footer>
@@ -274,6 +253,87 @@
     <button class="danger" type="button" onclick={() => void onDelete(note)}>{draft ? "放弃" : "删除"}</button>
   </footer>
 </section>
+
+{#if attachmentManagerOpen}
+  <div
+    class="note-attachment-manager"
+    role="dialog"
+    aria-modal="true"
+    aria-label="管理便签附件"
+    tabindex="-1"
+    onkeydown={handleViewerKeydown}
+    onclick={(event) => {
+      if (event.target === event.currentTarget) attachmentManagerOpen = false;
+    }}
+  >
+    <div data-note-color={note.color}>
+      <header>
+        <span><strong>管理附件</strong><small>{attachmentSummary()}</small></span>
+        <button type="button" disabled={attachmentBusy} onclick={() => imageInput.click()}>添加图片</button>
+        <button type="button" disabled={attachmentBusy} onclick={() => attachmentInput.click()}>添加文件</button>
+        <button class="manager-close" type="button" aria-label="关闭附件管理" onclick={() => (attachmentManagerOpen = false)}>×</button>
+      </header>
+      <div class="note-attachment-manager-scroll">
+        {#if imageAttachments.length > 0}
+          <section>
+            <h3>图片</h3>
+            <div class="note-attachment-grid" aria-label="便签图片">
+              {#each imageAttachments as attachment (attachment.uuid)}
+                {@const index = attachmentIndex(attachment)}
+                <article class:failed={attachment.transfer_state === "failed"}>
+                  <button class="note-attachment-preview" type="button" onclick={() => void openAttachment(attachment)}>
+                    {#if attachmentPreviewUrls[attachment.uuid]}
+                      <img src={attachmentPreviewUrls[attachment.uuid]} alt={attachment.display_name} />
+                    {:else}
+                      <span>{attachment.transfer_state === "remote_only" ? "下载预览" : "正在准备"}</span>
+                    {/if}
+                  </button>
+                  <div>
+                    <small title={attachment.transfer_error ?? attachment.display_name}>{attachmentState(attachment)}</small>
+                    {#if attachment.transfer_state === "failed"}
+                      <button type="button" disabled={attachmentBusy} onclick={() => void onRetryAttachment(attachment)}>重试</button>
+                    {:else}
+                      <button class="attachment-order-button" type="button" title="向前移动" aria-label="向前移动" disabled={attachmentBusy || index <= 0} onclick={() => void onMoveAttachment(attachment, -1)}>←</button>
+                      <button class="attachment-order-button" type="button" title="向后移动" aria-label="向后移动" disabled={attachmentBusy || index >= attachments.length - 1} onclick={() => void onMoveAttachment(attachment, 1)}>→</button>
+                    {/if}
+                    <button class="danger" type="button" disabled={attachmentBusy} onclick={() => void onDeleteAttachment(attachment)}>删除</button>
+                  </div>
+                </article>
+              {/each}
+            </div>
+          </section>
+        {/if}
+        {#if fileAttachments.length > 0}
+          <section>
+            <h3>文件</h3>
+            <div class="note-file-list" aria-label="便签附件">
+              {#each fileAttachments as attachment (attachment.uuid)}
+                {@const index = attachmentIndex(attachment)}
+                <article class:failed={attachment.transfer_state === "failed"}>
+                  <span class="note-file-kind" aria-hidden="true">{fileKind(attachment)}</span>
+                  <div class="note-file-info">
+                    <strong title={attachment.display_name}>{attachment.display_name}</strong>
+                    <small title={attachment.transfer_error ?? attachment.display_name}>{formatBytes(attachment.byte_size)} · {attachmentState(attachment)}</small>
+                  </div>
+                  {#if attachment.transfer_state === "failed"}
+                    <button type="button" disabled={attachmentBusy} onclick={() => void onRetryAttachment(attachment)}>重试</button>
+                  {:else}
+                    <button type="button" disabled={attachmentBusy} onclick={() => void openFile(attachment)}>打开</button>
+                    <button type="button" disabled={attachmentBusy} onclick={() => void saveAttachment(attachment)}>保存</button>
+                  {/if}
+                  <button class="attachment-order-button" type="button" title="向前移动" aria-label="向前移动" disabled={attachmentBusy || index <= 0} onclick={() => void onMoveAttachment(attachment, -1)}>←</button>
+                  <button class="attachment-order-button" type="button" title="向后移动" aria-label="向后移动" disabled={attachmentBusy || index >= attachments.length - 1} onclick={() => void onMoveAttachment(attachment, 1)}>→</button>
+                  <button class="danger" type="button" disabled={attachmentBusy} onclick={() => void onDeleteAttachment(attachment)}>删除</button>
+                </article>
+              {/each}
+              {#if fileActionError}<p class="note-file-error">{fileActionError}</p>{/if}
+            </div>
+          </section>
+        {/if}
+      </div>
+    </div>
+  </div>
+{/if}
 
 {#if viewerAttachment}
   <div
