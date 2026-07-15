@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 use crate::{
     db::{device_id, now_millis, Database},
+    note_attachment_sync::{self, NoteAttachmentSyncDocument, SyncNoteAttachment},
     note_sync::{self, NoteSyncDocument, SyncNote},
     schedule::{local_date_from_timestamp, timestamp_for_local_date},
     tray::PanelState,
@@ -74,6 +75,10 @@ struct TodoExport {
     todos: Vec<TransferTodo>,
     #[serde(default)]
     notes: Vec<SyncNote>,
+    #[serde(default)]
+    note_attachments: Vec<SyncNoteAttachment>,
+    #[serde(default)]
+    attachment_files_included: bool,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -88,6 +93,11 @@ pub struct ImportPreview {
     note_added: usize,
     note_updated: usize,
     note_unchanged: usize,
+    attachment_total: usize,
+    attachment_added: usize,
+    attachment_updated: usize,
+    attachment_unchanged: usize,
+    attachment_files_included: bool,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -98,6 +108,9 @@ pub struct ImportResult {
     note_added: usize,
     note_updated: usize,
     note_unchanged: usize,
+    attachment_added: usize,
+    attachment_updated: usize,
+    attachment_unchanged: usize,
 }
 
 #[tauri::command]
@@ -125,6 +138,9 @@ pub fn export_todos(
         groups: read_all_groups(&connection)?,
         todos: read_all_todos(&connection)?,
         notes: note_sync::build_document(&connection, exported_at)?.notes,
+        note_attachments: note_attachment_sync::build_document(&connection, exported_at)?
+            .attachments,
+        attachment_files_included: false,
     };
     let json = serde_json::to_string_pretty(&export)
         .map_err(|error| format!("生成导出文件失败：{error}"))?;
@@ -260,6 +276,9 @@ fn validate_import(import: &TodoExport) -> Result<(), String> {
     if import.format_version == 0 {
         return Err("导入文件缺少有效的 format_version".to_string());
     }
+    if import.attachment_files_included {
+        return Err("普通 JSON 不能声明包含附件文件，请使用 .eggdone-backup".to_string());
+    }
 
     let mut group_uuids = HashSet::new();
     for group in &import.groups {
@@ -353,6 +372,12 @@ fn validate_import(import: &TodoExport) -> Result<(), String> {
         )?;
     }
     note_sync::validate_notes(&import.notes)?;
+    note_attachment_sync::validate_document(&NoteAttachmentSyncDocument {
+        format_version: note_attachment_sync::NOTE_ATTACHMENT_SYNC_FORMAT_VERSION,
+        device_id: "00000000-0000-4000-8000-000000000001".to_string(),
+        generated_at: import.exported_at,
+        attachments: import.note_attachments.clone(),
+    })?;
     Ok(())
 }
 
@@ -415,6 +440,8 @@ fn build_preview(
         }
     }
     let (note_added, note_updated, note_unchanged) = count_note_changes(connection, &import.notes)?;
+    let (attachment_added, attachment_updated, attachment_unchanged) =
+        count_attachment_changes(connection, &import.note_attachments)?;
 
     Ok(ImportPreview {
         path: path.to_string_lossy().into_owned(),
@@ -431,6 +458,11 @@ fn build_preview(
         note_added,
         note_updated,
         note_unchanged,
+        attachment_total: import.note_attachments.len(),
+        attachment_added,
+        attachment_updated,
+        attachment_unchanged,
+        attachment_files_included: import.attachment_files_included,
     })
 }
 
@@ -450,6 +482,9 @@ fn merge_transfer(
         note_added: 0,
         note_updated: 0,
         note_unchanged: 0,
+        attachment_added: 0,
+        attachment_updated: 0,
+        attachment_unchanged: 0,
     };
 
     for group in imported_groups {
@@ -482,10 +517,14 @@ fn merge_transfer(
 
 fn merge_import(connection: &mut Connection, import: TodoExport) -> Result<ImportResult, String> {
     let note_changes = count_note_changes(connection, &import.notes)?;
+    let attachment_changes = count_attachment_changes(connection, &import.note_attachments)?;
     let mut result = merge_transfer(connection, &import.groups, &import.todos)?;
     result.note_added = note_changes.0;
     result.note_updated = note_changes.1;
     result.note_unchanged = note_changes.2;
+    result.attachment_added = attachment_changes.0;
+    result.attachment_updated = attachment_changes.1;
+    result.attachment_unchanged = attachment_changes.2;
     if !import.notes.is_empty() {
         let remote = NoteSyncDocument {
             format_version: note_sync::NOTE_SYNC_FORMAT_VERSION,
@@ -495,7 +534,44 @@ fn merge_import(connection: &mut Connection, import: TodoExport) -> Result<Impor
         };
         note_sync::merge_remote_document(connection, &remote, now_millis())?;
     }
+    if !import.note_attachments.is_empty() {
+        let remote = NoteAttachmentSyncDocument {
+            format_version: note_attachment_sync::NOTE_ATTACHMENT_SYNC_FORMAT_VERSION,
+            device_id: device_id(connection).map_err(database_error)?,
+            generated_at: import.exported_at,
+            attachments: import.note_attachments,
+        };
+        note_attachment_sync::merge_remote_document(connection, &remote, now_millis())?;
+    }
     Ok(result)
+}
+
+fn count_attachment_changes(
+    connection: &Connection,
+    imported: &[SyncNoteAttachment],
+) -> Result<(usize, usize, usize), String> {
+    let local = note_attachment_sync::build_document(connection, now_millis())?;
+    let local_attachments = local
+        .attachments
+        .into_iter()
+        .map(|attachment| (attachment.uuid.clone(), attachment))
+        .collect::<HashMap<_, _>>();
+    let mut added = 0;
+    let mut updated = 0;
+    let mut unchanged = 0;
+    for attachment in imported {
+        match local_attachments.get(&attachment.uuid) {
+            None => added += 1,
+            Some(local_attachment)
+                if note_attachment_sync::compare_attachments(attachment, local_attachment)
+                    .is_gt() =>
+            {
+                updated += 1;
+            }
+            Some(_) => unchanged += 1,
+        }
+    }
+    Ok((added, updated, unchanged))
 }
 
 fn count_note_changes(
@@ -890,6 +966,28 @@ mod tests {
         }
     }
 
+    fn attachment(uuid: &str, note_uuid: &str, updated_at: i64) -> SyncNoteAttachment {
+        SyncNoteAttachment {
+            uuid: uuid.to_string(),
+            note_uuid: note_uuid.to_string(),
+            kind: "file".to_string(),
+            display_name: "backup.md".to_string(),
+            mime_type: "text/markdown".to_string(),
+            byte_size: 7,
+            sha256: "a".repeat(64),
+            preview_mime_type: None,
+            preview_byte_size: None,
+            preview_sha256: None,
+            width: None,
+            height: None,
+            sort_order: 0,
+            created_at: 1,
+            updated_at,
+            deleted_at: None,
+            updated_by: "00000000-0000-4000-8000-000000000099".to_string(),
+        }
+    }
+
     #[test]
     fn export_and_import_round_trip_including_deleted_todos() {
         let mut source = connection();
@@ -905,6 +1003,11 @@ mod tests {
         let mut deleted = todo("00000000-0000-4000-8000-000000000002", "deleted", 3);
         deleted.deleted_at = Some(3);
         let exported_note = note("00000000-0000-4000-8000-000000000003", "note", 4);
+        let exported_attachment = attachment(
+            "00000000-0000-4000-8000-000000000004",
+            &exported_note.uuid,
+            5,
+        );
         merge_transfer(
             &mut source,
             std::slice::from_ref(&work),
@@ -922,6 +1025,17 @@ mod tests {
             4,
         )
         .unwrap();
+        note_attachment_sync::merge_remote_document(
+            &mut source,
+            &NoteAttachmentSyncDocument {
+                format_version: note_attachment_sync::NOTE_ATTACHMENT_SYNC_FORMAT_VERSION,
+                device_id: "00000000-0000-4000-8000-000000000099".to_string(),
+                generated_at: 5,
+                attachments: vec![exported_attachment.clone()],
+            },
+            5,
+        )
+        .unwrap();
 
         let export = TodoExport {
             format_version: FORMAT_VERSION,
@@ -929,6 +1043,10 @@ mod tests {
             groups: read_all_groups(&source).unwrap(),
             todos: read_all_todos(&source).unwrap(),
             notes: note_sync::build_document(&source, 10).unwrap().notes,
+            note_attachments: note_attachment_sync::build_document(&source, 10)
+                .unwrap()
+                .attachments,
+            attachment_files_included: false,
         };
         let json = serde_json::to_string(&export).unwrap();
         let exported: TodoExport = serde_json::from_str(&json).unwrap();
@@ -938,6 +1056,7 @@ mod tests {
 
         assert_eq!(result.added, 2);
         assert_eq!(result.note_added, 1);
+        assert_eq!(result.attachment_added, 1);
         let (stored_due_date, stored_due_at): (Option<String>, Option<i64>) = destination
             .query_row(
                 "SELECT due_date, due_at FROM todos WHERE uuid = ?1",
@@ -955,6 +1074,12 @@ mod tests {
         assert_eq!(
             note_sync::build_document(&destination, 10).unwrap().notes,
             vec![exported_note]
+        );
+        assert_eq!(
+            note_attachment_sync::build_document(&destination, 10)
+                .unwrap()
+                .attachments,
+            vec![exported_attachment]
         );
     }
 
@@ -999,6 +1124,8 @@ mod tests {
             groups: vec![],
             todos: vec![],
             notes: vec![],
+            note_attachments: vec![],
+            attachment_files_included: false,
         };
         assert!(validate_import(&future).is_err());
 
@@ -1008,8 +1135,21 @@ mod tests {
             groups: vec![],
             todos: vec![shared.clone(), shared],
             notes: vec![],
+            note_attachments: vec![],
+            attachment_files_included: false,
         };
         assert!(validate_import(&duplicated).is_err());
+
+        let falsely_complete = TodoExport {
+            format_version: FORMAT_VERSION,
+            exported_at: 1,
+            groups: vec![],
+            todos: vec![],
+            notes: vec![],
+            note_attachments: vec![],
+            attachment_files_included: true,
+        };
+        assert!(validate_import(&falsely_complete).is_err());
     }
 
     #[test]
@@ -1037,6 +1177,8 @@ mod tests {
         assert_eq!(import.todos[0].archived_at, None);
         assert_eq!(import.todos[0].due_date, None);
         assert!(import.notes.is_empty());
+        assert!(import.note_attachments.is_empty());
+        assert!(!import.attachment_files_included);
         validate_import(&import).unwrap();
     }
 
@@ -1066,6 +1208,8 @@ mod tests {
                 groups: vec![],
                 todos: vec![],
                 notes: vec![imported.clone()],
+                note_attachments: vec![],
+                attachment_files_included: false,
             },
         )
         .unwrap();

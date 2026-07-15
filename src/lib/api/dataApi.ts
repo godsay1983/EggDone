@@ -11,6 +11,11 @@ export interface ImportPreview {
   note_added: number;
   note_updated: number;
   note_unchanged: number;
+  attachment_total: number;
+  attachment_added: number;
+  attachment_updated: number;
+  attachment_unchanged: number;
+  attachment_files_included: boolean;
 }
 
 export interface ImportResult {
@@ -20,6 +25,9 @@ export interface ImportResult {
   note_added: number;
   note_updated: number;
   note_unchanged: number;
+  attachment_added: number;
+  attachment_updated: number;
+  attachment_unchanged: number;
 }
 
 export const dataApi = {
