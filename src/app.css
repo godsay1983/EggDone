@@ -1012,6 +1012,7 @@ footer {
   color: #a15f52;
 }
 
+.note-card-actions button,
 .note-editor header button,
 .note-editor footer > button {
   border: 1px solid #d9c5a5;
@@ -1019,21 +1020,25 @@ footer {
   background: #f3e8d2;
 }
 
+.note-card-actions button.danger,
 .note-editor button.danger {
   border-color: #e6b9b0;
   color: #8b2f27;
   background: #fbe5df;
 }
 
+.note-card-actions button:hover,
 .note-editor header button:hover,
 .note-editor footer > button:hover {
   background: #ead9b8;
 }
 
+.note-card-actions button.danger:hover,
 .note-editor button.danger:hover {
   background: #f4d3cc;
 }
 
+.note-card-actions button:focus-visible,
 .note-editor header button:focus-visible,
 .note-editor footer > button:focus-visible {
   outline: 2px solid #8d6b22;
@@ -5303,11 +5308,7 @@ html[data-theme="dark"] .note-image-viewer .viewer-close:hover {
   }
 }
 
-html[data-theme="dark"] .note-card-actions button {
-  color: #d2c6b5;
-  background: rgb(255 255 255 / 8%);
-}
-
+html[data-theme="dark"] .note-card-actions button,
 html[data-theme="dark"] .note-editor header button,
 html[data-theme="dark"] .note-editor footer > button {
   border-color: #6c5947;
@@ -5315,21 +5316,25 @@ html[data-theme="dark"] .note-editor footer > button {
   background: #4a3d31;
 }
 
+html[data-theme="dark"] .note-card-actions button.danger,
 html[data-theme="dark"] .note-editor button.danger {
   border-color: #7a4640;
   color: #ffd6cf;
   background: #5a312d;
 }
 
+html[data-theme="dark"] .note-card-actions button:hover,
 html[data-theme="dark"] .note-editor header button:hover,
 html[data-theme="dark"] .note-editor footer > button:hover {
   background: #5b4b3d;
 }
 
+html[data-theme="dark"] .note-card-actions button.danger:hover,
 html[data-theme="dark"] .note-editor button.danger:hover {
   background: #6b3a34;
 }
 
+html[data-theme="dark"] .note-card-actions button:focus-visible,
 html[data-theme="dark"] .note-editor header button:focus-visible,
 html[data-theme="dark"] .note-editor footer > button:focus-visible {
   outline-color: #f6c15a;
