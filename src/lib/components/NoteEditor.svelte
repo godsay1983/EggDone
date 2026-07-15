@@ -78,6 +78,13 @@
     viewerAttachment = null;
   }
 
+  function handleViewerKeydown(event: KeyboardEvent) {
+    if (viewerAttachment && event.key === "Escape") {
+      event.stopPropagation();
+      closeViewer();
+    }
+  }
+
   function attachmentState(attachment: NoteAttachment) {
     if (attachment.transfer_state === "failed") return "处理失败";
     if (attachment.transfer_state === "downloading") return "下载中";
@@ -88,6 +95,8 @@
     return "已同步";
   }
 </script>
+
+<svelte:window onkeydown={handleViewerKeydown} />
 
 <section
   class="note-editor"
@@ -137,8 +146,26 @@
             {#if attachment.transfer_state === "failed"}
               <button type="button" disabled={attachmentBusy} onclick={() => void onRetryAttachment(attachment)}>重试</button>
             {:else}
-              <button type="button" disabled={index === 0 || attachmentBusy} onclick={() => void onMoveAttachment(attachment, -1)}>前移</button>
-              <button type="button" disabled={index === attachments.length - 1 || attachmentBusy} onclick={() => void onMoveAttachment(attachment, 1)}>后移</button>
+              {#if index > 0}
+                <button
+                  class="attachment-order-button"
+                  type="button"
+                  title="向前移动"
+                  aria-label="向前移动"
+                  disabled={attachmentBusy}
+                  onclick={() => void onMoveAttachment(attachment, -1)}
+                >←</button>
+              {/if}
+              {#if index < attachments.length - 1}
+                <button
+                  class="attachment-order-button"
+                  type="button"
+                  title="向后移动"
+                  aria-label="向后移动"
+                  disabled={attachmentBusy}
+                  onclick={() => void onMoveAttachment(attachment, 1)}
+                >→</button>
+              {/if}
             {/if}
             <button class="danger" type="button" disabled={attachmentBusy} onclick={() => void onDeleteAttachment(attachment)}>删除</button>
           </div>
@@ -164,11 +191,21 @@
 </section>
 
 {#if viewerAttachment}
-  <div class="note-image-viewer" role="dialog" aria-modal="true" aria-label="查看图片" tabindex="-1">
+  <div
+    class="note-image-viewer"
+    role="dialog"
+    aria-modal="true"
+    aria-label="查看图片"
+    tabindex="-1"
+    onclick={(event) => {
+      if (event.target === event.currentTarget) closeViewer();
+    }}
+    onkeydown={handleViewerKeydown}
+  >
     <div>
       <header>
         <strong>{viewerAttachment.display_name}</strong>
-        <button type="button" onclick={closeViewer}>关闭</button>
+        <button class="viewer-close" type="button" title="关闭" aria-label="关闭图片查看器" onclick={closeViewer}>×</button>
       </header>
       {#if viewerLoading}
         <span>正在读取原图…</span>

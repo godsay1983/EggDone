@@ -1122,6 +1122,9 @@ footer {
 }
 
 .note-attachment-grid article > div button {
+  display: grid;
+  min-width: 26px;
+  height: 22px;
   padding: 2px 4px;
   border: 0;
   border-radius: 6px;
@@ -1129,6 +1132,13 @@ footer {
   background: rgb(255 255 255 / 70%);
   font-size: 9px;
   cursor: pointer;
+  place-items: center;
+}
+
+.note-attachment-grid article > div button.attachment-order-button {
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
 }
 
 .note-attachment-grid article > div button.danger {
@@ -1169,6 +1179,39 @@ footer {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.note-image-viewer header strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-image-viewer .viewer-close {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  padding: 0 0 2px;
+  border: 1px solid #d7c9b5;
+  border-radius: 50%;
+  color: #493f31;
+  background: #f5eee2;
+  font-size: 23px;
+  line-height: 1;
+  cursor: pointer;
+  place-items: center;
+}
+
+.note-image-viewer .viewer-close:hover {
+  border-color: #c7ad7d;
+  background: #eadcc7;
+}
+
+.note-image-viewer .viewer-close:focus-visible {
+  outline: 2px solid #c58a18;
+  outline-offset: 2px;
 }
 
 .note-image-viewer img {
@@ -4806,6 +4849,17 @@ html[data-theme="dark"] .note-attachment-preview {
 html[data-theme="dark"] .note-image-viewer > div {
   color: #f0e7d9;
   background: #292621;
+}
+
+html[data-theme="dark"] .note-image-viewer .viewer-close {
+  border-color: #6c5947;
+  color: #fff1d6;
+  background: #3b342c;
+}
+
+html[data-theme="dark"] .note-image-viewer .viewer-close:hover {
+  border-color: #9b794f;
+  background: #4b4035;
 }
 
 @media (max-width: 340px) {
