@@ -32,13 +32,19 @@
     <p class:with-attachments={attachments.length > 0}>{preview}</p>
     {#if attachments.length > 0}
       {#if imageAttachments.length > 0}
-        <div class="note-card-attachment">
-          {#if attachmentPreviewUrls[imageAttachments[0].uuid]}
-          <img src={attachmentPreviewUrls[imageAttachments[0].uuid]} alt="" aria-hidden="true" />
-          {:else}
-            <span>图片预览待下载</span>
-          {/if}
-          <em>{imageAttachments.length} 图{fileAttachments.length > 0 ? ` · ${fileAttachments.length} 文件` : ""}</em>
+        <div class="note-card-media-summary">
+          <div class="note-card-media-preview">
+            {#if attachmentPreviewUrls[imageAttachments[0].uuid]}
+              <img src={attachmentPreviewUrls[imageAttachments[0].uuid]} alt="" aria-hidden="true" />
+            {:else}
+              <span>图片</span>
+            {/if}
+          </div>
+          <span class="note-card-media-info">
+            <strong>{imageAttachments.length} 张图片</strong>
+            <small title={imageAttachments[0].display_name}>{imageAttachments[0].display_name}</small>
+            {#if fileAttachments.length > 0}<em>另有 {fileAttachments.length} 个文件</em>{/if}
+          </span>
         </div>
       {:else if fileAttachments.length > 0}
         <div class="note-card-file-summary">

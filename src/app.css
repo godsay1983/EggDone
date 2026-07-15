@@ -882,38 +882,66 @@ footer {
   font-size: 9px;
 }
 
-.note-card-attachment {
-  position: relative;
-  height: 62px;
+.note-card-media-summary {
+  display: flex;
+  min-width: 0;
+  height: 64px;
+  align-items: center;
+  gap: 10px;
   margin: 6px 0 8px;
-  overflow: hidden;
+  padding: 5px 8px 5px 5px;
   border: 1px solid var(--note-border);
   border-radius: 10px;
   background: rgb(255 255 255 / 38%);
 }
 
-.note-card-attachment img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+.note-card-media-preview {
+  display: grid;
+  width: 82px;
+  height: 52px;
+  flex: 0 0 82px;
+  overflow: hidden;
+  place-items: center;
+  border-radius: 7px;
+  background: rgb(255 255 255 / 45%);
 }
 
-.note-card-attachment > span {
-  display: grid;
+.note-card-media-preview img {
+  width: 100%;
   height: 100%;
-  place-items: center;
+  object-fit: contain;
+}
+
+.note-card-media-preview > span {
   color: #786b58;
   font-size: 11px;
 }
 
-.note-card-attachment em {
-  position: absolute;
-  right: 6px;
-  bottom: 5px;
-  padding: 2px 6px;
-  border-radius: 999px;
-  color: #3e3428;
-  background: rgb(255 255 255 / 86%);
+.note-card-media-info {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+}
+
+.note-card-media-info strong,
+.note-card-media-info small,
+.note-card-media-info em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-card-media-info strong {
+  color: #4d4133;
+  font-size: 11px;
+}
+
+.note-card-media-info small,
+.note-card-media-info em {
+  color: #786b58;
   font-size: 9px;
   font-style: normal;
 }
@@ -5210,7 +5238,8 @@ html[data-theme="dark"] .note-card-body small {
   color: #978b7b;
 }
 
-html[data-theme="dark"] .note-card-attachment,
+html[data-theme="dark"] .note-card-media-summary,
+html[data-theme="dark"] .note-card-media-preview,
 html[data-theme="dark"] .note-card-file-summary,
 html[data-theme="dark"] .note-attachment-summary,
 html[data-theme="dark"] .note-attachment-grid article,
@@ -5221,6 +5250,9 @@ html[data-theme="dark"] .note-attachment-preview {
 
 html[data-theme="dark"] .note-card-file-summary strong,
 html[data-theme="dark"] .note-card-file-summary em,
+html[data-theme="dark"] .note-card-media-info strong,
+html[data-theme="dark"] .note-card-media-info small,
+html[data-theme="dark"] .note-card-media-info em,
 html[data-theme="dark"] .note-attachment-summary-heading,
 html[data-theme="dark"] .note-attachment-summary-heading small,
 html[data-theme="dark"] .note-attachment-summary-heading em,

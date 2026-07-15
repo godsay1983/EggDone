@@ -34,6 +34,7 @@
     NoteColor,
   } from "$lib/types";
   import { movePreviewByPointer } from "$lib/utils/reorderPreview";
+  import { reorderNoteAttachmentWithinKind } from "$lib/utils/noteAttachmentOrder";
   import { isDueTodayOrOverdue, localDateString } from "$lib/utils/todoDates";
   import {
     filterTodos,
@@ -691,15 +692,12 @@
   async function moveNoteAttachment(attachment: NoteAttachment, direction: -1 | 1) {
     if (noteAttachmentBusy) return;
     const current = noteAttachmentsByNote[attachment.note_uuid] ?? [];
-    const index = current.findIndex((item) => item.uuid === attachment.uuid);
-    const targetIndex = index + direction;
-    if (index < 0 || targetIndex < 0 || targetIndex >= current.length) return;
+    const reordered = reorderNoteAttachmentWithinKind(current, attachment.uuid, direction);
+    if (!reordered) return;
 
     noteAttachmentBusy = true;
     noteAttachmentError = "";
     try {
-      const reordered = [...current];
-      [reordered[index], reordered[targetIndex]] = [reordered[targetIndex], reordered[index]];
       const saved = await noteAttachmentApi.reorder(
         attachment.note_uuid,
         reordered.map((item) => item.uuid),

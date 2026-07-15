@@ -103,8 +103,13 @@
     return /\.(pdf|txt|md|markdown|docx|xlsx|pptx|zip)$/i.test(name);
   }
 
-  function attachmentIndex(attachment: NoteAttachment) {
-    return attachments.findIndex((item) => item.uuid === attachment.uuid);
+  function attachmentKindIndex(attachment: NoteAttachment) {
+    const sameKind = attachment.kind === "image" ? imageAttachments : fileAttachments;
+    return sameKind.findIndex((item) => item.uuid === attachment.uuid);
+  }
+
+  function attachmentKindCount(attachment: NoteAttachment) {
+    return attachment.kind === "image" ? imageAttachments.length : fileAttachments.length;
   }
 
   function fileKind(attachment: NoteAttachment) {
@@ -279,7 +284,7 @@
             <h3>图片</h3>
             <div class="note-attachment-grid" aria-label="便签图片">
               {#each imageAttachments as attachment (attachment.uuid)}
-                {@const index = attachmentIndex(attachment)}
+                {@const index = attachmentKindIndex(attachment)}
                 <article class:failed={attachment.transfer_state === "failed"}>
                   <button class="note-attachment-preview" type="button" onclick={() => void openAttachment(attachment)}>
                     {#if attachmentPreviewUrls[attachment.uuid]}
@@ -294,7 +299,7 @@
                       <button type="button" disabled={attachmentBusy} onclick={() => void onRetryAttachment(attachment)}>重试</button>
                     {:else}
                       <button class="attachment-order-button" type="button" title="向前移动" aria-label="向前移动" disabled={attachmentBusy || index <= 0} onclick={() => void onMoveAttachment(attachment, -1)}>←</button>
-                      <button class="attachment-order-button" type="button" title="向后移动" aria-label="向后移动" disabled={attachmentBusy || index >= attachments.length - 1} onclick={() => void onMoveAttachment(attachment, 1)}>→</button>
+                      <button class="attachment-order-button" type="button" title="向后移动" aria-label="向后移动" disabled={attachmentBusy || index >= attachmentKindCount(attachment) - 1} onclick={() => void onMoveAttachment(attachment, 1)}>→</button>
                     {/if}
                     <button class="danger" type="button" disabled={attachmentBusy} onclick={() => void onDeleteAttachment(attachment)}>删除</button>
                   </div>
@@ -308,7 +313,7 @@
             <h3>文件</h3>
             <div class="note-file-list" aria-label="便签附件">
               {#each fileAttachments as attachment (attachment.uuid)}
-                {@const index = attachmentIndex(attachment)}
+                {@const index = attachmentKindIndex(attachment)}
                 <article class:failed={attachment.transfer_state === "failed"}>
                   <span class="note-file-kind" aria-hidden="true">{fileKind(attachment)}</span>
                   <div class="note-file-info">
@@ -322,7 +327,7 @@
                     <button type="button" disabled={attachmentBusy} onclick={() => void saveAttachment(attachment)}>保存</button>
                   {/if}
                   <button class="attachment-order-button" type="button" title="向前移动" aria-label="向前移动" disabled={attachmentBusy || index <= 0} onclick={() => void onMoveAttachment(attachment, -1)}>←</button>
-                  <button class="attachment-order-button" type="button" title="向后移动" aria-label="向后移动" disabled={attachmentBusy || index >= attachments.length - 1} onclick={() => void onMoveAttachment(attachment, 1)}>→</button>
+                  <button class="attachment-order-button" type="button" title="向后移动" aria-label="向后移动" disabled={attachmentBusy || index >= attachmentKindCount(attachment) - 1} onclick={() => void onMoveAttachment(attachment, 1)}>→</button>
                   <button class="danger" type="button" disabled={attachmentBusy} onclick={() => void onDeleteAttachment(attachment)}>删除</button>
                 </article>
               {/each}
