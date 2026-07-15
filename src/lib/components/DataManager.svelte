@@ -49,6 +49,15 @@
     });
   }
 
+  async function exportFullBackup() {
+    await runAction(async () => {
+      const result = await dataApi.exportFullBackup();
+      if (result) {
+        message = `完整备份已导出：${result.attachment_count} 个附件，${result.file_count} 个文件`;
+      }
+    });
+  }
+
   async function runAction(action: () => Promise<void>) {
     if (busy) return;
     busy = true;
@@ -108,6 +117,10 @@
       <button type="button" disabled={busy} onclick={() => void backupDatabase()}>
         <strong>备份 SQLite</strong>
         <span>保存完整数据库快照</span>
+      </button>
+      <button type="button" disabled={busy} onclick={() => void exportFullBackup()}>
+        <strong>导出完整备份</strong>
+        <span>包含任务、便签、附件原文件和图片预览</span>
       </button>
     </div>
 

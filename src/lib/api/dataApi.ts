@@ -30,9 +30,20 @@ export interface ImportResult {
   attachment_unchanged: number;
 }
 
+export interface FullBackupExportResult {
+  path: string;
+  attachment_count: number;
+  file_count: number;
+  total_bytes: number;
+}
+
 export const dataApi = {
   exportTodos(): Promise<string | null> {
     return invoke<string | null>("export_todos");
+  },
+
+  exportFullBackup(): Promise<FullBackupExportResult | null> {
+    return invoke<FullBackupExportResult | null>("export_full_backup");
   },
 
   previewImport(): Promise<ImportPreview | null> {

@@ -145,6 +145,7 @@ pub fn run() {
             commands::delete_remote_note_asset,
             commands::sync_now,
             data_exchange::export_todos,
+            data_exchange::export_full_backup,
             data_exchange::preview_todo_import,
             data_exchange::confirm_todo_import,
             data_exchange::backup_database,

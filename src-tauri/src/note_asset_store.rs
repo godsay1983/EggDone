@@ -244,6 +244,20 @@ impl NoteAssetStore {
             .map_err(|error| format!("读取本地附件失败：{error}"))
     }
 
+    pub(crate) fn verified_asset_path(
+        &self,
+        attachment_uuid: &str,
+        file_name: &str,
+        expected_size: i64,
+        expected_sha256: &str,
+    ) -> Result<PathBuf, String> {
+        let relative_path = validated_asset_relative_path(attachment_uuid, file_name)?;
+        if !self.verify_local_file(&relative_path, expected_size, expected_sha256)? {
+            return Err("本地附件缺失或校验失败，请重新选择文件".to_string());
+        }
+        self.resolve_relative_path(&relative_path)
+    }
+
     pub(crate) fn write_downloaded_asset(
         &self,
         attachment_uuid: &str,

@@ -1,17 +1,21 @@
 use std::{
     collections::{HashMap, HashSet},
-    fs,
+    fs::{self, File},
+    io::{self, Write},
     path::{Path, PathBuf},
 };
 
 use rusqlite::{backup::Backup, params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use tauri::{AppHandle, State};
 use tauri_plugin_dialog::{DialogExt, FilePath};
 use uuid::Uuid;
+use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
 
 use crate::{
     db::{device_id, now_millis, Database},
+    note_asset_store::NoteAssetStore,
     note_attachment_sync::{self, NoteAttachmentSyncDocument, SyncNoteAttachment},
     note_sync::{self, NoteSyncDocument, SyncNote},
     schedule::{local_date_from_timestamp, timestamp_for_local_date},
@@ -19,6 +23,9 @@ use crate::{
 };
 
 const FORMAT_VERSION: u32 = 1;
+const BACKUP_FORMAT_VERSION: u32 = 1;
+const BACKUP_MAX_ENTRY_COUNT: usize = 10_000;
+const BACKUP_MAX_TOTAL_BYTES: u64 = 512 * 1024 * 1024;
 const TODO_NOTE_MAX_CHARS: usize = 1000;
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -79,6 +86,29 @@ struct TodoExport {
     note_attachments: Vec<SyncNoteAttachment>,
     #[serde(default)]
     attachment_files_included: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct BackupManifest {
+    format_version: u32,
+    created_at: i64,
+    data: BackupManifestEntry,
+    assets: Vec<BackupManifestEntry>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct BackupManifestEntry {
+    path: String,
+    byte_size: u64,
+    sha256: String,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+pub struct FullBackupExportResult {
+    path: String,
+    attachment_count: usize,
+    file_count: usize,
+    total_bytes: u64,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -147,6 +177,215 @@ pub fn export_todos(
     fs::write(&path, json).map_err(|error| format!("写入导出文件失败：{error}"))?;
 
     Ok(Some(path.to_string_lossy().into_owned()))
+}
+
+#[tauri::command]
+pub fn export_full_backup(
+    app: AppHandle,
+    database: State<'_, Database>,
+    panel_state: State<'_, PanelState>,
+) -> Result<Option<FullBackupExportResult>, String> {
+    let Some(path) = pick_save_path(
+        &app,
+        &panel_state,
+        "eggdone-data.eggdone-backup",
+        "EggDone Complete Backup",
+        &["eggdone-backup"],
+    )?
+    else {
+        return Ok(None);
+    };
+
+    let exported_at = now_millis();
+    let connection = lock_database(&database)?;
+    let attachment_document =
+        note_attachment_sync::build_backup_document(&connection, exported_at)?;
+    let export = TodoExport {
+        format_version: FORMAT_VERSION,
+        exported_at,
+        groups: read_all_groups(&connection)?,
+        todos: read_all_todos(&connection)?,
+        notes: note_sync::build_document(&connection, exported_at)?.notes,
+        note_attachments: attachment_document.attachments.clone(),
+        attachment_files_included: true,
+    };
+    drop(connection);
+
+    let data_bytes = serde_json::to_vec_pretty(&export)
+        .map_err(|error| format!("生成完整备份数据失败：{error}"))?;
+    let asset_store = NoteAssetStore::from_app(&app)?;
+    let mut assets = Vec::<(BackupManifestEntry, PathBuf)>::new();
+    let mut total_bytes = data_bytes.len() as u64;
+    for attachment in attachment_document
+        .attachments
+        .iter()
+        .filter(|attachment| attachment.deleted_at.is_none())
+    {
+        let original = asset_store
+            .verified_asset_path(
+                &attachment.uuid,
+                "original",
+                attachment.byte_size,
+                &attachment.sha256,
+            )
+            .map_err(|error| {
+                format!(
+                    "附件“{}”尚未完整下载或校验失败，无法创建完整备份：{error}",
+                    attachment.display_name
+                )
+            })?;
+        push_backup_asset(
+            &mut assets,
+            &mut total_bytes,
+            format!("note-assets/{}/original", attachment.uuid),
+            original,
+            attachment.byte_size as u64,
+            &attachment.sha256,
+        )?;
+
+        if attachment.kind == "image" {
+            let preview_size = attachment
+                .preview_byte_size
+                .ok_or_else(|| "图片附件缺少预览大小".to_string())?;
+            let preview_sha256 = attachment
+                .preview_sha256
+                .as_deref()
+                .ok_or_else(|| "图片附件缺少预览摘要".to_string())?;
+            let preview = asset_store
+                .verified_asset_path(
+                    &attachment.uuid,
+                    "preview.jpg",
+                    preview_size,
+                    preview_sha256,
+                )
+                .map_err(|error| {
+                    format!(
+                        "图片“{}”的预览尚未完整下载或校验失败，无法创建完整备份：{error}",
+                        attachment.display_name
+                    )
+                })?;
+            push_backup_asset(
+                &mut assets,
+                &mut total_bytes,
+                format!("note-assets/{}/preview.jpg", attachment.uuid),
+                preview,
+                preview_size as u64,
+                preview_sha256,
+            )?;
+        }
+    }
+    if assets.len() + 2 > BACKUP_MAX_ENTRY_COUNT {
+        return Err("完整备份文件数量超过 10000 个限制".to_string());
+    }
+
+    let manifest = BackupManifest {
+        format_version: BACKUP_FORMAT_VERSION,
+        created_at: exported_at,
+        data: backup_manifest_entry("data.json".to_string(), &data_bytes),
+        assets: assets.iter().map(|(entry, _)| entry.clone()).collect(),
+    };
+    let manifest_bytes = serde_json::to_vec_pretty(&manifest)
+        .map_err(|error| format!("生成完整备份清单失败：{error}"))?;
+    total_bytes = total_bytes.saturating_add(manifest_bytes.len() as u64);
+    if total_bytes > BACKUP_MAX_TOTAL_BYTES {
+        return Err("完整备份解压后不能超过 512 MiB".to_string());
+    }
+
+    let temporary_path = path.with_file_name(format!(
+        ".{}.{}.tmp",
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("eggdone-backup"),
+        Uuid::new_v4()
+    ));
+    let write_result =
+        write_full_backup_archive(&temporary_path, &manifest_bytes, &data_bytes, &assets);
+    if let Err(error) = write_result {
+        let _ = fs::remove_file(&temporary_path);
+        return Err(error);
+    }
+    if path.exists() {
+        fs::remove_file(&path).map_err(|error| format!("无法覆盖完整备份：{error}"))?;
+    }
+    fs::rename(&temporary_path, &path).map_err(|error| format!("保存完整备份失败：{error}"))?;
+
+    Ok(Some(FullBackupExportResult {
+        path: path.to_string_lossy().into_owned(),
+        attachment_count: attachment_document
+            .attachments
+            .iter()
+            .filter(|attachment| attachment.deleted_at.is_none())
+            .count(),
+        file_count: assets.len(),
+        total_bytes,
+    }))
+}
+
+fn push_backup_asset(
+    assets: &mut Vec<(BackupManifestEntry, PathBuf)>,
+    total_bytes: &mut u64,
+    path: String,
+    source_path: PathBuf,
+    byte_size: u64,
+    sha256: &str,
+) -> Result<(), String> {
+    *total_bytes = total_bytes.saturating_add(byte_size);
+    if *total_bytes > BACKUP_MAX_TOTAL_BYTES {
+        return Err("完整备份解压后不能超过 512 MiB".to_string());
+    }
+    assets.push((
+        BackupManifestEntry {
+            path,
+            byte_size,
+            sha256: sha256.to_string(),
+        },
+        source_path,
+    ));
+    Ok(())
+}
+
+fn backup_manifest_entry(path: String, bytes: &[u8]) -> BackupManifestEntry {
+    BackupManifestEntry {
+        path,
+        byte_size: bytes.len() as u64,
+        sha256: format!("{:x}", Sha256::digest(bytes)),
+    }
+}
+
+fn write_full_backup_archive(
+    path: &Path,
+    manifest: &[u8],
+    data: &[u8],
+    assets: &[(BackupManifestEntry, PathBuf)],
+) -> Result<(), String> {
+    let file = File::create(path).map_err(|error| format!("创建完整备份失败：{error}"))?;
+    let mut archive = ZipWriter::new(file);
+    let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+    archive
+        .start_file("manifest.json", options)
+        .map_err(|error| format!("写入完整备份清单失败：{error}"))?;
+    archive
+        .write_all(manifest)
+        .map_err(|error| format!("写入完整备份清单失败：{error}"))?;
+    archive
+        .start_file("data.json", options)
+        .map_err(|error| format!("写入完整备份数据失败：{error}"))?;
+    archive
+        .write_all(data)
+        .map_err(|error| format!("写入完整备份数据失败：{error}"))?;
+    for (entry, source_path) in assets {
+        archive
+            .start_file(&entry.path, options)
+            .map_err(|error| format!("写入完整备份附件失败：{error}"))?;
+        let mut source =
+            File::open(source_path).map_err(|error| format!("打开完整备份附件失败：{error}"))?;
+        io::copy(&mut source, &mut archive)
+            .map_err(|error| format!("写入完整备份附件失败：{error}"))?;
+    }
+    archive
+        .finish()
+        .map_err(|error| format!("完成完整备份失败：{error}"))?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -908,6 +1147,7 @@ fn database_error(error: rusqlite::Error) -> String {
 mod tests {
     use super::*;
     use crate::db::{configure_connection, migrate};
+    use std::io::Read;
 
     fn connection() -> Connection {
         let mut connection = Connection::open_in_memory().unwrap();
@@ -1219,5 +1459,43 @@ mod tests {
             note_sync::build_document(&connection, 11).unwrap().notes,
             vec![imported]
         );
+    }
+
+    #[test]
+    fn full_backup_archive_uses_fixed_paths_and_matching_manifest_hashes() {
+        let directory = std::env::temp_dir().join(format!("eggdone-backup-{}", Uuid::new_v4()));
+        fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("sample.eggdone-backup");
+        let data = br#"{"attachment_files_included":true}"#;
+        let asset = b"attachment bytes".to_vec();
+        let asset_path = directory.join("original");
+        fs::write(&asset_path, &asset).unwrap();
+        let entry = backup_manifest_entry(
+            "note-assets/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/original".to_string(),
+            &asset,
+        );
+        let manifest = serde_json::to_vec(&BackupManifest {
+            format_version: BACKUP_FORMAT_VERSION,
+            created_at: 1,
+            data: backup_manifest_entry("data.json".to_string(), data),
+            assets: vec![entry.clone()],
+        })
+        .unwrap();
+
+        write_full_backup_archive(&path, &manifest, data, &[(entry, asset_path)]).unwrap();
+
+        let mut archive = zip::ZipArchive::new(File::open(&path).unwrap()).unwrap();
+        assert_eq!(archive.len(), 3);
+        let mut restored = Vec::new();
+        archive
+            .by_name("note-assets/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/original")
+            .unwrap()
+            .read_to_end(&mut restored)
+            .unwrap();
+        assert_eq!(restored, asset);
+        assert!(archive.by_name("manifest.json").is_ok());
+        assert!(archive.by_name("data.json").is_ok());
+
+        fs::remove_dir_all(directory).unwrap();
     }
 }

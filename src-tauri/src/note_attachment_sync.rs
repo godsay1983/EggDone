@@ -90,6 +90,34 @@ pub(crate) fn build_document(
     Ok(document)
 }
 
+pub(crate) fn build_backup_document(
+    connection: &Connection,
+    generated_at: i64,
+) -> Result<NoteAttachmentSyncDocument, String> {
+    let mut statement = connection
+        .prepare(
+            "SELECT uuid, note_uuid, kind, display_name, mime_type, byte_size, sha256,
+                    preview_mime_type, preview_byte_size, preview_sha256, width, height,
+                    sort_order, created_at, updated_at, deleted_at, updated_by
+             FROM note_attachments
+             ORDER BY uuid ASC",
+        )
+        .map_err(database_error)?;
+    let attachments = statement
+        .query_map([], map_sync_attachment)
+        .map_err(database_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(database_error)?;
+    let document = NoteAttachmentSyncDocument {
+        format_version: NOTE_ATTACHMENT_SYNC_FORMAT_VERSION,
+        device_id: device_id(connection).map_err(database_error)?,
+        generated_at,
+        attachments,
+    };
+    validate_document(&document)?;
+    Ok(document)
+}
+
 pub(crate) fn merge_remote_document(
     connection: &mut Connection,
     remote: &NoteAttachmentSyncDocument,
@@ -533,6 +561,13 @@ mod tests {
             .unwrap()
             .attachments
             .is_empty());
+        assert_eq!(
+            build_backup_document(&connection, 1000)
+                .unwrap()
+                .attachments
+                .len(),
+            1
+        );
 
         set_transfer_state(
             &connection,

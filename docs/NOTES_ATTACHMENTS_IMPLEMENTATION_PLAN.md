@@ -374,7 +374,7 @@ remote_only -> downloading -> cached
 
 - 现有 JSON 导入导出包含便签和可远端恢复的附件元数据，不嵌入二进制；具体字段见 [NOTES_ATTACHMENTS_BACKUP_FORMAT.md](NOTES_ATTACHMENTS_BACKUP_FORMAT.md)。
 - 当 JSON 中包含附件元数据但没有二进制包时，导入预览提示 `附件文件不包含在 JSON 中`。
-- 后续新增 `.eggdone-backup` 压缩备份，包含 JSON 清单和 `note-assets/` 文件。
+- 已实现 `.eggdone-backup` 压缩备份导出，包含 JSON 清单和 `note-assets/` 文件；导入校验与恢复按 DA8 下一提交边界实现。
 - 压缩包导入必须校验路径、大小和 SHA-256，禁止目录穿越。
 - 第一阶段不能在未实现完整备份前宣称 JSON 已备份附件文件。
 
