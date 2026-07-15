@@ -15,7 +15,9 @@
   export let attachmentPreviewUrls: Record<string, string> = {};
   export let attachmentBusy = false;
   export let onAddImages: (files: File[]) => Promise<void>;
+  export let onAddFiles: (files: File[]) => Promise<void>;
   export let onOpenAttachment: (attachment: NoteAttachment) => Promise<string>;
+  export let onOpenFile: (attachment: NoteAttachment) => Promise<void>;
   export let onMoveAttachment: (attachment: NoteAttachment, direction: -1 | 1) => Promise<void>;
   export let onDeleteAttachment: (attachment: NoteAttachment) => Promise<void>;
   export let onRetryAttachment: (attachment: NoteAttachment) => Promise<void>;
@@ -24,11 +26,16 @@
   let title = note.title;
   let content = note.content;
   let titleInput: HTMLInputElement;
-  let fileInput: HTMLInputElement;
+  let imageInput: HTMLInputElement;
+  let attachmentInput: HTMLInputElement;
   let viewerAttachment: NoteAttachment | null = null;
   let viewerUrl = "";
   let viewerLoading = false;
   let viewerError = "";
+  let fileActionError = "";
+
+  $: imageAttachments = attachments.filter((attachment) => attachment.kind === "image");
+  $: fileAttachments = attachments.filter((attachment) => attachment.kind === "file");
 
   onMount(() => {
     titleInput.focus();
@@ -39,9 +46,15 @@
     onChange(note, title, content);
   }
 
-  function selectFiles(event: Event) {
+  function selectImages(event: Event) {
     const files = Array.from((event.currentTarget as HTMLInputElement).files ?? []);
     if (files.length > 0) void onAddImages(files);
+    (event.currentTarget as HTMLInputElement).value = "";
+  }
+
+  function selectAttachments(event: Event) {
+    const files = Array.from((event.currentTarget as HTMLInputElement).files ?? []);
+    if (files.length > 0) void onAddFiles(files);
     (event.currentTarget as HTMLInputElement).value = "";
   }
 
@@ -52,10 +65,55 @@
     void onAddImages(files);
   }
 
-  function dropImages(event: DragEvent) {
+  function dropAttachments(event: DragEvent) {
     event.preventDefault();
-    const files = Array.from(event.dataTransfer?.files ?? []).filter((file) => file.type.startsWith("image/"));
-    if (files.length > 0) void onAddImages(files);
+    const files = Array.from(event.dataTransfer?.files ?? []);
+    const images = files.filter((file) => file.type.startsWith("image/"));
+    const ordinaryFiles = files.filter((file) => !file.type.startsWith("image/") && isSupportedFile(file.name));
+    if (images.length > 0) void onAddImages(images);
+    if (ordinaryFiles.length > 0) void onAddFiles(ordinaryFiles);
+  }
+
+  async function openFile(attachment: NoteAttachment) {
+    fileActionError = "";
+    try {
+      await onOpenFile(attachment);
+    } catch (reason) {
+      fileActionError = reason instanceof Error ? reason.message : String(reason);
+    }
+  }
+
+  async function saveAttachment(attachment: NoteAttachment) {
+    fileActionError = "";
+    try {
+      const url = await onOpenAttachment(attachment);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = attachment.display_name;
+      anchor.click();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (reason) {
+      fileActionError = reason instanceof Error ? reason.message : String(reason);
+    }
+  }
+
+  function isSupportedFile(name: string) {
+    return /\.(pdf|txt|md|markdown|docx|xlsx|pptx|zip)$/i.test(name);
+  }
+
+  function attachmentIndex(attachment: NoteAttachment) {
+    return attachments.findIndex((item) => item.uuid === attachment.uuid);
+  }
+
+  function fileKind(attachment: NoteAttachment) {
+    const extension = attachment.display_name.split(".").pop()?.toUpperCase();
+    return extension && extension.length <= 8 ? extension : "FILE";
+  }
+
+  function formatBytes(bytes: number) {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
   }
 
   async function openAttachment(attachment: NoteAttachment) {
@@ -103,13 +161,15 @@
   data-note-color={note.color}
   aria-label="编辑便签"
   ondragover={(event) => event.preventDefault()}
-  ondrop={dropImages}
+  ondrop={dropAttachments}
 >
   <header>
     <button type="button" onclick={() => void onDone()}>返回</button>
     <span>{error ? error : saving ? "保存中…" : draft ? "开始输入后自动保存" : "已保存在本机"}</span>
-    <input bind:this={fileInput} class="note-file-input" type="file" accept="image/jpeg,image/png,image/webp" multiple onchange={selectFiles} />
-    <button class="attachment-trigger" type="button" title="添加图片" aria-label="添加图片" disabled={attachmentBusy} onclick={() => fileInput.click()}>▧</button>
+    <input bind:this={imageInput} class="note-file-input" type="file" accept="image/jpeg,image/png,image/webp" multiple onchange={selectImages} />
+    <input bind:this={attachmentInput} class="note-file-input" type="file" accept=".pdf,.txt,.md,.markdown,.docx,.xlsx,.pptx,.zip" multiple onchange={selectAttachments} />
+    <button class="attachment-trigger" type="button" title="添加图片" aria-label="添加图片" disabled={attachmentBusy} onclick={() => imageInput.click()}>图片</button>
+    <button class="attachment-trigger" type="button" title="添加附件" aria-label="添加附件" disabled={attachmentBusy} onclick={() => attachmentInput.click()}>附件</button>
     <button class="primary" type="button" onclick={() => void onDone()}>完成</button>
   </header>
   <input
@@ -130,9 +190,10 @@
     oninput={changed}
     onpaste={pasteImages}
   ></textarea>
-  {#if attachments.length > 0}
+  {#if imageAttachments.length > 0}
     <section class="note-attachment-grid" aria-label="便签图片">
-      {#each attachments as attachment, index (attachment.uuid)}
+      {#each imageAttachments as attachment (attachment.uuid)}
+        {@const index = attachmentIndex(attachment)}
         <article class:failed={attachment.transfer_state === "failed"}>
           <button class="note-attachment-preview" type="button" onclick={() => void openAttachment(attachment)}>
             {#if attachmentPreviewUrls[attachment.uuid]}
@@ -171,6 +232,30 @@
           </div>
         </article>
       {/each}
+    </section>
+  {/if}
+  {#if fileAttachments.length > 0}
+    <section class="note-file-list" aria-label="便签附件">
+      {#each fileAttachments as attachment (attachment.uuid)}
+        {@const index = attachmentIndex(attachment)}
+        <article class:failed={attachment.transfer_state === "failed"}>
+          <span class="note-file-kind" aria-hidden="true">{fileKind(attachment)}</span>
+          <div class="note-file-info">
+            <strong title={attachment.display_name}>{attachment.display_name}</strong>
+            <small title={attachment.transfer_error ?? attachment.display_name}>{formatBytes(attachment.byte_size)} · {attachmentState(attachment)}</small>
+          </div>
+          {#if attachment.transfer_state === "failed"}
+            <button type="button" disabled={attachmentBusy} onclick={() => void onRetryAttachment(attachment)}>重试</button>
+          {:else}
+            <button type="button" disabled={attachmentBusy} onclick={() => void openFile(attachment)}>打开</button>
+            <button type="button" disabled={attachmentBusy} onclick={() => void saveAttachment(attachment)}>保存</button>
+          {/if}
+          <button class="attachment-order-button" type="button" title="向前移动" aria-label="向前移动" disabled={attachmentBusy || index <= 0} onclick={() => void onMoveAttachment(attachment, -1)}>←</button>
+          <button class="attachment-order-button" type="button" title="向后移动" aria-label="向后移动" disabled={attachmentBusy || index >= attachments.length - 1} onclick={() => void onMoveAttachment(attachment, 1)}>→</button>
+          <button class="danger" type="button" disabled={attachmentBusy} onclick={() => void onDeleteAttachment(attachment)}>删除</button>
+        </article>
+      {/each}
+      {#if fileActionError}<p class="note-file-error">{fileActionError}</p>{/if}
     </section>
   {/if}
   <footer>

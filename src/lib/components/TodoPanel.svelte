@@ -579,15 +579,15 @@
     }
   }
 
-  function attachmentDraftTitle(fileName: string) {
+  function attachmentDraftTitle(fileName: string, fallback: string) {
     const withoutExtension = fileName.replace(/\.[^.]+$/, "").trim();
-    return withoutExtension || "图片便签";
+    return withoutExtension || fallback;
   }
 
-  async function ensureNoteForImages(firstFile: File): Promise<Note | null> {
+  async function ensureNoteForAttachment(firstFile: File, fallback: string): Promise<Note | null> {
     if (noteDraft) {
       if (!hasNoteDraftContent(noteDraft)) {
-        noteDraft = { ...noteDraft, title: attachmentDraftTitle(firstFile.name) };
+        noteDraft = { ...noteDraft, title: attachmentDraftTitle(firstFile.name, fallback) };
       }
       return persistNoteDraft();
     }
@@ -600,12 +600,32 @@
     noteAttachmentBusy = true;
     noteAttachmentError = "";
     try {
-      const note = await ensureNoteForImages(files[0]);
+      const note = await ensureNoteForAttachment(files[0], "图片便签");
       if (!note) throw new Error("请先保存便签后再添加图片");
       const existing = noteAttachmentsByNote[note.uuid] ?? [];
-      const available = Math.max(0, 9 - existing.length);
+      const imageCount = existing.filter((attachment) => attachment.kind === "image").length;
+      const available = Math.max(0, 9 - imageCount);
       for (const file of files.slice(0, available)) {
         await noteAttachmentApi.createImage(note.uuid, file);
+      }
+      await refreshNoteAttachments(note.uuid);
+      scheduleAutoSync();
+    } catch (reason) {
+      noteAttachmentError = reason instanceof Error ? reason.message : String(reason);
+    } finally {
+      noteAttachmentBusy = false;
+    }
+  }
+
+  async function addNoteFiles(files: File[]) {
+    if (files.length === 0 || noteAttachmentBusy) return;
+    noteAttachmentBusy = true;
+    noteAttachmentError = "";
+    try {
+      const note = await ensureNoteForAttachment(files[0], "附件便签");
+      if (!note) throw new Error("请先保存便签后再添加附件");
+      for (const file of files) {
+        await noteAttachmentApi.createFile(note.uuid, file);
       }
       await refreshNoteAttachments(note.uuid);
       scheduleAutoSync();
@@ -648,7 +668,7 @@
     try {
       if (attachment.remote_uploaded) {
         await noteAttachmentApi.retry(attachment.uuid);
-        if (attachment.local_preview_path === null) {
+        if (attachment.kind === "image" && attachment.local_preview_path === null) {
           const url = await noteAttachmentApi.previewUrl(attachment);
           const previous = noteAttachmentPreviewUrls[attachment.uuid];
           if (previous) URL.revokeObjectURL(previous);
@@ -2544,7 +2564,9 @@
       attachmentPreviewUrls={noteAttachmentPreviewUrls}
       attachmentBusy={noteAttachmentBusy}
       onAddImages={addNoteImages}
+      onAddFiles={addNoteFiles}
       onOpenAttachment={noteAttachmentApi.originalUrl}
+      onOpenFile={noteAttachmentApi.openFile}
       onMoveAttachment={moveNoteAttachment}
       onDeleteAttachment={deleteNoteAttachment}
       onRetryAttachment={retryNoteAttachment}

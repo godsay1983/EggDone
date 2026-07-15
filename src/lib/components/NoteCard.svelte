@@ -14,6 +14,8 @@
 
   $: preview = note.content.trim() || "点击打开便签";
   $: title = note.title.trim() || preview.split(/\r?\n/, 1)[0] || "无标题便签";
+  $: imageAttachments = attachments.filter((attachment) => attachment.kind === "image");
+  $: fileAttachments = attachments.filter((attachment) => attachment.kind === "file");
 </script>
 
 <article class="note-card" data-note-color={note.color}>
@@ -25,12 +27,12 @@
     <p>{preview}</p>
     {#if attachments.length > 0}
       <div class="note-card-attachment">
-        {#if attachmentPreviewUrls[attachments[0].uuid]}
-          <img src={attachmentPreviewUrls[attachments[0].uuid]} alt="" aria-hidden="true" />
+        {#if imageAttachments.length > 0 && attachmentPreviewUrls[imageAttachments[0].uuid]}
+          <img src={attachmentPreviewUrls[imageAttachments[0].uuid]} alt="" aria-hidden="true" />
         {:else}
-          <span>图片</span>
+          <span>{fileAttachments.length > 0 ? "附件" : "图片"}</span>
         {/if}
-        <em>{attachments.length} 张图片</em>
+        <em>{imageAttachments.length > 0 ? `${imageAttachments.length} 张图片` : ""}{imageAttachments.length > 0 && fileAttachments.length > 0 ? " · " : ""}{fileAttachments.length > 0 ? `${fileAttachments.length} 个文件` : ""}</em>
       </div>
     {/if}
     <small>{new Date(note.updated_at).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</small>

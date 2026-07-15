@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::db::{device_id, now_millis};
 
 pub(crate) const IMAGE_UPLOAD_MAX_BYTES: i64 = 10 * 1024 * 1024;
-const FILE_UPLOAD_MAX_BYTES: i64 = 20 * 1024 * 1024;
+pub(crate) const FILE_UPLOAD_MAX_BYTES: i64 = 20 * 1024 * 1024;
 pub(crate) const PREVIEW_MAX_BYTES: i64 = 2 * 1024 * 1024;
 const DISPLAY_NAME_MAX_CHARS: usize = 255;
 const MIME_TYPE_MAX_CHARS: usize = 100;

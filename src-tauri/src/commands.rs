@@ -1,3 +1,6 @@
+use std::path::Path;
+use std::process::Command;
+
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, LogicalSize, Manager, Size, State, WebviewWindow};
@@ -5,7 +8,7 @@ use uuid::Uuid;
 
 use crate::{
     db::{device_id, now_millis, Database},
-    note_asset_store::{NoteAssetStore, NoteAttachmentCacheStats},
+    note_asset_store::{validate_safe_file_metadata, NoteAssetStore, NoteAttachmentCacheStats},
     note_attachment_sync, note_attachments, note_sync,
     notes::{self, Note},
     reminders,
@@ -267,6 +270,52 @@ pub fn create_note_image_attachment(
 }
 
 #[tauri::command]
+pub fn create_note_file_attachment(
+    note_uuid: String,
+    display_name: String,
+    bytes: Vec<u8>,
+    app: AppHandle,
+    database: State<'_, Database>,
+    asset_store: State<'_, NoteAssetStore>,
+) -> Result<note_attachments::NoteAttachment, String> {
+    let attachment_uuid = Uuid::new_v4().to_string();
+    let prepared = asset_store.import_file_bytes(&bytes, &display_name, &attachment_uuid)?;
+    let result = {
+        let connection = lock_database(&database)?;
+        let sort_order = note_attachments::list_active_by_note(&connection, &note_uuid)?
+            .last()
+            .map(|attachment| attachment.sort_order + 1_000)
+            .unwrap_or(0);
+        note_attachments::create_pending(
+            &connection,
+            &note_attachments::NewNoteAttachment {
+                uuid: attachment_uuid.clone(),
+                note_uuid: note_uuid.clone(),
+                kind: "file".to_string(),
+                display_name: prepared.display_name,
+                mime_type: prepared.mime_type,
+                byte_size: prepared.byte_size,
+                sha256: prepared.sha256,
+                preview_mime_type: None,
+                preview_byte_size: None,
+                preview_sha256: None,
+                width: None,
+                height: None,
+                sort_order,
+                local_original_path: prepared.local_original_path,
+                local_preview_path: None,
+            },
+        )
+    };
+    if result.is_err() {
+        let _ = asset_store.delete_asset(&attachment_uuid);
+    } else {
+        let _ = app.emit_to("main", "note-attachments-changed", note_uuid);
+    }
+    result
+}
+
+#[tauri::command]
 pub async fn read_note_attachment_preview(
     uuid: String,
     app: AppHandle,
@@ -321,6 +370,65 @@ pub async fn read_note_attachment_original(
         &asset_store,
     )
     .await
+}
+
+#[tauri::command]
+pub async fn open_note_file_attachment(
+    uuid: String,
+    app: AppHandle,
+    database: State<'_, Database>,
+    runtime: State<'_, SyncRuntime>,
+    asset_store: State<'_, NoteAssetStore>,
+) -> Result<(), String> {
+    let attachment = {
+        let connection = lock_database(&database)?;
+        note_attachments::require_by_uuid(&connection, &uuid)?
+    };
+    if attachment.kind != "file" {
+        return Err("只有普通附件可以使用系统默认程序打开".to_string());
+    }
+    validate_safe_file_metadata(&attachment.display_name, &attachment.mime_type)?;
+    read_or_download_note_asset(
+        &attachment,
+        "original",
+        attachment.byte_size,
+        &attachment.sha256,
+        &app,
+        &database,
+        &runtime,
+        &asset_store,
+    )
+    .await?;
+    let path = asset_store.prepare_file_for_open(&attachment.uuid, &attachment.display_name)?;
+    open_with_default_application(&path)
+}
+
+fn open_with_default_application(path: &Path) -> Result<(), String> {
+    if !path.is_file() {
+        return Err("附件文件不存在".to_string());
+    }
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        let mut command = Command::new("explorer.exe");
+        command.arg(path);
+        command
+    };
+    #[cfg(target_os = "macos")]
+    let mut command = {
+        let mut command = Command::new("open");
+        command.arg(path);
+        command
+    };
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut command = {
+        let mut command = Command::new("xdg-open");
+        command.arg(path);
+        command
+    };
+    command
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("无法使用系统默认程序打开附件：{error}"))
 }
 
 #[tauri::command]

@@ -13,7 +13,9 @@ use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
-use crate::note_attachments::{NoteAttachment, IMAGE_UPLOAD_MAX_BYTES, PREVIEW_MAX_BYTES};
+use crate::note_attachments::{
+    NoteAttachment, FILE_UPLOAD_MAX_BYTES, IMAGE_UPLOAD_MAX_BYTES, PREVIEW_MAX_BYTES,
+};
 
 const ASSET_DIRECTORY: &str = "note-assets";
 const ORIGINAL_FILE_NAME: &str = "original";
@@ -36,6 +38,15 @@ pub(crate) struct PreparedImageAsset {
     pub height: i64,
     pub local_original_path: String,
     pub local_preview_path: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct PreparedFileAsset {
+    pub display_name: String,
+    pub mime_type: String,
+    pub byte_size: i64,
+    pub sha256: String,
+    pub local_original_path: String,
 }
 
 pub(crate) struct NoteAssetStore {
@@ -127,6 +138,78 @@ impl NoteAssetStore {
             });
         let _ = fs::remove_file(source);
         result
+    }
+
+    pub(crate) fn import_file_bytes(
+        &self,
+        bytes: &[u8],
+        display_name: &str,
+        attachment_uuid: &str,
+    ) -> Result<PreparedFileAsset, String> {
+        validate_uuid(attachment_uuid)?;
+        if bytes.is_empty() {
+            return Err("附件文件为空".to_string());
+        }
+        if bytes.len() as i64 > FILE_UPLOAD_MAX_BYTES {
+            return Err("附件不能超过 20 MiB".to_string());
+        }
+        let display_name = sanitize_file_display_name(display_name)?;
+        let mime_type = detect_file_mime_type(&display_name, bytes)?.to_string();
+
+        let asset_root = self.app_data_root.join(ASSET_DIRECTORY);
+        fs::create_dir_all(&asset_root).map_err(|error| format!("创建附件目录失败：{error}"))?;
+        let final_directory = asset_root.join(attachment_uuid);
+        if final_directory.exists() {
+            return Err("附件文件已存在，请使用新的附件 UUID".to_string());
+        }
+        let staging_directory =
+            asset_root.join(format!(".staging-{attachment_uuid}-{}", Uuid::new_v4()));
+        fs::create_dir(&staging_directory)
+            .map_err(|error| format!("创建附件临时目录失败：{error}"))?;
+        let staging_original = staging_directory.join(ORIGINAL_FILE_NAME);
+        let result = (|| {
+            write_new_file(&staging_original, bytes)?;
+            let (byte_size, sha256) = hash_file(&staging_original, FILE_UPLOAD_MAX_BYTES)?;
+            fs::rename(&staging_directory, &final_directory)
+                .map_err(|error| format!("保存附件文件失败：{error}"))?;
+            Ok(PreparedFileAsset {
+                display_name,
+                mime_type,
+                byte_size,
+                sha256,
+                local_original_path: relative_asset_path(attachment_uuid, ORIGINAL_FILE_NAME),
+            })
+        })();
+        if result.is_err() {
+            let _ = fs::remove_dir_all(&staging_directory);
+        }
+        result
+    }
+
+    pub(crate) fn prepare_file_for_open(
+        &self,
+        attachment_uuid: &str,
+        display_name: &str,
+    ) -> Result<PathBuf, String> {
+        validate_uuid(attachment_uuid)?;
+        let safe_name = sanitize_file_display_name(display_name)?;
+        if safe_name != display_name {
+            return Err("附件文件名包含不安全字符".to_string());
+        }
+        let directory = self
+            .app_data_root
+            .join(ASSET_DIRECTORY)
+            .join(attachment_uuid);
+        let source = directory.join(ORIGINAL_FILE_NAME);
+        if !source.is_file() {
+            return Err("附件文件不存在".to_string());
+        }
+        let destination = directory.join(format!("open-{safe_name}"));
+        if !destination.is_file() {
+            fs::copy(&source, &destination)
+                .map_err(|error| format!("准备打开附件失败：{error}"))?;
+        }
+        Ok(destination)
     }
 
     pub(crate) fn verify_local_file(
@@ -291,6 +374,14 @@ impl NoteAssetStore {
             }
         }
         for directory in directories {
+            if let Ok(entries) = fs::read_dir(&directory) {
+                for entry in entries.flatten() {
+                    let file_name = entry.file_name();
+                    if file_name.to_string_lossy().starts_with("open-") {
+                        let _ = fs::remove_file(entry.path());
+                    }
+                }
+            }
             match fs::remove_dir(&directory) {
                 Ok(()) => {}
                 Err(error)
@@ -503,6 +594,105 @@ fn validate_display_name(value: &str) -> Result<(), String> {
     Ok(())
 }
 
+pub(crate) fn validate_safe_file_metadata(
+    display_name: &str,
+    mime_type: &str,
+) -> Result<(), String> {
+    let sanitized = sanitize_file_display_name(display_name)?;
+    if sanitized != display_name {
+        return Err("附件文件名包含不安全字符".to_string());
+    }
+    let expected = mime_type_for_extension(file_extension(display_name)?)
+        .ok_or_else(|| "不支持此附件类型".to_string())?;
+    if mime_type != expected {
+        return Err("附件扩展名与 MIME 类型不一致".to_string());
+    }
+    Ok(())
+}
+
+fn sanitize_file_display_name(value: &str) -> Result<String, String> {
+    let base_name = value.rsplit(['/', '\\']).next().unwrap_or_default().trim();
+    let mut cleaned = String::with_capacity(base_name.len());
+    for character in base_name.chars() {
+        if character.is_control() || matches!(character, '<' | '>' | ':' | '"' | '|' | '?' | '*') {
+            cleaned.push('_');
+        } else {
+            cleaned.push(character);
+        }
+    }
+    let cleaned = cleaned.trim_matches([' ', '.']);
+    if cleaned.is_empty() {
+        return Err("附件文件名无效".to_string());
+    }
+    let extension = file_extension(cleaned)?.to_ascii_lowercase();
+    if mime_type_for_extension(&extension).is_none() {
+        return Err("仅支持 PDF、TXT、Markdown、DOCX、XLSX、PPTX 和 ZIP 文件".to_string());
+    }
+    let suffix = format!(".{extension}");
+    let stem = &cleaned[..cleaned.len() - suffix.len()];
+    let max_stem_chars = 255usize.saturating_sub(suffix.chars().count());
+    let truncated_stem: String = stem.chars().take(max_stem_chars).collect();
+    let truncated_stem = truncated_stem.trim_matches([' ', '.']);
+    if truncated_stem.is_empty() {
+        return Err("附件文件名无效".to_string());
+    }
+    let safe_stem = if is_windows_reserved_name(truncated_stem) {
+        format!("_{truncated_stem}")
+    } else {
+        truncated_stem.to_string()
+    };
+    Ok(format!("{safe_stem}{suffix}"))
+}
+
+fn is_windows_reserved_name(value: &str) -> bool {
+    let upper = value.to_ascii_uppercase();
+    matches!(upper.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || (upper.len() == 4
+            && (upper.starts_with("COM") || upper.starts_with("LPT"))
+            && matches!(upper.as_bytes()[3], b'1'..=b'9'))
+}
+
+fn file_extension(display_name: &str) -> Result<&str, String> {
+    Path::new(display_name)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .filter(|extension| !extension.is_empty())
+        .ok_or_else(|| "附件缺少受支持的扩展名".to_string())
+}
+
+fn mime_type_for_extension(extension: &str) -> Option<&'static str> {
+    match extension.to_ascii_lowercase().as_str() {
+        "pdf" => Some("application/pdf"),
+        "txt" => Some("text/plain"),
+        "md" | "markdown" => Some("text/markdown"),
+        "docx" => Some("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+        "xlsx" => Some("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+        "pptx" => Some("application/vnd.openxmlformats-officedocument.presentationml.presentation"),
+        "zip" => Some("application/zip"),
+        _ => None,
+    }
+}
+
+fn detect_file_mime_type(display_name: &str, bytes: &[u8]) -> Result<&'static str, String> {
+    let extension = file_extension(display_name)?.to_ascii_lowercase();
+    let mime_type =
+        mime_type_for_extension(&extension).ok_or_else(|| "不支持此附件类型".to_string())?;
+    let valid = match extension.as_str() {
+        "pdf" => bytes.starts_with(b"%PDF-"),
+        "txt" | "md" | "markdown" => !bytes.contains(&0) && std::str::from_utf8(bytes).is_ok(),
+        "docx" | "xlsx" | "pptx" | "zip" => {
+            bytes.starts_with(&[0x50, 0x4b, 0x03, 0x04])
+                || bytes.starts_with(&[0x50, 0x4b, 0x05, 0x06])
+                || bytes.starts_with(&[0x50, 0x4b, 0x07, 0x08])
+        }
+        _ => false,
+    };
+    if !valid {
+        return Err("附件内容与文件类型不一致或文件已损坏".to_string());
+    }
+    Ok(mime_type)
+}
+
 fn mime_type(format: ImageFormat) -> &'static str {
     match format {
         ImageFormat::Jpeg => "image/jpeg",
@@ -517,11 +707,11 @@ fn write_new_file(path: &Path, bytes: &[u8]) -> Result<(), String> {
         .write(true)
         .create_new(true)
         .open(path)
-        .map_err(|error| format!("创建图片预览失败：{error}"))?;
+        .map_err(|error| format!("创建附件文件失败：{error}"))?;
     file.write_all(bytes)
-        .map_err(|error| format!("写入图片预览失败：{error}"))?;
+        .map_err(|error| format!("写入附件文件失败：{error}"))?;
     file.sync_all()
-        .map_err(|error| format!("同步图片预览失败：{error}"))
+        .map_err(|error| format!("同步附件文件失败：{error}"))
 }
 
 fn hash_file(path: &Path, max_bytes: i64) -> Result<(i64, String), String> {
@@ -656,6 +846,65 @@ mod tests {
         let oversized_uuid = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
         assert!(store.import_image(&oversized, oversized_uuid).is_err());
         assert!(!app_data.join("note-assets").join(oversized_uuid).exists());
+    }
+
+    #[test]
+    fn imports_safe_files_and_cleans_names_without_overwriting_duplicates() {
+        let root = TestDirectory::new();
+        let app_data = root.0.join("app-data");
+        fs::create_dir(&app_data).unwrap();
+        let store = NoteAssetStore::for_root(app_data.clone());
+        let first_uuid = "11111111-1111-4111-8111-111111111111";
+        let second_uuid = "22222222-2222-4222-8222-222222222222";
+
+        let first = store
+            .import_file_bytes("蛋定 Todo".as_bytes(), "../计划<草稿>.TXT", first_uuid)
+            .unwrap();
+        let second = store
+            .import_file_bytes("另一份内容".as_bytes(), "计划_草稿_.txt", second_uuid)
+            .unwrap();
+
+        assert_eq!(first.display_name, "计划_草稿_.txt");
+        assert_eq!(first.mime_type, "text/plain");
+        assert_eq!(second.display_name, first.display_name);
+        assert_ne!(first.local_original_path, second.local_original_path);
+        assert!(store
+            .verify_local_file(&first.local_original_path, first.byte_size, &first.sha256)
+            .unwrap());
+    }
+
+    #[test]
+    fn validates_supported_file_signatures_and_rejects_unsafe_types() {
+        assert_eq!(
+            detect_file_mime_type("说明.pdf", b"%PDF-1.7\n").unwrap(),
+            "application/pdf"
+        );
+        assert_eq!(
+            detect_file_mime_type("资料.docx", b"PK\x03\x04word/document.xml").unwrap(),
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        );
+        assert!(detect_file_mime_type("伪装.pdf", b"MZ executable").is_err());
+        assert!(sanitize_file_display_name("脚本.ps1").is_err());
+        assert!(sanitize_file_display_name("程序.exe").is_err());
+        assert_eq!(sanitize_file_display_name("CON.txt").unwrap(), "_CON.txt");
+        assert!(detect_file_mime_type("二进制.txt", b"hello\0world").is_err());
+    }
+
+    #[test]
+    fn truncates_long_file_names_and_enforces_twenty_mib_limit() {
+        let long_name = format!("{}.PDF", "长".repeat(300));
+        let sanitized = sanitize_file_display_name(&long_name).unwrap();
+        assert_eq!(sanitized.chars().count(), 255);
+        assert!(sanitized.ends_with(".pdf"));
+
+        let root = TestDirectory::new();
+        let app_data = root.0.join("app-data");
+        fs::create_dir(&app_data).unwrap();
+        let store = NoteAssetStore::for_root(app_data);
+        let bytes = vec![b'a'; FILE_UPLOAD_MAX_BYTES as usize + 1];
+        assert!(store
+            .import_file_bytes(&bytes, "过大.txt", "33333333-3333-4333-8333-333333333333")
+            .is_err());
     }
 
     #[test]

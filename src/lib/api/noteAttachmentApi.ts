@@ -34,6 +34,15 @@ export const noteAttachmentApi = {
     });
   },
 
+  async createFile(noteUuid: string, file: File): Promise<NoteAttachment> {
+    const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
+    return invoke<NoteAttachment>("create_note_file_attachment", {
+      noteUuid,
+      displayName: file.name,
+      bytes,
+    });
+  },
+
   async previewUrl(attachment: NoteAttachment): Promise<string> {
     const bytes = await invoke<number[]>("read_note_attachment_preview", {
       uuid: attachment.uuid,
@@ -46,6 +55,10 @@ export const noteAttachmentApi = {
       uuid: attachment.uuid,
     });
     return bytesToUrl(bytes, attachment.mime_type);
+  },
+
+  openFile(attachment: NoteAttachment): Promise<void> {
+    return invoke<void>("open_note_file_attachment", { uuid: attachment.uuid });
   },
 
   delete(uuid: string): Promise<NoteAttachment> {
