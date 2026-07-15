@@ -143,11 +143,14 @@ async function performSyncWithRetry(): Promise<ManualSyncResult> {
     });
     try {
       const result = await syncNow();
+      const cleanupNotice = result.message.includes("远端附件");
       syncStatus.set({
         kind: "synced",
-        message: result.conflictRetried
-          ? `冲突已合并：任务 ${result.todoCount}，便签 ${result.noteCount}，附件 ${result.noteAttachmentCount}`
-          : `同步完成：任务 ${result.todoCount}，便签 ${result.noteCount}，附件 ${result.noteAttachmentCount}`,
+        message: cleanupNotice
+          ? result.message
+          : result.conflictRetried
+            ? `冲突已合并：任务 ${result.todoCount}，便签 ${result.noteCount}，附件 ${result.noteAttachmentCount}`
+            : `同步完成：任务 ${result.todoCount}，便签 ${result.noteCount}，附件 ${result.noteAttachmentCount}`,
         updatedAt: Date.now(),
       });
       knownTodoRemoteEtag = result.todoRemoteEtag;

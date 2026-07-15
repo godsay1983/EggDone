@@ -98,6 +98,26 @@ describe("auto sync", () => {
     expect(get(syncStatus).kind).toBe("conflict");
   });
 
+  it("keeps non-blocking remote cleanup warnings visible", async () => {
+    configureAutoSync(enabledSettings);
+    vi.mocked(syncApi.syncNow).mockResolvedValue({
+      message: "任务、便签和附件同步完成；远端附件清理未完成：没有对象删除权限",
+      todoCount: 1,
+      noteCount: 1,
+      noteAttachmentCount: 1,
+      pendingAttachmentCount: 0,
+      conflictRetried: false,
+      todoRemoteEtag: '"etag"',
+      noteRemoteEtag: '"note-etag"',
+      noteAttachmentRemoteEtag: '"attachment-etag"',
+    });
+
+    await runManualSync();
+
+    expect(get(syncStatus).kind).toBe("synced");
+    expect(get(syncStatus).message).toContain("远端附件清理未完成");
+  });
+
   it("checks ETag on focus and every minute without downloading unchanged data", async () => {
     vi.useFakeTimers();
     configureAutoSync(enabledSettings);

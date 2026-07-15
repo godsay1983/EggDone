@@ -10,6 +10,7 @@ use uuid::Uuid;
 use crate::db::device_id;
 
 pub(crate) const NOTE_ATTACHMENT_SYNC_FORMAT_VERSION: u32 = 1;
+pub(crate) const REMOTE_BINARY_RETENTION_MS: i64 = 30 * 24 * 60 * 60 * 1_000;
 const DISPLAY_NAME_MAX_CHARS: usize = 255;
 const MIME_TYPE_MAX_CHARS: usize = 100;
 const MAX_PROTOCOL_BYTES: i64 = 8 * 1024 * 1024 * 1024;
@@ -42,6 +43,22 @@ pub(crate) struct NoteAttachmentSyncDocument {
     pub device_id: String,
     pub generated_at: i64,
     pub attachments: Vec<SyncNoteAttachment>,
+}
+
+pub(crate) fn remote_cleanup_candidates(
+    document: &NoteAttachmentSyncDocument,
+    now: i64,
+) -> Vec<&SyncNoteAttachment> {
+    let cutoff = now.saturating_sub(REMOTE_BINARY_RETENTION_MS);
+    document
+        .attachments
+        .iter()
+        .filter(|attachment| {
+            attachment
+                .deleted_at
+                .is_some_and(|deleted_at| deleted_at <= cutoff)
+        })
+        .collect()
 }
 
 pub(crate) fn build_document(
@@ -426,6 +443,29 @@ mod tests {
         .unwrap();
 
         assert_eq!(merged.attachments[0].deleted_at, Some(1000));
+    }
+
+    #[test]
+    fn remote_cleanup_requires_full_retention_period() {
+        let now = REMOTE_BINARY_RETENTION_MS + 10_000;
+        let active = attachment("活动.jpg", 1000, DEVICE_A);
+        let mut too_recent = attachment("刚删除.jpg", 2000, DEVICE_A);
+        too_recent.uuid = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb".to_string();
+        too_recent.deleted_at = Some(10_001);
+        let mut expired = attachment("已过保留期.jpg", 3000, DEVICE_A);
+        expired.uuid = "dddddddd-dddd-4ddd-8ddd-dddddddddddd".to_string();
+        expired.deleted_at = Some(10_000);
+        let cleanup_document = NoteAttachmentSyncDocument {
+            format_version: NOTE_ATTACHMENT_SYNC_FORMAT_VERSION,
+            device_id: DEVICE_A.to_string(),
+            generated_at: now,
+            attachments: vec![active, too_recent, expired],
+        };
+
+        let candidates = remote_cleanup_candidates(&cleanup_document, now);
+
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].display_name, "已过保留期.jpg");
     }
 
     #[test]

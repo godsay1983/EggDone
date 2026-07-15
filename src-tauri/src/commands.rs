@@ -1254,17 +1254,25 @@ pub async fn sync_now(
         note_attachment_sync::mark_document_synced(&connection, &synced_attachment_document)?;
         note_attachments::list_pending_transfers(&connection)?.len()
     };
+    let cleanup_summary = cleanup_remote_note_assets(
+        &runtime,
+        &prepared,
+        &synced_attachment_document,
+        now_millis(),
+    )
+    .await;
     let _ = app.emit_to("main", "notes-changed", ());
 
     let state = s3_sync::get_remote_state(&prepared).await.ok();
     let conflict_retried =
         todo_conflict_retried || note_conflict_retried || attachment_conflict_retried;
+    let sync_message = if conflict_retried {
+        "检测到远端更新，重新合并后同步完成".to_string()
+    } else {
+        "任务、便签和附件同步完成".to_string()
+    };
     Ok(ManualSyncResult {
-        message: if conflict_retried {
-            "检测到远端更新，重新合并后同步完成".to_string()
-        } else {
-            "任务、便签和附件同步完成".to_string()
-        },
+        message: cleanup_summary.append_to(sync_message),
         todo_count,
         note_count,
         note_attachment_count,
@@ -1274,6 +1282,84 @@ pub async fn sync_now(
         note_remote_etag: state.as_ref().and_then(|value| value.note_etag.clone()),
         note_attachment_remote_etag: state.and_then(|value| value.note_attachment_etag),
     })
+}
+
+#[derive(Default)]
+struct RemoteAssetCleanupSummary {
+    deleted_object_count: usize,
+    error: Option<String>,
+}
+
+impl RemoteAssetCleanupSummary {
+    fn append_to(&self, message: String) -> String {
+        if let Some(error) = &self.error {
+            return format!("{message}；远端附件清理未完成：{error}");
+        }
+        if self.deleted_object_count > 0 {
+            return format!(
+                "{message}，已清理远端附件 {} 个文件",
+                self.deleted_object_count
+            );
+        }
+        message
+    }
+}
+
+async fn cleanup_remote_note_assets(
+    runtime: &SyncRuntime,
+    prepared: &s3_sync::PreparedManualSync,
+    document: &note_attachment_sync::NoteAttachmentSyncDocument,
+    now: i64,
+) -> RemoteAssetCleanupSummary {
+    let mut summary = RemoteAssetCleanupSummary::default();
+    for attachment in note_attachment_sync::remote_cleanup_candidates(document, now) {
+        let original = s3_sync::delete_asset_if_matches(
+            runtime,
+            prepared,
+            &attachment.uuid,
+            "original",
+            attachment.byte_size,
+            &attachment.sha256,
+        )
+        .await;
+        match original {
+            Ok(true) => summary.deleted_object_count += 1,
+            Ok(false) => {}
+            Err(error) => {
+                summary.error = Some(error);
+                return summary;
+            }
+        }
+
+        if attachment.kind != "image" {
+            continue;
+        }
+        let (Some(preview_size), Some(preview_sha256)) = (
+            attachment.preview_byte_size,
+            attachment.preview_sha256.as_deref(),
+        ) else {
+            summary.error = Some("图片附件墓碑缺少预览校验信息".to_string());
+            return summary;
+        };
+        let preview = s3_sync::delete_asset_if_matches(
+            runtime,
+            prepared,
+            &attachment.uuid,
+            "preview.jpg",
+            preview_size,
+            preview_sha256,
+        )
+        .await;
+        match preview {
+            Ok(true) => summary.deleted_object_count += 1,
+            Ok(false) => {}
+            Err(error) => {
+                summary.error = Some(error);
+                return summary;
+            }
+        }
+    }
+    summary
 }
 
 fn refresh_badge_after_success<T>(app: &AppHandle, result: &Result<T, String>) {
