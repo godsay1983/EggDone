@@ -51,6 +51,7 @@ pub(crate) struct NoteAttachmentCacheStats {
     pub file_count: u64,
     pub reclaimable_file_count: u64,
     pub protected_file_count: u64,
+    pub pending_count: u64,
 }
 
 impl NoteAssetStore {

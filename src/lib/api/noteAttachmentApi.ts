@@ -9,6 +9,7 @@ export interface NoteAttachmentCacheStats {
   fileCount: number;
   reclaimableFileCount: number;
   protectedFileCount: number;
+  pendingCount: number;
 }
 
 function bytesToUrl(bytes: number[], mimeType: string) {

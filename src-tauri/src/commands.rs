@@ -328,11 +328,16 @@ pub fn get_note_attachment_cache_stats(
     database: State<'_, Database>,
     asset_store: State<'_, NoteAssetStore>,
 ) -> Result<NoteAttachmentCacheStats, String> {
-    let attachments = {
+    let (attachments, pending_count) = {
         let connection = lock_database(&database)?;
-        note_attachments::list_for_local_cache(&connection)?
+        (
+            note_attachments::list_for_local_cache(&connection)?,
+            note_attachments::list_pending_transfers(&connection)?.len() as u64,
+        )
     };
-    asset_store.cache_stats(&attachments)
+    let mut stats = asset_store.cache_stats(&attachments)?;
+    stats.pending_count = pending_count;
+    Ok(stats)
 }
 
 #[tauri::command]
@@ -348,12 +353,16 @@ pub fn clear_note_attachment_cache(
         note_attachments::list_for_local_cache(&connection)?
     };
     asset_store.clear_reclaimable_cache(&attachments)?;
-    let remaining = {
+    let (remaining, pending_count) = {
         let connection = lock_database(&database)?;
         note_attachments::clear_uploaded_local_cache_paths(&connection)?;
-        note_attachments::list_for_local_cache(&connection)?
+        (
+            note_attachments::list_for_local_cache(&connection)?,
+            note_attachments::list_pending_transfers(&connection)?.len() as u64,
+        )
     };
-    let stats = asset_store.cache_stats(&remaining)?;
+    let mut stats = asset_store.cache_stats(&remaining)?;
+    stats.pending_count = pending_count;
     let _ = app.emit_to("main", "note-attachment-cache-cleared", ());
     Ok(stats)
 }

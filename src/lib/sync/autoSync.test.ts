@@ -23,6 +23,8 @@ const enabledSettings = {
   bucket: "eggdone",
   objectKey: "todos.json",
   noteObjectKey: "notes.json",
+  noteAttachmentObjectKey: "note-attachments.json",
+  noteAssetPrefix: "note-assets/v1/",
   pathStyle: true,
   allowHttp: true,
   credentialsConfigured: true,

@@ -233,6 +233,16 @@
       <input value={settings.noteObjectKey} readonly aria-readonly="true" />
     </label>
 
+    <label class="sync-field">
+      <span>附件元数据 Key <small>只读，双端共用</small></span>
+      <input value={settings.noteAttachmentObjectKey} readonly aria-readonly="true" />
+    </label>
+
+    <label class="sync-field">
+      <span>附件资源前缀 <small>原图和预览图存储位置</small></span>
+      <input value={settings.noteAssetPrefix} readonly aria-readonly="true" />
+    </label>
+
     <label class="path-style">
       <input type="checkbox" bind:checked={settings.pathStyle} disabled={busy} />
       <span>使用 Path Style（MinIO 通常需要）</span>
@@ -312,6 +322,10 @@
       </button>
     </div>
     {#if cacheStats}
+      <div class="attachment-sync-pending">
+        <span>待同步附件</span>
+        <strong>{cacheStats.pendingCount} 个</strong>
+      </div>
       <div class="attachment-cache-stats">
         <span>本地占用 <strong>{formatBytes(cacheStats.totalBytes)}</strong></span>
         <span>可清理 <strong>{formatBytes(cacheStats.reclaimableBytes)}</strong></span>

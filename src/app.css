@@ -3514,6 +3514,22 @@ footer button {
   font-size: 9px;
 }
 
+.attachment-sync-pending {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  color: #776a56;
+  background: #faf7f0;
+  font-size: 9px;
+}
+
+.attachment-sync-pending strong {
+  color: #675b48;
+}
+
 .attachment-cache-heading button {
   flex: 0 0 auto;
   padding: 6px 9px;
@@ -4760,17 +4776,20 @@ html[data-theme="dark"] .attachment-cache {
 }
 
 html[data-theme="dark"] .attachment-cache-heading strong,
-html[data-theme="dark"] .attachment-cache-stats strong {
+html[data-theme="dark"] .attachment-cache-stats strong,
+html[data-theme="dark"] .attachment-sync-pending strong {
   color: #ded4c4;
 }
 
 html[data-theme="dark"] .attachment-cache-heading span,
-html[data-theme="dark"] .attachment-cache-stats {
+html[data-theme="dark"] .attachment-cache-stats,
+html[data-theme="dark"] .attachment-sync-pending {
   color: #9e9383;
 }
 
 html[data-theme="dark"] .attachment-cache-heading button,
-html[data-theme="dark"] .attachment-cache-stats span {
+html[data-theme="dark"] .attachment-cache-stats span,
+html[data-theme="dark"] .attachment-sync-pending {
   border-color: #534b3f;
   color: #ded4c4;
   background: #312e28;
