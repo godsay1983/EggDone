@@ -100,6 +100,8 @@ pub fn run() {
             commands::create_note_image_attachment,
             commands::read_note_attachment_preview,
             commands::read_note_attachment_original,
+            commands::get_note_attachment_cache_stats,
+            commands::clear_note_attachment_cache,
             commands::delete_note_attachment,
             commands::restore_note_attachment,
             commands::retry_note_attachment,

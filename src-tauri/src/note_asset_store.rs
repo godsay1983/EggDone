@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Component, Path, PathBuf};
@@ -7,11 +8,12 @@ use image::imageops::FilterType;
 use image::{
     DynamicImage, ExtendedColorType, GenericImageView, ImageFormat, ImageReader, RgbImage,
 };
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
-use crate::note_attachments::{IMAGE_UPLOAD_MAX_BYTES, PREVIEW_MAX_BYTES};
+use crate::note_attachments::{NoteAttachment, IMAGE_UPLOAD_MAX_BYTES, PREVIEW_MAX_BYTES};
 
 const ASSET_DIRECTORY: &str = "note-assets";
 const ORIGINAL_FILE_NAME: &str = "original";
@@ -38,6 +40,17 @@ pub(crate) struct PreparedImageAsset {
 
 pub(crate) struct NoteAssetStore {
     app_data_root: PathBuf,
+}
+
+#[derive(Clone, Debug, Default, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct NoteAttachmentCacheStats {
+    pub total_bytes: u64,
+    pub reclaimable_bytes: u64,
+    pub protected_bytes: u64,
+    pub file_count: u64,
+    pub reclaimable_file_count: u64,
+    pub protected_file_count: u64,
 }
 
 impl NoteAssetStore {
@@ -198,6 +211,96 @@ impl NoteAssetStore {
             return Ok(());
         }
         fs::remove_dir_all(directory).map_err(|error| format!("删除附件文件失败：{error}"))
+    }
+
+    pub(crate) fn cache_stats(
+        &self,
+        attachments: &[NoteAttachment],
+    ) -> Result<NoteAttachmentCacheStats, String> {
+        let mut stats = NoteAttachmentCacheStats::default();
+        let mut seen = HashSet::new();
+        for attachment in attachments {
+            for relative_path in [
+                attachment.local_original_path.as_deref(),
+                attachment.local_preview_path.as_deref(),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                if !seen.insert(relative_path.to_string()) {
+                    continue;
+                }
+                let path = self.resolve_relative_path(relative_path)?;
+                let metadata = match fs::symlink_metadata(&path) {
+                    Ok(metadata) => metadata,
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                    Err(error) => return Err(format!("读取附件缓存信息失败：{error}")),
+                };
+                if metadata.file_type().is_symlink() || !metadata.is_file() {
+                    return Err("附件缓存包含无效文件".to_string());
+                }
+                stats.total_bytes = stats.total_bytes.saturating_add(metadata.len());
+                stats.file_count += 1;
+                if attachment.remote_uploaded {
+                    stats.reclaimable_bytes =
+                        stats.reclaimable_bytes.saturating_add(metadata.len());
+                    stats.reclaimable_file_count += 1;
+                } else {
+                    stats.protected_bytes = stats.protected_bytes.saturating_add(metadata.len());
+                    stats.protected_file_count += 1;
+                }
+            }
+        }
+        Ok(stats)
+    }
+
+    pub(crate) fn clear_reclaimable_cache(
+        &self,
+        attachments: &[NoteAttachment],
+    ) -> Result<(), String> {
+        let mut seen = HashSet::new();
+        let mut directories = HashSet::new();
+        for attachment in attachments
+            .iter()
+            .filter(|attachment| attachment.remote_uploaded)
+        {
+            for relative_path in [
+                attachment.local_original_path.as_deref(),
+                attachment.local_preview_path.as_deref(),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                if !seen.insert(relative_path.to_string()) {
+                    continue;
+                }
+                let path = self.resolve_relative_path(relative_path)?;
+                if let Some(parent) = path.parent() {
+                    directories.insert(parent.to_path_buf());
+                }
+                match fs::symlink_metadata(&path) {
+                    Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
+                        return Err("附件缓存包含无效文件".to_string());
+                    }
+                    Ok(_) => fs::remove_file(&path)
+                        .map_err(|error| format!("清理附件缓存失败：{error}"))?,
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(error) => return Err(format!("读取附件缓存信息失败：{error}")),
+                }
+            }
+        }
+        for directory in directories {
+            match fs::remove_dir(&directory) {
+                Ok(()) => {}
+                Err(error)
+                    if matches!(
+                        error.kind(),
+                        std::io::ErrorKind::NotFound | std::io::ErrorKind::DirectoryNotEmpty
+                    ) => {}
+                Err(error) => return Err(format!("清理附件缓存目录失败：{error}")),
+            }
+        }
+        Ok(())
     }
 
     fn prepare_image_in_staging(
@@ -601,5 +704,81 @@ mod tests {
         assert!(store
             .write_downloaded_asset(uuid, "preview.png", bytes, bytes.len() as i64, &sha256)
             .is_err());
+    }
+
+    #[test]
+    fn reports_and_clears_only_uploaded_attachment_cache() {
+        let root = TestDirectory::new();
+        let app_data = root.0.join("app-data");
+        let uploaded_uuid = "11111111-1111-4111-8111-111111111111";
+        let protected_uuid = "22222222-2222-4222-8222-222222222222";
+        let uploaded_directory = app_data.join("note-assets").join(uploaded_uuid);
+        let protected_directory = app_data.join("note-assets").join(protected_uuid);
+        fs::create_dir_all(&uploaded_directory).unwrap();
+        fs::create_dir_all(&protected_directory).unwrap();
+        fs::write(uploaded_directory.join("original"), b"uploaded-original").unwrap();
+        fs::write(uploaded_directory.join("preview.jpg"), b"uploaded-preview").unwrap();
+        fs::write(protected_directory.join("original"), b"pending-original").unwrap();
+        fs::write(protected_directory.join("preview.jpg"), b"pending-preview").unwrap();
+        let store = NoteAssetStore::for_root(app_data);
+        let attachments = vec![
+            cached_attachment(uploaded_uuid, true),
+            cached_attachment(protected_uuid, false),
+        ];
+
+        let stats = store.cache_stats(&attachments).unwrap();
+        assert_eq!(stats.file_count, 4);
+        assert_eq!(stats.reclaimable_file_count, 2);
+        assert_eq!(stats.protected_file_count, 2);
+        assert_eq!(
+            stats.reclaimable_bytes,
+            (b"uploaded-original".len() + b"uploaded-preview".len()) as u64
+        );
+        assert_eq!(
+            stats.protected_bytes,
+            (b"pending-original".len() + b"pending-preview".len()) as u64
+        );
+
+        store.clear_reclaimable_cache(&attachments).unwrap();
+
+        assert!(!uploaded_directory.exists());
+        assert!(protected_directory.join("original").is_file());
+        assert!(protected_directory.join("preview.jpg").is_file());
+        let remaining = store.cache_stats(&attachments).unwrap();
+        assert_eq!(remaining.total_bytes, stats.protected_bytes);
+        assert_eq!(remaining.reclaimable_bytes, 0);
+        assert_eq!(remaining.protected_bytes, stats.protected_bytes);
+    }
+
+    fn cached_attachment(uuid: &str, remote_uploaded: bool) -> NoteAttachment {
+        NoteAttachment {
+            id: 1,
+            uuid: uuid.to_string(),
+            note_uuid: "33333333-3333-4333-8333-333333333333".to_string(),
+            kind: "image".to_string(),
+            display_name: "cache.jpg".to_string(),
+            mime_type: "image/jpeg".to_string(),
+            byte_size: 1,
+            sha256: "a".repeat(64),
+            preview_mime_type: Some("image/jpeg".to_string()),
+            preview_byte_size: Some(1),
+            preview_sha256: Some("b".repeat(64)),
+            width: Some(1),
+            height: Some(1),
+            sort_order: 0,
+            created_at: 1,
+            updated_at: 1,
+            deleted_at: None,
+            updated_by: "test-device".to_string(),
+            local_original_path: Some(format!("note-assets/{uuid}/original")),
+            local_preview_path: Some(format!("note-assets/{uuid}/preview.jpg")),
+            transfer_state: if remote_uploaded {
+                "cached".to_string()
+            } else {
+                "pending_upload".to_string()
+            },
+            transfer_error: None,
+            remote_uploaded,
+        }
     }
 }

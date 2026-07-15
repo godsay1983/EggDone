@@ -414,6 +414,13 @@
       void listen<string>("note-attachments-changed", (event) => {
         void refreshNoteAttachments(event.payload, selectedNoteUuid === event.payload);
       }).then((unlisten) => unlisteners.push(unlisten));
+      void listen("note-attachment-cache-cleared", () => {
+        Object.values(noteAttachmentPreviewUrls).forEach((url) => URL.revokeObjectURL(url));
+        noteAttachmentPreviewUrls = {};
+        void loadAllNoteAttachments().then(async () => {
+          if (selectedNoteUuid) await refreshNoteAttachments(selectedNoteUuid);
+        });
+      }).then((unlisten) => unlisteners.push(unlisten));
     }
 
     return () => {

@@ -12,6 +12,10 @@
     runManualSync,
     syncStatus,
   } from "$lib/sync/autoSync";
+  import {
+    noteAttachmentApi,
+    type NoteAttachmentCacheStats,
+  } from "$lib/api/noteAttachmentApi";
 
   let settings: SyncSettings | null = null;
   let accessKey = "";
@@ -19,12 +23,43 @@
   let busy = false;
   let error = "";
   let message = "";
+  let cacheStats: NoteAttachmentCacheStats | null = null;
+  let cacheBusy = false;
+  let cacheMessage = "";
+  let cacheError = "";
 
   $: usesHttp = settings?.endpoint.trim().toLowerCase().startsWith("http://") ?? false;
 
   onMount(() => {
     void load();
+    void loadAttachmentCacheStats();
   });
+
+  async function loadAttachmentCacheStats() {
+    cacheError = "";
+    try {
+      cacheStats = await noteAttachmentApi.cacheStats();
+    } catch (reason) {
+      cacheError = errorMessage(reason);
+    }
+  }
+
+  async function clearAttachmentCache() {
+    if (cacheBusy || !cacheStats || cacheStats.reclaimableBytes === 0) return;
+    if (!window.confirm("清理已同步附件的本地副本？需要时会从远端重新下载。")) return;
+    cacheBusy = true;
+    cacheError = "";
+    cacheMessage = "";
+    const removedBytes = cacheStats.reclaimableBytes;
+    try {
+      cacheStats = await noteAttachmentApi.clearCache();
+      cacheMessage = `已清理 ${formatBytes(removedBytes)} 可重新下载缓存`;
+    } catch (reason) {
+      cacheError = errorMessage(reason);
+    } finally {
+      cacheBusy = false;
+    }
+  }
 
   async function load() {
     busy = true;
@@ -92,6 +127,7 @@
       configureAutoSync(settings);
       const result = await runManualSync();
       message = `${result.message}，任务 ${result.todoCount} 条，便签 ${result.noteCount} 条`;
+      await loadAttachmentCacheStats();
     } catch (reason) {
       message = "";
       error = errorMessage(reason);
@@ -119,6 +155,12 @@
 
   function errorMessage(reason: unknown) {
     return reason instanceof Error ? reason.message : String(reason);
+  }
+
+  function formatBytes(bytes: number) {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
   }
 </script>
 
@@ -254,6 +296,33 @@
       </button>
     {/if}
   {/if}
+
+  <section class="attachment-cache" aria-labelledby="attachment-cache-title">
+    <div class="attachment-cache-heading">
+      <div>
+        <strong id="attachment-cache-title">附件缓存</strong>
+        <span>只清理已同步、可从远端重新下载的本地副本</span>
+      </div>
+      <button
+        type="button"
+        disabled={cacheBusy || !cacheStats || cacheStats.reclaimableBytes === 0}
+        onclick={() => void clearAttachmentCache()}
+      >
+        {cacheBusy ? "清理中…" : "清理缓存"}
+      </button>
+    </div>
+    {#if cacheStats}
+      <div class="attachment-cache-stats">
+        <span>本地占用 <strong>{formatBytes(cacheStats.totalBytes)}</strong></span>
+        <span>可清理 <strong>{formatBytes(cacheStats.reclaimableBytes)}</strong></span>
+        <span>待上传保护 <strong>{formatBytes(cacheStats.protectedBytes)}</strong></span>
+      </div>
+    {:else}
+      <p class="sync-placeholder">正在统计附件缓存…</p>
+    {/if}
+    {#if cacheMessage}<p class="sync-message" role="status">{cacheMessage}</p>{/if}
+    {#if cacheError}<p class="settings-error" role="alert">{cacheError}</p>{/if}
+  </section>
 
   {#if message}<p class="sync-message" role="status">{message}</p>{/if}
   {#if error}<p class="settings-error" role="alert">{error}</p>{/if}

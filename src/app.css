@@ -3440,6 +3440,73 @@ footer button {
   background: #f8e9e5;
 }
 
+.attachment-cache {
+  margin-top: 12px;
+  padding-top: 11px;
+  border-top: 1px dashed #e5dbcb;
+}
+
+.attachment-cache-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.attachment-cache-heading > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.attachment-cache-heading strong {
+  color: #554b3d;
+  font-size: 11px;
+}
+
+.attachment-cache-heading span,
+.attachment-cache-stats {
+  color: #9c8e79;
+  font-size: 9px;
+}
+
+.attachment-cache-heading button {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  border: 1px solid #e0d5c4;
+  border-radius: 8px;
+  color: #675b48;
+  background: #faf7f0;
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.attachment-cache-heading button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.attachment-cache-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.attachment-cache-stats span {
+  padding: 6px;
+  border-radius: 7px;
+  background: #faf7f0;
+  line-height: 1.35;
+}
+
+.attachment-cache-stats strong {
+  display: block;
+  margin-top: 2px;
+  color: #675b48;
+}
+
 .sync-placeholder,
 .sync-message {
   margin: 6px 0 0;
@@ -4643,6 +4710,27 @@ html[data-theme="dark"] .delete-credentials {
 
 html[data-theme="dark"] .delete-credentials:hover {
   background: #422d28;
+}
+
+html[data-theme="dark"] .attachment-cache {
+  border-color: #403a32;
+}
+
+html[data-theme="dark"] .attachment-cache-heading strong,
+html[data-theme="dark"] .attachment-cache-stats strong {
+  color: #ded4c4;
+}
+
+html[data-theme="dark"] .attachment-cache-heading span,
+html[data-theme="dark"] .attachment-cache-stats {
+  color: #9e9383;
+}
+
+html[data-theme="dark"] .attachment-cache-heading button,
+html[data-theme="dark"] .attachment-cache-stats span {
+  border-color: #534b3f;
+  color: #ded4c4;
+  background: #312e28;
 }
 
 html[data-theme="dark"] .sync-placeholder,

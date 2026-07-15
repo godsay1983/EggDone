@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::{
     db::{device_id, now_millis, Database},
-    note_asset_store::NoteAssetStore,
+    note_asset_store::{NoteAssetStore, NoteAttachmentCacheStats},
     note_attachment_sync, note_attachments, note_sync,
     notes::{self, Note},
     reminders,
@@ -321,6 +321,41 @@ pub async fn read_note_attachment_original(
         &asset_store,
     )
     .await
+}
+
+#[tauri::command]
+pub fn get_note_attachment_cache_stats(
+    database: State<'_, Database>,
+    asset_store: State<'_, NoteAssetStore>,
+) -> Result<NoteAttachmentCacheStats, String> {
+    let attachments = {
+        let connection = lock_database(&database)?;
+        note_attachments::list_for_local_cache(&connection)?
+    };
+    asset_store.cache_stats(&attachments)
+}
+
+#[tauri::command]
+pub fn clear_note_attachment_cache(
+    app: AppHandle,
+    database: State<'_, Database>,
+    runtime: State<'_, SyncRuntime>,
+    asset_store: State<'_, NoteAssetStore>,
+) -> Result<NoteAttachmentCacheStats, String> {
+    let _sync_guard = runtime.acquire()?;
+    let attachments = {
+        let connection = lock_database(&database)?;
+        note_attachments::list_for_local_cache(&connection)?
+    };
+    asset_store.clear_reclaimable_cache(&attachments)?;
+    let remaining = {
+        let connection = lock_database(&database)?;
+        note_attachments::clear_uploaded_local_cache_paths(&connection)?;
+        note_attachments::list_for_local_cache(&connection)?
+    };
+    let stats = asset_store.cache_stats(&remaining)?;
+    let _ = app.emit_to("main", "note-attachment-cache-cleared", ());
+    Ok(stats)
 }
 
 async fn read_or_download_note_asset(

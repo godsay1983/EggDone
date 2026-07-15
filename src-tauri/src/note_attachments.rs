@@ -110,6 +110,23 @@ pub(crate) fn list_pending_transfers(
     Ok(attachments)
 }
 
+pub(crate) fn list_for_local_cache(connection: &Connection) -> Result<Vec<NoteAttachment>, String> {
+    let mut statement = connection
+        .prepare(&format!(
+            "{}
+             WHERE local_original_path IS NOT NULL OR local_preview_path IS NOT NULL
+             ORDER BY uuid ASC",
+            select_columns()
+        ))
+        .map_err(database_error)?;
+    let attachments = statement
+        .query_map([], map_attachment)
+        .map_err(database_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(database_error)?;
+    Ok(attachments)
+}
+
 pub(crate) fn create_pending(
     connection: &Connection,
     input: &NewNoteAttachment,
@@ -312,6 +329,21 @@ pub(crate) fn set_download_failed(
     .map_err(database_error)?;
     require_changed(changed)?;
     require_by_uuid(connection, uuid)
+}
+
+pub(crate) fn clear_uploaded_local_cache_paths(connection: &Connection) -> Result<usize, String> {
+    connection
+        .execute(
+            "
+            UPDATE note_attachments
+            SET local_original_path = NULL, local_preview_path = NULL,
+                transfer_state = 'remote_only', transfer_error = NULL
+            WHERE remote_uploaded = 1
+              AND (local_original_path IS NOT NULL OR local_preview_path IS NOT NULL)
+            ",
+            [],
+        )
+        .map_err(database_error)
 }
 
 pub(crate) fn soft_delete(connection: &Connection, uuid: &str) -> Result<NoteAttachment, String> {
@@ -703,6 +735,28 @@ mod tests {
         let mut missing_preview = image_input();
         missing_preview.preview_sha256 = None;
         assert!(create_pending(&connection, &missing_preview).is_err());
+    }
+
+    #[test]
+    fn clears_only_uploaded_local_cache_paths() {
+        let connection = connection();
+        insert_note(&connection);
+        create_pending(&connection, &image_input()).unwrap();
+
+        assert_eq!(clear_uploaded_local_cache_paths(&connection).unwrap(), 0);
+        let protected = require_by_uuid(&connection, ATTACHMENT_ID).unwrap();
+        assert!(protected.local_original_path.is_some());
+        assert!(protected.local_preview_path.is_some());
+        assert_eq!(protected.transfer_state, "pending_upload");
+
+        set_transfer_state(&connection, ATTACHMENT_ID, "synced", None, true).unwrap();
+        assert_eq!(clear_uploaded_local_cache_paths(&connection).unwrap(), 1);
+        let cleared = require_by_uuid(&connection, ATTACHMENT_ID).unwrap();
+        assert!(cleared.local_original_path.is_none());
+        assert!(cleared.local_preview_path.is_none());
+        assert_eq!(cleared.transfer_state, "remote_only");
+        assert!(cleared.remote_uploaded);
+        assert!(list_for_local_cache(&connection).unwrap().is_empty());
     }
 
     fn connection() -> Connection {

@@ -2,6 +2,15 @@ import { invoke } from "@tauri-apps/api/core";
 
 import type { NoteAttachment } from "$lib/types";
 
+export interface NoteAttachmentCacheStats {
+  totalBytes: number;
+  reclaimableBytes: number;
+  protectedBytes: number;
+  fileCount: number;
+  reclaimableFileCount: number;
+  protectedFileCount: number;
+}
+
 function bytesToUrl(bytes: number[], mimeType: string) {
   return URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: mimeType }));
 }
@@ -48,5 +57,13 @@ export const noteAttachmentApi = {
 
   retry(uuid: string): Promise<NoteAttachment> {
     return invoke<NoteAttachment>("retry_note_attachment", { uuid });
+  },
+
+  cacheStats(): Promise<NoteAttachmentCacheStats> {
+    return invoke<NoteAttachmentCacheStats>("get_note_attachment_cache_stats");
+  },
+
+  clearCache(): Promise<NoteAttachmentCacheStats> {
+    return invoke<NoteAttachmentCacheStats>("clear_note_attachment_cache");
   },
 };
