@@ -148,6 +148,8 @@ pub fn run() {
             data_exchange::export_full_backup,
             data_exchange::preview_todo_import,
             data_exchange::confirm_todo_import,
+            data_exchange::preview_full_backup_import,
+            data_exchange::confirm_full_backup_import,
             data_exchange::backup_database,
         ])
         .run(tauri::generate_context!())

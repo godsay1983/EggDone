@@ -12,6 +12,7 @@
 
   let busy = false;
   let preview: ImportPreview | null = null;
+  let importKind: "json" | "backup" | null = null;
   let message = "";
   let error = "";
   let dialogElement: HTMLDivElement;
@@ -28,15 +29,31 @@
   async function chooseImport() {
     await runAction(async () => {
       preview = await dataApi.previewImport();
-      if (preview) message = "";
+      if (preview) {
+        importKind = "json";
+        message = "";
+      }
+    });
+  }
+
+  async function chooseFullBackupImport() {
+    await runAction(async () => {
+      preview = await dataApi.previewFullBackupImport();
+      if (preview) {
+        importKind = "backup";
+        message = "";
+      }
     });
   }
 
   async function confirmImport() {
     if (!preview) return;
     await runAction(async () => {
-      const result = await dataApi.confirmImport(preview!.path);
+      const result = importKind === "backup"
+        ? await dataApi.confirmFullBackupImport(preview!.path)
+        : await dataApi.confirmImport(preview!.path);
       preview = null;
+      importKind = null;
       message = importMessage(result);
       await onImported();
     });
@@ -72,7 +89,14 @@
   }
 
   function importMessage(result: ImportResult) {
-    return `导入完成：任务新增 ${result.added}、更新 ${result.updated}、保持 ${result.unchanged}；便签新增 ${result.note_added}、更新 ${result.note_updated}、保持 ${result.note_unchanged}；附件新增 ${result.attachment_added}、更新 ${result.attachment_updated}、保持 ${result.attachment_unchanged}`;
+    const restored = result.restored_file_count > 0 ? `；恢复文件 ${result.restored_file_count} 个` : "";
+    return `导入完成：任务新增 ${result.added}、更新 ${result.updated}、保持 ${result.unchanged}；便签新增 ${result.note_added}、更新 ${result.note_updated}、保持 ${result.note_unchanged}；附件新增 ${result.attachment_added}、更新 ${result.attachment_updated}、保持 ${result.attachment_unchanged}${restored}`;
+  }
+
+  function formatBytes(value: number) {
+    if (value < 1024) return `${value} B`;
+    if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KiB`;
+    return `${(value / 1024 / 1024).toFixed(1)} MiB`;
   }
 </script>
 
@@ -122,6 +146,10 @@
         <strong>导出完整备份</strong>
         <span>包含任务、便签、附件原文件和图片预览</span>
       </button>
+      <button type="button" disabled={busy} onclick={() => void chooseFullBackupImport()}>
+        <strong>导入完整备份</strong>
+        <span>校验清单和摘要后，恢复任务、便签及附件文件</span>
+      </button>
     </div>
 
     {#if preview}
@@ -132,10 +160,14 @@
           <span>任务：新增 {preview.added}，更新 {preview.updated}，保持 {preview.unchanged}</span>
           <span>便签：新增 {preview.note_added}，更新 {preview.note_updated}，保持 {preview.note_unchanged}</span>
           <span>附件：新增 {preview.attachment_added}，更新 {preview.attachment_updated}，保持 {preview.attachment_unchanged}</span>
-          <span>附件文件不包含在 JSON 中，导入后将从已配置的对象存储按需下载。</span>
+          {#if preview.attachment_files_included}
+            <span>已校验 {preview.backup_file_count} 个附件文件，共 {formatBytes(preview.backup_total_bytes)}，确认后将恢复到本地。</span>
+          {:else}
+            <span>附件文件不包含在 JSON 中，导入后将从已配置的对象存储按需下载。</span>
+          {/if}
         </div>
         <div class="preview-actions">
-          <button type="button" disabled={busy} onclick={() => (preview = null)}>
+          <button type="button" disabled={busy} onclick={() => { preview = null; importKind = null; }}>
             取消
           </button>
           <button type="button" disabled={busy} onclick={() => void confirmImport()}>

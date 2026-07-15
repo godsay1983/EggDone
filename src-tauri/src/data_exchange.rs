@@ -1,17 +1,17 @@
 use std::{
     collections::{HashMap, HashSet},
     fs::{self, File},
-    io::{self, Write},
+    io::{self, Read, Write},
     path::{Path, PathBuf},
 };
 
 use rusqlite::{backup::Backup, params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::{DialogExt, FilePath};
 use uuid::Uuid;
-use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
+use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
 
 use crate::{
     db::{device_id, now_millis, Database},
@@ -88,7 +88,7 @@ struct TodoExport {
     attachment_files_included: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct BackupManifest {
     format_version: u32,
     created_at: i64,
@@ -96,7 +96,7 @@ struct BackupManifest {
     assets: Vec<BackupManifestEntry>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 struct BackupManifestEntry {
     path: String,
     byte_size: u64,
@@ -128,6 +128,8 @@ pub struct ImportPreview {
     attachment_updated: usize,
     attachment_unchanged: usize,
     attachment_files_included: bool,
+    backup_file_count: usize,
+    backup_total_bytes: u64,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -141,6 +143,18 @@ pub struct ImportResult {
     attachment_added: usize,
     attachment_updated: usize,
     attachment_unchanged: usize,
+    restored_file_count: usize,
+}
+
+struct ValidatedFullBackup {
+    import: TodoExport,
+    manifest: BackupManifest,
+    total_bytes: u64,
+}
+
+struct InstalledAsset {
+    uuid: String,
+    had_previous: bool,
 }
 
 #[tauri::command]
@@ -388,6 +402,299 @@ fn write_full_backup_archive(
     Ok(())
 }
 
+fn read_full_backup_archive(
+    path: &Path,
+    extraction_root: Option<&Path>,
+) -> Result<ValidatedFullBackup, String> {
+    let file = File::open(path).map_err(|error| format!("读取完整备份失败：{error}"))?;
+    let mut archive =
+        ZipArchive::new(file).map_err(|error| format!("完整备份 ZIP 无效：{error}"))?;
+    if archive.len() == 0 || archive.len() > BACKUP_MAX_ENTRY_COUNT {
+        return Err("完整备份条目数量无效或超过 10000 个限制".to_string());
+    }
+
+    let mut names = HashSet::new();
+    let mut file_names = HashSet::new();
+    let mut total_bytes = 0_u64;
+    for index in 0..archive.len() {
+        let entry = archive
+            .by_index(index)
+            .map_err(|error| format!("读取完整备份条目失败：{error}"))?;
+        let name = entry.name().to_string();
+        validate_backup_entry_path(&name, entry.is_dir())?;
+        if !names.insert(name.clone()) {
+            return Err(format!("完整备份包含重复条目：{name}"));
+        }
+        if entry
+            .unix_mode()
+            .is_some_and(|mode| mode & 0o170000 == 0o120000)
+        {
+            return Err(format!("完整备份不允许符号链接：{name}"));
+        }
+        if !entry.is_dir() {
+            file_names.insert(name);
+            total_bytes = total_bytes.saturating_add(entry.size());
+            if total_bytes > BACKUP_MAX_TOTAL_BYTES {
+                return Err("完整备份解压后不能超过 512 MiB".to_string());
+            }
+        }
+    }
+
+    let manifest_bytes = read_archive_entry(&mut archive, "manifest.json", 4 * 1024 * 1024, None)?;
+    let manifest: BackupManifest = serde_json::from_slice(&manifest_bytes)
+        .map_err(|error| format!("完整备份清单格式无效：{error}"))?;
+    validate_backup_manifest(&manifest)?;
+
+    let expected_files = std::iter::once("manifest.json".to_string())
+        .chain(std::iter::once("data.json".to_string()))
+        .chain(manifest.assets.iter().map(|entry| entry.path.clone()))
+        .collect::<HashSet<_>>();
+    if file_names != expected_files {
+        let unexpected = file_names.difference(&expected_files).next();
+        let missing = expected_files.difference(&file_names).next();
+        return Err(match (unexpected, missing) {
+            (Some(name), _) => format!("完整备份包含清单外条目：{name}"),
+            (_, Some(name)) => format!("完整备份缺少条目：{name}"),
+            _ => "完整备份条目与清单不一致".to_string(),
+        });
+    }
+
+    let data_bytes = read_archive_entry(&mut archive, "data.json", manifest.data.byte_size, None)?;
+    verify_manifest_bytes(&manifest.data, &data_bytes)?;
+    let import: TodoExport = serde_json::from_slice(&data_bytes)
+        .map_err(|error| format!("完整备份数据格式无效：{error}"))?;
+    validate_complete_import(&import)?;
+    validate_manifest_assets(&manifest, &import)?;
+
+    if let Some(root) = extraction_root {
+        if root.exists() {
+            fs::remove_dir_all(root).map_err(|error| format!("清理恢复临时目录失败：{error}"))?;
+        }
+        fs::create_dir_all(root).map_err(|error| format!("创建恢复临时目录失败：{error}"))?;
+    }
+    for entry in &manifest.assets {
+        let output = extraction_root.map(|root| {
+            root.join(
+                entry
+                    .path
+                    .strip_prefix("note-assets/")
+                    .unwrap_or(&entry.path),
+            )
+        });
+        let bytes = read_archive_entry(
+            &mut archive,
+            &entry.path,
+            entry.byte_size,
+            output.as_deref(),
+        )?;
+        if let Some(output) = output {
+            let (size, sha256) = hash_backup_file(&output)?;
+            if size as u64 != entry.byte_size || sha256 != entry.sha256 {
+                return Err(format!("完整备份条目摘要不匹配：{}", entry.path));
+            }
+        } else {
+            verify_manifest_bytes(entry, &bytes)?;
+        }
+    }
+
+    Ok(ValidatedFullBackup {
+        import,
+        manifest,
+        total_bytes,
+    })
+}
+
+fn read_archive_entry(
+    archive: &mut ZipArchive<File>,
+    name: &str,
+    max_bytes: u64,
+    output_path: Option<&Path>,
+) -> Result<Vec<u8>, String> {
+    let mut entry = archive
+        .by_name(name)
+        .map_err(|_| format!("完整备份缺少条目：{name}"))?;
+    if entry.size() > max_bytes || entry.size() > BACKUP_MAX_TOTAL_BYTES {
+        return Err(format!("完整备份条目大小无效：{name}"));
+    }
+    let mut output = if let Some(path) = output_path {
+        let parent = path
+            .parent()
+            .ok_or_else(|| "恢复附件路径无效".to_string())?;
+        fs::create_dir_all(parent).map_err(|error| format!("创建恢复附件目录失败：{error}"))?;
+        Some(File::create(path).map_err(|error| format!("创建恢复附件失败：{error}"))?)
+    } else {
+        None
+    };
+    let capacity = usize::try_from(entry.size().min(4 * 1024 * 1024)).unwrap_or(0);
+    let mut bytes = Vec::with_capacity(capacity);
+    let mut buffer = [0_u8; 64 * 1024];
+    let mut read_bytes = 0_u64;
+    loop {
+        let count = entry
+            .read(&mut buffer)
+            .map_err(|error| format!("读取完整备份条目失败：{error}"))?;
+        if count == 0 {
+            break;
+        }
+        read_bytes = read_bytes.saturating_add(count as u64);
+        if read_bytes > max_bytes {
+            return Err(format!("完整备份条目超过清单大小：{name}"));
+        }
+        if let Some(file) = output.as_mut() {
+            file.write_all(&buffer[..count])
+                .map_err(|error| format!("写入恢复附件失败：{error}"))?;
+        } else {
+            bytes.extend_from_slice(&buffer[..count]);
+        }
+    }
+    if read_bytes != entry.size() {
+        return Err(format!("完整备份条目读取不完整：{name}"));
+    }
+    Ok(bytes)
+}
+
+fn validate_backup_entry_path(name: &str, is_directory: bool) -> Result<(), String> {
+    if name.is_empty() || name.contains('\\') || name.starts_with('/') || name.contains(':') {
+        return Err(format!("完整备份包含不安全路径：{name}"));
+    }
+    let trimmed = if is_directory {
+        name.strip_suffix('/').unwrap_or(name)
+    } else {
+        name
+    };
+    if trimmed
+        .split('/')
+        .any(|part| part.is_empty() || matches!(part, "." | ".."))
+    {
+        return Err(format!("完整备份包含不安全路径：{name}"));
+    }
+    if is_directory {
+        let parts = trimmed.split('/').collect::<Vec<_>>();
+        if parts.first() != Some(&"note-assets") || parts.len() > 2 {
+            return Err(format!("完整备份包含无效目录：{name}"));
+        }
+        if parts.len() == 2 && Uuid::parse_str(parts[1]).is_err() {
+            return Err(format!("完整备份包含无效附件目录：{name}"));
+        }
+    }
+    Ok(())
+}
+
+fn validate_backup_manifest(manifest: &BackupManifest) -> Result<(), String> {
+    if manifest.format_version != BACKUP_FORMAT_VERSION || manifest.created_at < 0 {
+        return Err("完整备份清单版本或创建时间无效".to_string());
+    }
+    if manifest.data.path != "data.json"
+        || manifest.data.byte_size == 0
+        || !is_sha256_value(&manifest.data.sha256)
+    {
+        return Err("完整备份 data.json 清单无效".to_string());
+    }
+    let mut previous = None::<&str>;
+    let mut paths = HashSet::new();
+    for entry in &manifest.assets {
+        validate_backup_entry_path(&entry.path, false)?;
+        if !entry.path.starts_with("note-assets/")
+            || entry.byte_size == 0
+            || !is_sha256_value(&entry.sha256)
+        {
+            return Err(format!("完整备份附件清单无效：{}", entry.path));
+        }
+        if previous.is_some_and(|value| value >= entry.path.as_str()) {
+            return Err("完整备份附件清单必须按路径升序排列".to_string());
+        }
+        if !paths.insert(entry.path.clone()) {
+            return Err(format!("完整备份清单包含重复路径：{}", entry.path));
+        }
+        previous = Some(&entry.path);
+    }
+    Ok(())
+}
+
+fn validate_manifest_assets(manifest: &BackupManifest, import: &TodoExport) -> Result<(), String> {
+    let entries = manifest
+        .assets
+        .iter()
+        .map(|entry| (entry.path.as_str(), entry))
+        .collect::<HashMap<_, _>>();
+    let mut expected = HashSet::new();
+    for attachment in import
+        .note_attachments
+        .iter()
+        .filter(|attachment| attachment.deleted_at.is_none())
+    {
+        let original = format!("note-assets/{}/original", attachment.uuid);
+        let original_entry = entries
+            .get(original.as_str())
+            .ok_or_else(|| format!("完整备份缺少附件原文件：{}", attachment.display_name))?;
+        if original_entry.byte_size != attachment.byte_size as u64
+            || original_entry.sha256 != attachment.sha256
+        {
+            return Err(format!(
+                "完整备份附件原文件清单不匹配：{}",
+                attachment.display_name
+            ));
+        }
+        expected.insert(original);
+        if attachment.kind == "image" {
+            let preview = format!("note-assets/{}/preview.jpg", attachment.uuid);
+            let preview_entry = entries
+                .get(preview.as_str())
+                .ok_or_else(|| format!("完整备份缺少图片预览：{}", attachment.display_name))?;
+            if preview_entry.byte_size != attachment.preview_byte_size.unwrap_or_default() as u64
+                || preview_entry.sha256 != attachment.preview_sha256.as_deref().unwrap_or_default()
+            {
+                return Err(format!(
+                    "完整备份图片预览清单不匹配：{}",
+                    attachment.display_name
+                ));
+            }
+            expected.insert(preview);
+        }
+    }
+    if entries.len() != expected.len() {
+        return Err("完整备份包含未被活动附件引用的二进制文件".to_string());
+    }
+    Ok(())
+}
+
+fn verify_manifest_bytes(entry: &BackupManifestEntry, bytes: &[u8]) -> Result<(), String> {
+    if bytes.len() as u64 != entry.byte_size
+        || format!("{:x}", Sha256::digest(bytes)) != entry.sha256
+    {
+        return Err(format!("完整备份条目摘要不匹配：{}", entry.path));
+    }
+    Ok(())
+}
+
+fn hash_backup_file(path: &Path) -> Result<(u64, String), String> {
+    let mut file = File::open(path).map_err(|error| format!("打开恢复附件失败：{error}"))?;
+    let mut digest = Sha256::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    let mut size = 0_u64;
+    loop {
+        let count = file
+            .read(&mut buffer)
+            .map_err(|error| format!("读取恢复附件失败：{error}"))?;
+        if count == 0 {
+            break;
+        }
+        size = size.saturating_add(count as u64);
+        if size > BACKUP_MAX_TOTAL_BYTES {
+            return Err("恢复附件超过完整备份容量限制".to_string());
+        }
+        digest.update(&buffer[..count]);
+    }
+    Ok((size, format!("{:x}", digest.finalize())))
+}
+
+fn is_sha256_value(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|character| character.is_ascii_digit() || (b'a'..=b'f').contains(&character))
+}
+
 #[tauri::command]
 pub fn preview_todo_import(
     app: AppHandle,
@@ -400,6 +707,29 @@ pub fn preview_todo_import(
     let import = read_import_file(&path)?;
     let connection = lock_database(&database)?;
     let preview = build_preview(&connection, &path, &import)?;
+    Ok(Some(preview))
+}
+
+#[tauri::command]
+pub fn preview_full_backup_import(
+    app: AppHandle,
+    database: State<'_, Database>,
+    panel_state: State<'_, PanelState>,
+) -> Result<Option<ImportPreview>, String> {
+    let Some(path) = pick_open_path(
+        &app,
+        &panel_state,
+        "EggDone Complete Backup",
+        &["eggdone-backup"],
+    )?
+    else {
+        return Ok(None);
+    };
+    let validated = read_full_backup_archive(&path, None)?;
+    let connection = lock_database(&database)?;
+    let mut preview = build_preview(&connection, &path, &validated.import)?;
+    preview.backup_file_count = validated.manifest.assets.len();
+    preview.backup_total_bytes = validated.total_bytes;
     Ok(Some(preview))
 }
 
@@ -418,6 +748,92 @@ pub fn confirm_todo_import(
         crate::tray::update_task_badge(&app);
     }
     result
+}
+
+#[tauri::command]
+pub fn confirm_full_backup_import(
+    path: String,
+    app: AppHandle,
+    database: State<'_, Database>,
+) -> Result<ImportResult, String> {
+    let token = Uuid::new_v4();
+    let app_data_root = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("获取附件目录失败：{error}"))?;
+    let asset_root = app_data_root.join("note-assets");
+    fs::create_dir_all(&asset_root).map_err(|error| format!("创建附件目录失败：{error}"))?;
+    let staging_root = asset_root.join(format!(".backup-import-{token}"));
+    let rollback_root = asset_root.join(format!(".backup-rollback-{token}"));
+    let database_snapshot = app_data_root.join(format!(".backup-database-{token}.sqlite3"));
+
+    let validated = match read_full_backup_archive(Path::new(&path), Some(&staging_root)) {
+        Ok(validated) => validated,
+        Err(error) => {
+            let _ = fs::remove_dir_all(&staging_root);
+            return Err(error);
+        }
+    };
+    let active_attachments = validated
+        .import
+        .note_attachments
+        .iter()
+        .filter(|attachment| attachment.deleted_at.is_none())
+        .cloned()
+        .collect::<Vec<_>>();
+
+    let restore_result = (|| {
+        let local_attachments = {
+            let connection = lock_database(&database)?;
+            backup_connection(&connection, &database_snapshot)?;
+            note_attachment_sync::build_backup_document(&connection, now_millis())?.attachments
+        };
+        let restore_uuids = restore_candidate_uuids(&local_attachments, &active_attachments);
+        let installed =
+            install_backup_assets(&asset_root, &staging_root, &rollback_root, &restore_uuids)?;
+        let database_result: Result<ImportResult, String> = (|| {
+            let mut connection = lock_database(&database)?;
+            let mut result = merge_import(&mut connection, validated.import)?;
+            set_restored_attachment_paths(&connection, &active_attachments, &restore_uuids)?;
+            result.restored_file_count = restore_uuids
+                .iter()
+                .filter_map(|uuid| active_attachments.iter().find(|item| &item.uuid == uuid))
+                .map(|attachment| if attachment.kind == "image" { 2 } else { 1 })
+                .sum();
+            Ok(result)
+        })();
+        match database_result {
+            Ok(result) => {
+                let _ = fs::remove_dir_all(&rollback_root);
+                Ok(result)
+            }
+            Err(error) => {
+                let asset_rollback_error =
+                    rollback_installed_assets(&asset_root, &rollback_root, &installed).err();
+                let restore_error = lock_database(&database)
+                    .and_then(|mut connection| {
+                        restore_connection(&mut connection, &database_snapshot)
+                    })
+                    .err();
+                let mut message = error;
+                if let Some(rollback_error) = asset_rollback_error {
+                    message.push_str(&format!("；附件回滚失败：{rollback_error}"));
+                }
+                if let Some(rollback_error) = restore_error {
+                    message.push_str(&format!("；数据库回滚失败：{rollback_error}"));
+                }
+                Err(message)
+            }
+        }
+    })();
+
+    let _ = fs::remove_dir_all(&staging_root);
+    let _ = fs::remove_dir_all(&rollback_root);
+    let _ = fs::remove_file(&database_snapshot);
+    if restore_result.is_ok() {
+        crate::tray::update_task_badge(&app);
+    }
+    restore_result
 }
 
 #[tauri::command]
@@ -496,6 +912,133 @@ fn backup_connection(source: &Connection, path: &Path) -> Result<(), String> {
         .map_err(|error| format!("数据库备份失败：{error}"))
 }
 
+fn restore_connection(destination: &mut Connection, path: &Path) -> Result<(), String> {
+    let source =
+        Connection::open(path).map_err(|error| format!("打开数据库回滚点失败：{error}"))?;
+    let backup = Backup::new(&source, destination)
+        .map_err(|error| format!("初始化数据库回滚失败：{error}"))?;
+    backup
+        .run_to_completion(32, std::time::Duration::from_millis(10), None)
+        .map_err(|error| format!("数据库回滚失败：{error}"))
+}
+
+fn restore_candidate_uuids(
+    local: &[SyncNoteAttachment],
+    imported: &[SyncNoteAttachment],
+) -> HashSet<String> {
+    let local_by_uuid = local
+        .iter()
+        .map(|attachment| (&attachment.uuid, attachment))
+        .collect::<HashMap<_, _>>();
+    imported
+        .iter()
+        .filter(|attachment| {
+            local_by_uuid
+                .get(&attachment.uuid)
+                .is_none_or(|local_attachment| {
+                    note_attachment_sync::compare_attachments(attachment, local_attachment).is_ge()
+                })
+        })
+        .map(|attachment| attachment.uuid.clone())
+        .collect()
+}
+
+fn install_backup_assets(
+    asset_root: &Path,
+    staging_root: &Path,
+    rollback_root: &Path,
+    restore_uuids: &HashSet<String>,
+) -> Result<Vec<InstalledAsset>, String> {
+    fs::create_dir_all(rollback_root).map_err(|error| format!("创建附件回滚目录失败：{error}"))?;
+    let mut installed = Vec::new();
+    for uuid in restore_uuids {
+        if Uuid::parse_str(uuid).is_err() {
+            let _ = rollback_installed_assets(asset_root, rollback_root, &installed);
+            return Err("恢复附件 UUID 无效".to_string());
+        }
+        let staged = staging_root.join(uuid);
+        let final_path = asset_root.join(uuid);
+        let previous = rollback_root.join(uuid);
+        if !staged.is_dir() {
+            let _ = rollback_installed_assets(asset_root, rollback_root, &installed);
+            return Err(format!("完整备份缺少已校验附件目录：{uuid}"));
+        }
+        let had_previous = final_path.exists();
+        if had_previous {
+            if let Err(error) = fs::rename(&final_path, &previous) {
+                let _ = rollback_installed_assets(asset_root, rollback_root, &installed);
+                return Err(format!("建立附件回滚点失败：{error}"));
+            }
+        }
+        if let Err(error) = fs::rename(&staged, &final_path) {
+            if had_previous {
+                let _ = fs::rename(&previous, &final_path);
+            }
+            let _ = rollback_installed_assets(asset_root, rollback_root, &installed);
+            return Err(format!("原子恢复附件失败：{error}"));
+        }
+        installed.push(InstalledAsset {
+            uuid: uuid.clone(),
+            had_previous,
+        });
+    }
+    Ok(installed)
+}
+
+fn rollback_installed_assets(
+    asset_root: &Path,
+    rollback_root: &Path,
+    installed: &[InstalledAsset],
+) -> Result<(), String> {
+    let mut errors = Vec::new();
+    for item in installed.iter().rev() {
+        let final_path = asset_root.join(&item.uuid);
+        let previous = rollback_root.join(&item.uuid);
+        if final_path.exists() {
+            if let Err(error) = fs::remove_dir_all(&final_path) {
+                errors.push(format!("删除 {} 失败：{error}", item.uuid));
+                continue;
+            }
+        }
+        if item.had_previous {
+            if let Err(error) = fs::rename(previous, final_path) {
+                errors.push(format!("恢复 {} 失败：{error}", item.uuid));
+            }
+        }
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors.join("；"))
+    }
+}
+
+fn set_restored_attachment_paths(
+    connection: &Connection,
+    attachments: &[SyncNoteAttachment],
+    restore_uuids: &HashSet<String>,
+) -> Result<(), String> {
+    let transaction = connection.unchecked_transaction().map_err(database_error)?;
+    for attachment in attachments
+        .iter()
+        .filter(|attachment| restore_uuids.contains(&attachment.uuid))
+    {
+        let original = format!("note-assets/{}/original", attachment.uuid);
+        let preview = (attachment.kind == "image")
+            .then(|| format!("note-assets/{}/preview.jpg", attachment.uuid));
+        transaction
+            .execute(
+                "UPDATE note_attachments
+                 SET local_original_path = ?1, local_preview_path = ?2,
+                     transfer_state = 'synced', transfer_error = NULL, remote_uploaded = 1
+                 WHERE uuid = ?3 AND deleted_at IS NULL",
+                params![original, preview, attachment.uuid],
+            )
+            .map_err(database_error)?;
+    }
+    transaction.commit().map_err(database_error)
+}
+
 fn read_import_file(path: &Path) -> Result<TodoExport, String> {
     let contents =
         fs::read_to_string(path).map_err(|error| format!("读取导入文件失败：{error}"))?;
@@ -506,6 +1049,14 @@ fn read_import_file(path: &Path) -> Result<TodoExport, String> {
 }
 
 fn validate_import(import: &TodoExport) -> Result<(), String> {
+    validate_import_mode(import, false)
+}
+
+fn validate_complete_import(import: &TodoExport) -> Result<(), String> {
+    validate_import_mode(import, true)
+}
+
+fn validate_import_mode(import: &TodoExport, expect_attachment_files: bool) -> Result<(), String> {
     if import.format_version > FORMAT_VERSION {
         return Err(format!(
             "导入文件版本 {} 高于当前支持的版本 {}",
@@ -515,7 +1066,10 @@ fn validate_import(import: &TodoExport) -> Result<(), String> {
     if import.format_version == 0 {
         return Err("导入文件缺少有效的 format_version".to_string());
     }
-    if import.attachment_files_included {
+    if import.attachment_files_included != expect_attachment_files {
+        if expect_attachment_files {
+            return Err("完整备份必须声明包含附件文件".to_string());
+        }
         return Err("普通 JSON 不能声明包含附件文件，请使用 .eggdone-backup".to_string());
     }
 
@@ -617,6 +1171,34 @@ fn validate_import(import: &TodoExport) -> Result<(), String> {
         generated_at: import.exported_at,
         attachments: import.note_attachments.clone(),
     })?;
+    if expect_attachment_files {
+        let notes = import
+            .notes
+            .iter()
+            .map(|note| (&note.uuid, note.deleted_at))
+            .collect::<HashMap<_, _>>();
+        for attachment in import
+            .note_attachments
+            .iter()
+            .filter(|attachment| attachment.deleted_at.is_none())
+        {
+            match notes.get(&attachment.note_uuid) {
+                Some(None) => {}
+                Some(Some(_)) => {
+                    return Err(format!(
+                        "完整备份的活动附件引用了已删除便签：{}",
+                        attachment.display_name
+                    ))
+                }
+                None => {
+                    return Err(format!(
+                        "完整备份的附件缺少所属便签：{}",
+                        attachment.display_name
+                    ))
+                }
+            }
+        }
+    }
     Ok(())
 }
 
@@ -702,6 +1284,8 @@ fn build_preview(
         attachment_updated,
         attachment_unchanged,
         attachment_files_included: import.attachment_files_included,
+        backup_file_count: 0,
+        backup_total_bytes: 0,
     })
 }
 
@@ -724,6 +1308,7 @@ fn merge_transfer(
         attachment_added: 0,
         attachment_updated: 0,
         attachment_unchanged: 0,
+        restored_file_count: 0,
     };
 
     for group in imported_groups {
@@ -1497,5 +2082,67 @@ mod tests {
         assert!(archive.by_name("data.json").is_ok());
 
         fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn validates_and_extracts_a_complete_backup() {
+        let directory = std::env::temp_dir().join(format!("eggdone-restore-{}", Uuid::new_v4()));
+        let extraction = directory.join("extracted");
+        fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("sample.eggdone-backup");
+        let note_uuid = "00000000-0000-4000-8000-000000000020";
+        let attachment_uuid = "00000000-0000-4000-8000-000000000021";
+        let asset = b"backup!".to_vec();
+        let asset_sha256 = format!("{:x}", Sha256::digest(&asset));
+        let mut exported_attachment = attachment(attachment_uuid, note_uuid, 5);
+        exported_attachment.byte_size = asset.len() as i64;
+        exported_attachment.sha256 = asset_sha256.clone();
+        let export = TodoExport {
+            format_version: FORMAT_VERSION,
+            exported_at: 10,
+            groups: vec![],
+            todos: vec![],
+            notes: vec![note(note_uuid, "restore", 4)],
+            note_attachments: vec![exported_attachment],
+            attachment_files_included: true,
+        };
+        let data = serde_json::to_vec(&export).unwrap();
+        let asset_path = directory.join("original");
+        fs::write(&asset_path, &asset).unwrap();
+        let entry = BackupManifestEntry {
+            path: format!("note-assets/{attachment_uuid}/original"),
+            byte_size: asset.len() as u64,
+            sha256: asset_sha256,
+        };
+        let manifest = serde_json::to_vec(&BackupManifest {
+            format_version: BACKUP_FORMAT_VERSION,
+            created_at: 10,
+            data: backup_manifest_entry("data.json".to_string(), &data),
+            assets: vec![entry.clone()],
+        })
+        .unwrap();
+        write_full_backup_archive(&path, &manifest, &data, &[(entry, asset_path)]).unwrap();
+
+        let validated = read_full_backup_archive(&path, Some(&extraction)).unwrap();
+        assert!(validated.import.attachment_files_included);
+        assert_eq!(validated.manifest.assets.len(), 1);
+        assert_eq!(
+            fs::read(extraction.join(attachment_uuid).join("original")).unwrap(),
+            asset
+        );
+
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn rejects_unsafe_backup_paths_and_invalid_hashes() {
+        assert!(validate_backup_entry_path("../data.json", false).is_err());
+        assert!(validate_backup_entry_path("note-assets\\bad", false).is_err());
+        let entry = BackupManifestEntry {
+            path: "data.json".to_string(),
+            byte_size: 4,
+            sha256: "0".repeat(64),
+        };
+        assert!(verify_manifest_bytes(&entry, b"data").is_err());
     }
 }

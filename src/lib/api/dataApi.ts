@@ -16,6 +16,8 @@ export interface ImportPreview {
   attachment_updated: number;
   attachment_unchanged: number;
   attachment_files_included: boolean;
+  backup_file_count: number;
+  backup_total_bytes: number;
 }
 
 export interface ImportResult {
@@ -28,6 +30,7 @@ export interface ImportResult {
   attachment_added: number;
   attachment_updated: number;
   attachment_unchanged: number;
+  restored_file_count: number;
 }
 
 export interface FullBackupExportResult {
@@ -52,6 +55,14 @@ export const dataApi = {
 
   confirmImport(path: string): Promise<ImportResult> {
     return invoke<ImportResult>("confirm_todo_import", { path });
+  },
+
+  previewFullBackupImport(): Promise<ImportPreview | null> {
+    return invoke<ImportPreview | null>("preview_full_backup_import");
+  },
+
+  confirmFullBackupImport(path: string): Promise<ImportResult> {
+    return invoke<ImportResult>("confirm_full_backup_import", { path });
   },
 
   backupDatabase(): Promise<string | null> {

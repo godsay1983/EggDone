@@ -128,12 +128,12 @@
 - [x] JSON 导出和导入明确区分附件元数据与二进制。
 - [x] 固定 `.eggdone-backup` 清单、路径和容量限制。
 - [x] 两端导出包含二进制的 `.eggdone-backup` 完整备份。
-- [ ] 两端实现完整备份校验、导入预览和原子恢复。
+- [x] 两端实现完整备份校验、导入预览和原子恢复。
 - [ ] 验证离线添加、上传中退出、网络中断、凭据错误和摘要不匹配。
 - [ ] 验证桌面添加、鸿蒙删除、桌面恢复的完整链路。
 - [ ] 验证 HEIC/HEIF 远端图片在桌面显示 JPEG 预览。
-- [ ] 运行 `pnpm check`、`pnpm test` 和 `pnpm build`。
-- [ ] 运行 `cargo fmt -- --check`、`cargo check` 和相关 Rust 测试。
+- [x] 运行 `pnpm check`、`pnpm test` 和 `pnpm build`。
+- [x] 运行 `cargo fmt -- --check`、`cargo check` 和相关 Rust 测试。
 - [ ] 更新 README、手动回归文档、版本号和发布说明。
 
 完成条件：真实 S3 / MinIO 双端测试通过，升级不破坏现有 Todo 和文字便签同步。
