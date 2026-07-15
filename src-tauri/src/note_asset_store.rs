@@ -768,7 +768,7 @@ fn is_sha256(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use image::{Rgba, RgbaImage};
+    use image::{Rgb, Rgba, RgbaImage};
 
     struct TestDirectory(PathBuf);
 
@@ -826,6 +826,44 @@ mod tests {
         assert!(preview.get_pixel(0, 0)[0] > 100);
         assert!(preview.get_pixel(0, 0)[1] > 100);
         assert!(preview.get_pixel(0, 0)[2] > 100);
+    }
+
+    #[test]
+    fn imports_jpeg_and_webp_fixtures_with_bounded_jpeg_previews() {
+        let root = TestDirectory::new();
+        let app_data = root.0.join("app-data");
+        fs::create_dir(&app_data).unwrap();
+        let store = NoteAssetStore::for_root(app_data.clone());
+        let fixtures = [
+            (
+                "sample.jpg",
+                ImageFormat::Jpeg,
+                "image/jpeg",
+                "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+            ),
+            (
+                "sample.webp",
+                ImageFormat::WebP,
+                "image/webp",
+                "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+            ),
+        ];
+
+        for (file_name, format, expected_mime, uuid) in fixtures {
+            let source = root.0.join(file_name);
+            DynamicImage::ImageRgb8(RgbImage::from_pixel(640, 320, Rgb([38, 132, 204])))
+                .save_with_format(&source, format)
+                .unwrap();
+
+            let prepared = store.import_image(&source, uuid).unwrap();
+
+            assert_eq!(prepared.display_name, file_name);
+            assert_eq!(prepared.mime_type, expected_mime);
+            assert_eq!((prepared.width, prepared.height), (640, 320));
+            let preview_path = app_data.join(&prepared.local_preview_path);
+            let preview = image::open(preview_path).unwrap();
+            assert_eq!(preview.dimensions(), (512, 256));
+        }
     }
 
     #[test]
