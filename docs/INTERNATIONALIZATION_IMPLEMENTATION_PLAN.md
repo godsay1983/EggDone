@@ -232,8 +232,8 @@ src-tauri/src/i18n.rs
 
 快捷新增语法不能与界面语言绑定。无论当前界面语言是什么，都应识别：
 
-- 中文：`今天`、`明天`、`提醒`、`每天`、`重要`。
-- 英文：`today`、`tomorrow`、`remind`、`daily`、`important`。
+- 中文：`今天`、`明天`、`提醒`、`每天`，以及标题开头的 `!` 或 `！` 重要标记。
+- 英文：`today`、`tomorrow`、`remind`、`daily`，以及标题开头的 `!` 重要标记。
 
 规则：
 
@@ -313,4 +313,3 @@ src-tauri/src/commands.rs
 - 用户数据和同步协议完全兼容旧版本。
 - 双端快捷新增 fixture 通过。
 - 全部前端、Rust 自动测试和 Windows 手动回归通过。
-

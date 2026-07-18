@@ -1,0 +1,238 @@
+{
+  "schema_version": 1,
+  "reference": {
+    "now_local": "2026-07-18T12:00:00",
+    "time_zone": "Asia/Shanghai",
+    "groups": [
+      {
+        "uuid": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "name": "工作"
+      },
+      {
+        "uuid": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "name": "Work"
+      }
+    ]
+  },
+  "normalization": {
+    "date_only_uses_due_date": true,
+    "date_time_uses_local_date_and_time": true,
+    "interface_language_does_not_limit_parser_language": true,
+    "unknown_tokens_are_preserved": true,
+    "empty_parsed_title_keeps_original_without_applying_tokens": true
+  },
+  "cases": [
+    {
+      "id": "zh_today_date_only",
+      "input": "今天 写日报",
+      "expected": {
+        "title": "写日报",
+        "due": {
+          "kind": "date",
+          "local_date": "2026-07-18",
+          "local_time": null
+        },
+        "reminder": null,
+        "repeat_rule": null,
+        "group_uuid": null,
+        "priority": 0,
+        "parse_applied": true
+      }
+    },
+    {
+      "id": "en_today_date_only",
+      "input": "today Write report",
+      "expected": {
+        "title": "Write report",
+        "due": {
+          "kind": "date",
+          "local_date": "2026-07-18",
+          "local_time": null
+        },
+        "reminder": null,
+        "repeat_rule": null,
+        "group_uuid": null,
+        "priority": 0,
+        "parse_applied": true
+      }
+    },
+    {
+      "id": "zh_tomorrow_time",
+      "input": "明天 10:30 开会",
+      "expected": {
+        "title": "开会",
+        "due": {
+          "kind": "datetime",
+          "local_date": "2026-07-19",
+          "local_time": "10:30"
+        },
+        "reminder": null,
+        "repeat_rule": null,
+        "group_uuid": null,
+        "priority": 0,
+        "parse_applied": true
+      }
+    },
+    {
+      "id": "en_tomorrow_time",
+      "input": "tomorrow 10:30 Meeting",
+      "expected": {
+        "title": "Meeting",
+        "due": {
+          "kind": "datetime",
+          "local_date": "2026-07-19",
+          "local_time": "10:30"
+        },
+        "reminder": null,
+        "repeat_rule": null,
+        "group_uuid": null,
+        "priority": 0,
+        "parse_applied": true
+      }
+    },
+    {
+      "id": "zh_next_weekday",
+      "input": "下周五 复盘",
+      "expected": {
+        "title": "复盘",
+        "due": {
+          "kind": "date",
+          "local_date": "2026-07-24",
+          "local_time": null
+        },
+        "reminder": null,
+        "repeat_rule": null,
+        "group_uuid": null,
+        "priority": 0,
+        "parse_applied": true
+      }
+    },
+    {
+      "id": "en_next_weekday",
+      "input": "next Friday Review",
+      "expected": {
+        "title": "Review",
+        "due": {
+          "kind": "date",
+          "local_date": "2026-07-24",
+          "local_time": null
+        },
+        "reminder": null,
+        "repeat_rule": null,
+        "group_uuid": null,
+        "priority": 0,
+        "parse_applied": true
+      }
+    },
+    {
+      "id": "zh_priority_and_group",
+      "input": "！ #工作 写方案",
+      "expected": {
+        "title": "写方案",
+        "due": null,
+        "reminder": null,
+        "repeat_rule": null,
+        "group_uuid": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "priority": 1,
+        "parse_applied": true
+      }
+    },
+    {
+      "id": "en_priority_and_group",
+      "input": "! #Work Write proposal",
+      "expected": {
+        "title": "Write proposal",
+        "due": null,
+        "reminder": null,
+        "repeat_rule": null,
+        "group_uuid": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "priority": 1,
+        "parse_applied": true
+      }
+    },
+    {
+      "id": "zh_reminder_and_repeat",
+      "input": "明天 18:00 提醒 09:00 每天 写日报",
+      "expected": {
+        "title": "写日报",
+        "due": {
+          "kind": "datetime",
+          "local_date": "2026-07-19",
+          "local_time": "18:00"
+        },
+        "reminder": {
+          "local_date": "2026-07-19",
+          "local_time": "09:00"
+        },
+        "repeat_rule": "daily",
+        "group_uuid": null,
+        "priority": 0,
+        "parse_applied": true
+      }
+    },
+    {
+      "id": "en_reminder_and_repeat",
+      "input": "tomorrow 18:00 remind 09:00 daily Write report",
+      "expected": {
+        "title": "Write report",
+        "due": {
+          "kind": "datetime",
+          "local_date": "2026-07-19",
+          "local_time": "18:00"
+        },
+        "reminder": {
+          "local_date": "2026-07-19",
+          "local_time": "09:00"
+        },
+        "repeat_rule": "daily",
+        "group_uuid": null,
+        "priority": 0,
+        "parse_applied": true
+      }
+    },
+    {
+      "id": "en_keywords_case_insensitive",
+      "input": "TODAY Important call",
+      "expected": {
+        "title": "Important call",
+        "due": {
+          "kind": "date",
+          "local_date": "2026-07-18",
+          "local_time": null
+        },
+        "reminder": null,
+        "repeat_rule": null,
+        "group_uuid": null,
+        "priority": 0,
+        "parse_applied": true
+      }
+    },
+    {
+      "id": "unknown_words_preserved",
+      "input": "someday 整理票据",
+      "expected": {
+        "title": "someday 整理票据",
+        "due": null,
+        "reminder": null,
+        "repeat_rule": null,
+        "group_uuid": null,
+        "priority": 0,
+        "parse_applied": false
+      }
+    },
+    {
+      "id": "only_tokens_keep_original",
+      "input": "tomorrow 10:30",
+      "expected": {
+        "title": "tomorrow 10:30",
+        "due": null,
+        "reminder": null,
+        "repeat_rule": null,
+        "group_uuid": null,
+        "priority": 0,
+        "parse_applied": false
+      }
+    }
+  ]
+}
+

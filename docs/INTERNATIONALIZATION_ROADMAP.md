@@ -6,14 +6,16 @@
 
 ## DI0：跨端术语与边界冻结
 
-- [ ] 固定 `system`、`zh-CN`、`en-US` 三种语言模式。
-- [ ] 固定中文和英文品牌显示规则。
-- [ ] 建立双端共享语义键清单和中英术语表。
-- [ ] 固定日期、时间、数量、文件大小和复数显示规则。
-- [ ] 固定语言偏好只在本机保存、不进入 S3 的边界。
-- [ ] 固定不翻译用户内容、Object Key、JSON 字段和内部枚举的规则。
-- [ ] 建立中英文快捷新增跨端 fixture。
-- [ ] 建立缺失键、硬编码文案和布局回归检查清单。
+- [x] 固定 `system`、`zh-CN`、`en-US` 三种语言模式。
+- [x] 固定中文和英文品牌显示规则。
+- [x] 建立双端共享语义键清单和中英术语表。
+- [x] 固定日期、时间、数量、文件大小和复数显示规则。
+- [x] 固定语言偏好只在本机保存、不进入 S3 的边界。
+- [x] 固定不翻译用户内容、Object Key、JSON 字段和内部枚举的规则。
+- [x] 建立中英文快捷新增跨端 fixture。
+- [x] 建立缺失键、硬编码文案和布局回归检查清单。
+
+交付物：[I18N_SHARED_CONTRACT.md](I18N_SHARED_CONTRACT.md) 和 [quick-add-i18n-v1.json](fixtures/quick-add-i18n-v1.json)。
 
 完成条件：两端相同功能使用相同语义键和术语，不再边开发边决定英文名称。
 
@@ -75,7 +77,7 @@
 - [ ] 前端按错误码翻译标题、说明和可执行建议。
 - [ ] 保留旧 `Err(String)` 的安全回退，避免一次性破坏 command 合约。
 - [ ] 避免把底层错误堆栈直接显示为整屏红字。
-- [ ] 扩展 `quickAdd.ts` 支持英文日期、提醒、重复和重要关键字。
+- [ ] 扩展 `quickAdd.ts` 支持英文日期、提醒、重复和重要标记。
 - [ ] 保持中文快捷新增现有行为和优先级。
 - [ ] 运行与鸿蒙端共享的中英文解析 fixture。
 - [ ] 验证英文搜索大小写不敏感且不改写用户数据。
@@ -117,4 +119,3 @@ cargo test
 5. `feat(i18n): localize tray focus and notifications`
 6. `feat(i18n): add bilingual quick add and error codes`
 7. `test(i18n): cover desktop language regression`
-
