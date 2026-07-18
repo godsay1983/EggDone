@@ -16,6 +16,8 @@
     noteAttachmentApi,
     type NoteAttachmentCacheStats,
   } from "$lib/api/noteAttachmentApi";
+  import { translator } from "$lib/i18n";
+  import { formatFileSize, formatTime } from "$lib/i18n/formatters";
 
   let settings: SyncSettings | null = null;
   let accessKey = "";
@@ -46,14 +48,16 @@
 
   async function clearAttachmentCache() {
     if (cacheBusy || !cacheStats || cacheStats.reclaimableBytes === 0) return;
-    if (!window.confirm("清理已同步附件的本地副本？需要时会从远端重新下载。")) return;
+    if (!window.confirm($translator("sync.cacheClearConfirm"))) return;
     cacheBusy = true;
     cacheError = "";
     cacheMessage = "";
     const removedBytes = cacheStats.reclaimableBytes;
     try {
       cacheStats = await noteAttachmentApi.clearCache();
-      cacheMessage = `已清理 ${formatBytes(removedBytes)} 可重新下载缓存`;
+      cacheMessage = $translator("sync.cacheCleared", {
+        size: formatFileSize(removedBytes),
+      });
     } catch (reason) {
       cacheError = errorMessage(reason);
     } finally {
@@ -93,10 +97,10 @@
       accessKey = "";
       secretKey = "";
       configureAutoSync(settings);
-      message = "同步配置已保存";
+      message = $translator("sync.settingsSaved");
       if (testAfterSave) {
         const result = await testSyncConnection();
-        message = result.message;
+        message = localizedSyncMessage(result.message);
       }
     } catch (reason) {
       error = errorMessage(reason);
@@ -109,7 +113,7 @@
     if (!settings || busy) return;
     busy = true;
     error = "";
-    message = "正在下载并合并远端任务和便签…";
+    message = $translator("sync.downloadingAndMerging");
     try {
       settings = await saveSyncSettings({
         enabled: settings.enabled,
@@ -126,7 +130,11 @@
       secretKey = "";
       configureAutoSync(settings);
       const result = await runManualSync();
-      message = `${result.message}，任务 ${result.todoCount} 条，便签 ${result.noteCount} 条`;
+      message = $translator("sync.resultSummary", {
+        message: localizedSyncMessage(result.message),
+        todos: result.todoCount,
+        notes: result.noteCount,
+      });
       await loadAttachmentCacheStats();
     } catch (reason) {
       message = "";
@@ -145,7 +153,7 @@
       await deleteSyncCredentials();
       settings = { ...settings, enabled: false, credentialsConfigured: false };
       configureAutoSync(settings);
-      message = "同步凭据已删除，同步已禁用";
+      message = $translator("sync.credentialsDeleted");
     } catch (reason) {
       error = errorMessage(reason);
     } finally {
@@ -154,21 +162,56 @@
   }
 
   function errorMessage(reason: unknown) {
-    return reason instanceof Error ? reason.message : String(reason);
+    return localizedSyncMessage(reason instanceof Error ? reason.message : String(reason));
   }
 
-  function formatBytes(bytes: number) {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+  function localizedSyncMessage(raw: string) {
+    if (raw === "连接成功，已找到同步文件") return $translator("sync.connectionFound");
+    if (raw === "连接成功，同步文件尚未创建") return $translator("sync.connectionMissing");
+    if (raw === "任务、便签和附件同步完成") return $translator("sync.serviceCompleted");
+    if (raw === "检测到远端更新，重新合并后同步完成") {
+      return $translator("sync.serviceConflictMerged");
+    }
+    if (raw === "同步未启用") return $translator("sync.disabledStatus");
+    if (raw === "同步凭据未配置") return $translator("sync.credentialsMissing");
+    if (raw === "正在同步…") return $translator("sync.syncing");
+    if (raw === "网络暂时不可用，将在下次同步时重试") {
+      return $translator("sync.offlineAdvice");
+    }
+    if (raw === "远端内容持续变化，请稍后再次同步" || raw.includes("远端文件持续发生变化")) {
+      return $translator("sync.conflictAdvice");
+    }
+    if (raw === "同步未完成，请重试") return $translator("sync.retryAdvice");
+    const retry = raw.match(/^网络异常，正在第 (\d+) 次重试…$/);
+    if (retry) return $translator("sync.networkRetry", { attempt: retry[1] });
+    const completed = raw.match(/^同步完成：任务 (\d+)，便签 (\d+)，附件 (\d+)$/);
+    if (completed) {
+      return $translator("sync.completedCounts", {
+        todos: completed[1],
+        notes: completed[2],
+        attachments: completed[3],
+      });
+    }
+    const merged = raw.match(/^冲突已合并：任务 (\d+)，便签 (\d+)，附件 (\d+)$/);
+    if (merged) {
+      return $translator("sync.conflictMergedCounts", {
+        todos: merged[1],
+        notes: merged[2],
+        attachments: merged[3],
+      });
+    }
+    if (raw.includes("远端附件清理未完成")) {
+      return $translator("sync.remoteCleanupWarning");
+    }
+    return raw;
   }
 </script>
 
 <section class="sync-section" aria-labelledby="sync-title">
   <div class="sync-heading">
     <div>
-      <strong id="sync-title">S3 / MinIO 同步</strong>
-      <span>合并本地与远端任务、便签</span>
+      <strong id="sync-title">{$translator("sync.title")}</strong>
+      <span>{$translator("sync.subtitle")}</span>
     </div>
     {#if settings}
       <label class="switch">
@@ -176,7 +219,7 @@
           type="checkbox"
           bind:checked={settings.enabled}
           disabled={busy}
-          aria-label="启用同步"
+          aria-label={$translator("sync.enable")}
         />
         <span></span>
       </label>
@@ -187,20 +230,20 @@
     <p
       class:status-error={["offline", "conflict", "failed"].includes($syncStatus.kind)}
       class="sync-status"
-      title={$syncStatus.detail ?? $syncStatus.message}
+      title={localizedSyncMessage($syncStatus.detail ?? $syncStatus.message)}
     >
-      {$syncStatus.message}
+      {localizedSyncMessage($syncStatus.message)}
       {#if $syncStatus.updatedAt}
-        <small>{new Date($syncStatus.updatedAt).toLocaleTimeString()}</small>
+        <small>{formatTime($syncStatus.updatedAt)}</small>
       {/if}
     </p>
   {/if}
 
   {#if !settings}
-    <p class="sync-placeholder">{busy ? "正在读取同步配置…" : "无法读取同步配置"}</p>
+    <p class="sync-placeholder">{busy ? $translator("sync.loadingSettings") : $translator("sync.settingsUnavailable")}</p>
   {:else}
     <label class="sync-field">
-      <span>Endpoint <small>留空使用 AWS S3</small></span>
+      <span>Endpoint <small>{$translator("sync.endpointHelp")}</small></span>
       <input
         type="url"
         bind:value={settings.endpoint}
@@ -212,7 +255,7 @@
     {#if usesHttp}
       <label class="http-warning">
         <input type="checkbox" bind:checked={settings.allowHttp} disabled={busy} />
-        <span>我了解 HTTP 会明文传输凭据、任务和便签数据</span>
+        <span>{$translator("sync.httpRiskConfirm")}</span>
       </label>
     {/if}
 
@@ -228,39 +271,39 @@
     </div>
 
     <label class="sync-field">
-      <span>任务 Object Key</span>
+      <span>{$translator("sync.todoObjectKey")}</span>
       <input bind:value={settings.objectKey} disabled={busy} />
     </label>
 
     <label class="sync-field">
-      <span>便签 Object Key <small>根据任务路径自动生成</small></span>
+      <span>{$translator("sync.noteObjectKey")} <small>{$translator("sync.noteObjectKeyHelp")}</small></span>
       <input value={settings.noteObjectKey} readonly aria-readonly="true" />
     </label>
 
     <label class="sync-field">
-      <span>附件元数据 Key <small>只读，双端共用</small></span>
+      <span>{$translator("sync.attachmentMetadataKey")} <small>{$translator("sync.readOnlyShared")}</small></span>
       <input value={settings.noteAttachmentObjectKey} readonly aria-readonly="true" />
     </label>
 
     <label class="sync-field">
-      <span>附件资源前缀 <small>原图和预览图存储位置</small></span>
+      <span>{$translator("sync.assetPrefix")} <small>{$translator("sync.assetPrefixHelp")}</small></span>
       <input value={settings.noteAssetPrefix} readonly aria-readonly="true" />
     </label>
 
     <label class="path-style">
       <input type="checkbox" bind:checked={settings.pathStyle} disabled={busy} />
-      <span>使用 Path Style（MinIO 通常需要）</span>
+      <span>{$translator("sync.pathStyleHelp")}</span>
     </label>
 
     <div class="credential-status">
-      <span>系统凭据</span>
+      <span>{$translator("sync.credentials")}</span>
       <strong class:configured={settings.credentialsConfigured}>
-        {settings.credentialsConfigured ? "已保存" : "未保存"}
+        {settings.credentialsConfigured ? $translator("sync.saved") : $translator("sync.notSaved")}
       </strong>
     </div>
 
     <label class="sync-field">
-      <span>Access Key <small>留空则保留已保存值</small></span>
+      <span>Access Key <small>{$translator("sync.keepSavedAccessKey")}</small></span>
       <input
         type="password"
         bind:value={accessKey}
@@ -280,14 +323,14 @@
 
     <div class="sync-actions">
       <button type="button" disabled={busy} onclick={() => void save(false)}>
-        保存
+        {$translator("common.save")}
       </button>
       <button
         type="button"
         disabled={busy}
         onclick={() => void save(true)}
       >
-        测试连接
+        {$translator("sync.testConnection")}
       </button>
       <button
         class="primary"
@@ -295,7 +338,7 @@
         disabled={busy || !settings.enabled}
         onclick={() => void synchronize()}
       >
-        {busy ? "处理中…" : "立即同步"}
+        {busy ? $translator("common.processing") : $translator("sync.manual")}
       </button>
     </div>
 
@@ -306,7 +349,7 @@
         disabled={busy}
         onclick={() => void removeCredentials()}
       >
-        删除凭据并禁用同步
+        {$translator("sync.deleteCredentials")}
       </button>
     {/if}
   {/if}
@@ -314,29 +357,29 @@
   <section class="attachment-cache" aria-labelledby="attachment-cache-title">
     <div class="attachment-cache-heading">
       <div>
-        <strong id="attachment-cache-title">附件缓存</strong>
-        <span>只清理已同步、可从远端重新下载的本地副本</span>
+        <strong id="attachment-cache-title">{$translator("sync.attachmentCache")}</strong>
+        <span>{$translator("sync.attachmentCacheHelp")}</span>
       </div>
       <button
         type="button"
         disabled={cacheBusy || !cacheStats || cacheStats.reclaimableBytes === 0}
         onclick={() => void clearAttachmentCache()}
       >
-        {cacheBusy ? "清理中…" : "清理缓存"}
+        {cacheBusy ? $translator("sync.clearingCache") : $translator("sync.clearCache")}
       </button>
     </div>
     {#if cacheStats}
       <div class="attachment-sync-pending">
-        <span>待同步附件</span>
-        <strong>{cacheStats.pendingCount} 个</strong>
+        <span>{$translator("sync.pendingAttachments")}</span>
+        <strong>{$translator("sync.attachmentCount", { count: cacheStats.pendingCount })}</strong>
       </div>
       <div class="attachment-cache-stats">
-        <span>本地占用 <strong>{formatBytes(cacheStats.totalBytes)}</strong></span>
-        <span>可清理 <strong>{formatBytes(cacheStats.reclaimableBytes)}</strong></span>
-        <span>待上传保护 <strong>{formatBytes(cacheStats.protectedBytes)}</strong></span>
+        <span>{$translator("sync.localUsage")} <strong>{formatFileSize(cacheStats.totalBytes)}</strong></span>
+        <span>{$translator("sync.reclaimable")} <strong>{formatFileSize(cacheStats.reclaimableBytes)}</strong></span>
+        <span>{$translator("sync.pendingUploadProtected")} <strong>{formatFileSize(cacheStats.protectedBytes)}</strong></span>
       </div>
     {:else}
-      <p class="sync-placeholder">正在统计附件缓存…</p>
+      <p class="sync-placeholder">{$translator("sync.calculatingCache")}</p>
     {/if}
     {#if cacheMessage}<p class="sync-message" role="status">{cacheMessage}</p>{/if}
     {#if cacheError}<p class="settings-error" role="alert">{cacheError}</p>{/if}

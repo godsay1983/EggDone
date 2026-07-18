@@ -1053,6 +1053,15 @@
     return $translator("sync.notSynced");
   }
 
+  function footerSyncTitle(
+    kind: import("$lib/sync/autoSync").SyncStatusKind,
+  ) {
+    if (kind === "offline") return $translator("sync.offlineAdvice");
+    if (kind === "conflict") return $translator("sync.conflictAdvice");
+    if (kind === "failed") return $translator("sync.retryAdvice");
+    return footerSyncLabel(kind);
+  }
+
   function openFocusPanel() {
     clearFocusTarget();
     focusTarget = null;
@@ -2933,7 +2942,7 @@
       )}
       class="footer-sync-status"
       type="button"
-      title={$syncStatus.detail ?? $syncStatus.message}
+      title={footerSyncTitle($syncStatus.kind)}
       onclick={() => {
         showAbout = false;
         showDataManager = false;
