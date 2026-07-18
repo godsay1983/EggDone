@@ -154,8 +154,8 @@
   let focusEndsAt: number | null = null;
   let focusRemainingMs = focusDurations.focus;
   let focusDisplayTime = "25:00";
-  let focusDisplayHint = "开始一颗番茄，先把注意力放在眼前这一件事。";
-  let focusDisplayPhase = "专注";
+  let focusDisplayHint = "";
+  let focusDisplayPhase = "";
   let focusIllustrationSrc = "/focus-illustration.png";
   let focusTarget: FocusTarget | null = getFocusTarget();
   let completingFocusTarget = false;
@@ -296,18 +296,18 @@
       : null;
   $: notes.setSearchQuery(listView === "notes" ? searchQuery : "");
   $: focusDisplayPhase = focusCompletionVisible
-    ? "完成"
+    ? $translator("focus.completed")
     : focusPhase === "focus"
-      ? "专注"
-      : "休息";
+      ? $translator("focus.title")
+      : $translator("focus.break");
   $: focusDisplayTime = formatFocusTime(focusRemainingMs);
   $: focusDisplayHint = focusCompletionVisible
-    ? "这一阶段完成了，准备切换到下一阶段。"
+    ? $translator("focus.hintCompleted")
     : focusRunning
-      ? "保持当前节奏，结束后会切到下一阶段。"
+      ? $translator("focus.hintRunning")
       : focusRemainingMs === focusDurations[focusPhase]
-        ? "开始一颗番茄，先把注意力放在眼前这一件事。"
-        : "已经暂停，继续时会从当前剩余时间开始。";
+        ? $translator("focus.hintReady")
+        : $translator("focus.hintPaused");
   $: focusIllustrationSrc = focusCompletionVisible
     ? "/focus-done.png"
     : focusPhase === "break"
@@ -3009,7 +3009,7 @@
 
 {#if showFocus}
   <div class="focus-backdrop">
-    <button class="focus-dismiss" type="button" aria-label="关闭专注面板" onclick={() => (showFocus = false)}></button>
+    <button class="focus-dismiss" type="button" aria-label={$translator("focus.closePanel")} onclick={() => (showFocus = false)}></button>
     <div
       class:completed={focusCompletionVisible}
       class:resting={focusPhase === "break" && !focusCompletionVisible}
@@ -3020,10 +3020,10 @@
     >
       <header>
         <div>
-          <p>番茄钟</p>
+          <p>{$translator("focus.timerName")}</p>
           <h2 id="focus-title">{focusDisplayPhase}</h2>
         </div>
-        <button type="button" aria-label="关闭" onclick={() => (showFocus = false)}>×</button>
+        <button type="button" aria-label={$translator("common.close")} onclick={() => (showFocus = false)}>×</button>
       </header>
 
       <img class="focus-illustration" src={focusIllustrationSrc} alt="" aria-hidden="true" />
@@ -3031,9 +3031,9 @@
       <strong class="focus-time">{focusDisplayTime}</strong>
       {#if focusTarget}
         <div class="focus-target-row">
-          <small class="focus-target">正在专注：{focusTarget.title}</small>
+          <small class="focus-target">{$translator("focus.currentTarget", { title: focusTarget.title })}</small>
           <button type="button" onclick={() => void completeFocusTarget()} disabled={completingFocusTarget}>
-            {completingFocusTarget ? "完成中" : "完成"}
+            {completingFocusTarget ? $translator("focus.completing") : $translator("focus.completed")}
           </button>
         </div>
       {/if}
@@ -3046,10 +3046,14 @@
           } else {
             toggleFocusRunning();
           }
-        }}>{focusRunning ? "暂停" : "开始"}</button>
-        <button type="button" onclick={addFocusFiveMinutes}>+5 分钟</button>
-        <button type="button" onclick={skipFocusPhase}>跳过</button>
-        <button type="button" onclick={endFocusSession}>结束</button>
+        }}>{focusRunning
+          ? $translator("focus.pause")
+          : focusRemainingMs === focusDurations[focusPhase]
+            ? $translator("focus.start")
+            : $translator("focus.resume")}</button>
+        <button type="button" onclick={addFocusFiveMinutes}>{$translator("focus.addFiveMinutes")}</button>
+        <button type="button" onclick={skipFocusPhase}>{$translator("focus.skip")}</button>
+        <button type="button" onclick={endFocusSession}>{$translator("focus.end")}</button>
       </div>
     </div>
   </div>

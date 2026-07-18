@@ -1,6 +1,7 @@
 mod commands;
 mod data_exchange;
 mod db;
+mod i18n;
 mod note_asset_store;
 mod note_attachment_sync;
 mod note_attachments;
@@ -48,6 +49,7 @@ pub fn run() {
             Some(vec!["--autostart"]),
         ))
         .plugin(tauri_plugin_notification::init())
+        .manage(i18n::I18nState::default())
         .manage(tray::PanelState::default())
         .manage(s3_sync::SyncRuntime::default())
         .setup(|app| {
@@ -131,6 +133,7 @@ pub fn run() {
             commands::publish_focus_notification,
             commands::update_focus_tray_tooltip,
             commands::restore_tray_task_tooltip,
+            commands::set_runtime_locale,
             commands::mark_panel_interaction,
             commands::toggle_panel_from_shortcut,
             commands::prepare_sync_document,

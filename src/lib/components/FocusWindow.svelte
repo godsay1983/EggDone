@@ -3,6 +3,7 @@
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { onMount } from "svelte";
+  import { translator } from "$lib/i18n";
   import {
     clearFocusTarget,
     FOCUS_SETTINGS_CHANGED_EVENT,
@@ -20,8 +21,8 @@
   let focusEndsAt: number | null = null;
   let focusRemainingMs = focusDurations.focus;
   let focusDisplayTime = "25:00";
-  let focusDisplayHint = "开始一颗番茄，先把注意力放在眼前这一件事。";
-  let focusDisplayPhase = "专注";
+  let focusDisplayHint = "";
+  let focusDisplayPhase = "";
   let focusIllustrationSrc = "/focus-illustration.png";
   let focusTarget: FocusTarget | null = getFocusTarget();
   let completingTarget = false;
@@ -30,18 +31,18 @@
   let compactMode = false;
 
   $: focusDisplayPhase = focusCompletionVisible
-    ? "完成"
+    ? $translator("focus.completed")
     : focusPhase === "focus"
-      ? "专注"
-      : "休息";
+      ? $translator("focus.title")
+      : $translator("focus.break");
   $: focusDisplayTime = formatFocusTime(focusRemainingMs);
   $: focusDisplayHint = focusCompletionVisible
-    ? "这一阶段完成了，准备切换到下一阶段。"
+    ? $translator("focus.hintCompleted")
     : focusRunning
-      ? "保持当前节奏，结束后会切到下一阶段。"
+      ? $translator("focus.hintRunning")
       : focusRemainingMs === focusDurations[focusPhase]
-        ? "开始一颗番茄，先把注意力放在眼前这一件事。"
-        : "已经暂停，继续时会从当前剩余时间开始。";
+        ? $translator("focus.hintReady")
+        : $translator("focus.hintPaused");
   $: focusIllustrationSrc = focusCompletionVisible
     ? "/focus-done.png"
     : focusPhase === "break"
@@ -307,16 +308,16 @@
 >
   <header class="focus-window-header" role="presentation" onmousedown={startWindowDrag}>
     <div>
-      <p>番茄钟</p>
+      <p>{$translator("focus.timerName")}</p>
       <h1>{focusDisplayPhase}</h1>
     </div>
     <div class="focus-window-header-actions">
       <button
         type="button"
-        aria-label={compactMode ? "展开专注窗口" : "收起为胶囊"}
+        aria-label={compactMode ? $translator("focus.expandWindow") : $translator("focus.compactWindow")}
         onclick={toggleCompactMode}
-      >{compactMode ? "展开" : "收起"}</button>
-      <button type="button" aria-label="关闭专注窗口" onclick={() => void hideFocusWindow()}>×</button>
+      >{compactMode ? $translator("focus.expand") : $translator("focus.compact")}</button>
+      <button type="button" aria-label={$translator("focus.closeWindow")} onclick={() => void hideFocusWindow()}>×</button>
     </div>
   </header>
 
@@ -326,9 +327,9 @@
     <strong>{focusDisplayTime}</strong>
     {#if focusTarget}
       <div class="focus-window-target-row">
-        <small class="focus-window-target">正在专注：{focusTarget.title}</small>
+        <small class="focus-window-target">{$translator("focus.currentTarget", { title: focusTarget.title })}</small>
         <button type="button" onclick={() => void completeFocusTarget()} disabled={completingTarget}>
-          {completingTarget ? "完成中" : "完成"}
+          {completingTarget ? $translator("focus.completing") : $translator("focus.completed")}
         </button>
       </div>
     {/if}
@@ -342,9 +343,13 @@
       } else {
         toggleFocusRunning();
       }
-    }}>{focusRunning ? "暂停" : "开始"}</button>
-    <button type="button" onclick={addFocusFiveMinutes}>+5 分钟</button>
-    <button type="button" onclick={skipFocusPhase}>跳过</button>
-    <button type="button" onclick={() => void endFocusSession()}>结束</button>
+    }}>{focusRunning
+      ? $translator("focus.pause")
+      : focusRemainingMs === focusDurations[focusPhase]
+        ? $translator("focus.start")
+        : $translator("focus.resume")}</button>
+    <button type="button" onclick={addFocusFiveMinutes}>{$translator("focus.addFiveMinutes")}</button>
+    <button type="button" onclick={skipFocusPhase}>{$translator("focus.skip")}</button>
+    <button type="button" onclick={() => void endFocusSession()}>{$translator("focus.end")}</button>
   </div>
 </main>

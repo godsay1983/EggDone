@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 use crate::{
     db::{device_id, now_millis, Database},
+    i18n::{AppLocale, I18nState},
     note_asset_store::{validate_safe_file_metadata, NoteAssetStore, NoteAttachmentCacheStats},
     note_attachment_sync, note_attachments, note_sync,
     notes::{self, Note},
@@ -1002,6 +1003,29 @@ pub fn update_focus_tray_tooltip(
 
 #[tauri::command]
 pub fn restore_tray_task_tooltip(app: AppHandle) -> Result<(), String> {
+    app.state::<I18nState>().clear_focus_tooltip();
+    tray::update_task_badge(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn set_runtime_locale(
+    locale: String,
+    app: AppHandle,
+    i18n_state: State<'_, I18nState>,
+) -> Result<(), String> {
+    let locale = AppLocale::from_code(&locale)?;
+    i18n_state.set_locale(locale);
+    if let Some(window) = app.get_webview_window("main") {
+        window
+            .set_title(locale.app_title())
+            .map_err(|error| error.to_string())?;
+    }
+    if let Some(window) = app.get_webview_window("focus") {
+        window
+            .set_title(locale.focus_window_title())
+            .map_err(|error| error.to_string())?;
+    }
     tray::update_task_badge(&app);
     Ok(())
 }

@@ -8,6 +8,7 @@ use tauri_plugin_notification::NotificationExt;
 
 use crate::{
     db::{device_id, now_millis, Database},
+    i18n::I18nState,
     tray,
 };
 
@@ -134,13 +135,14 @@ fn deliver_system_notification(app: &AppHandle, reminder: &DueReminder) -> Resul
     let app_for_click = app.clone();
     let app_for_snooze = app.clone();
     let app_for_later = app.clone();
+    let locale = app.state::<I18nState>().locale();
 
     Toast::new(app_id)
-        .title("蛋定 Todo")
-        .text1(&format!("该处理了：{}", reminder.title))
+        .title(locale.app_title())
+        .text1(&locale.reminder_body(&reminder.title))
         .duration(ToastDuration::Short)
-        .add_button("稍后 10 分钟", "snooze-10")
-        .add_button("今天晚些时候", "later-today")
+        .add_button(locale.reminder_snooze(), "snooze-10")
+        .add_button(locale.reminder_later_today(), "later-today")
         .on_activated(move |action| {
             match action.as_deref() {
                 Some("snooze-10") => {
@@ -159,10 +161,11 @@ fn deliver_system_notification(app: &AppHandle, reminder: &DueReminder) -> Resul
 
 #[cfg(not(target_os = "windows"))]
 fn deliver_system_notification(app: &AppHandle, reminder: &DueReminder) -> Result<(), String> {
+    let locale = app.state::<I18nState>().locale();
     app.notification()
         .builder()
-        .title("蛋定 Todo")
-        .body(format!("该处理了：{}", reminder.title))
+        .title(locale.app_title())
+        .body(locale.reminder_body(&reminder.title))
         .auto_cancel()
         .show()
         .map_err(|error| format!("发送系统提醒失败：{error}"))
@@ -172,16 +175,20 @@ pub(crate) fn deliver_focus_notification(
     app: &AppHandle,
     completed_phase: &str,
 ) -> Result<(), String> {
-    let body = if completed_phase == "break" {
-        "休息结束，可以开始下一轮专注。"
-    } else {
-        "专注结束，先休息一下。"
-    };
-    deliver_focus_system_notification(app, body)
+    let locale = app.state::<I18nState>().locale();
+    deliver_focus_system_notification(
+        app,
+        locale.focus_notification_title(),
+        locale.focus_notification_body(completed_phase),
+    )
 }
 
 #[cfg(target_os = "windows")]
-fn deliver_focus_system_notification(app: &AppHandle, body: &str) -> Result<(), String> {
+fn deliver_focus_system_notification(
+    app: &AppHandle,
+    title: &str,
+    body: &str,
+) -> Result<(), String> {
     use tauri_winrt_notification::{Duration as ToastDuration, Toast};
 
     let app_id = if tauri::is_dev() {
@@ -191,7 +198,7 @@ fn deliver_focus_system_notification(app: &AppHandle, body: &str) -> Result<(), 
     };
 
     Toast::new(app_id)
-        .title("蛋定专注")
+        .title(title)
         .text1(body)
         .duration(ToastDuration::Short)
         .show()
@@ -199,10 +206,14 @@ fn deliver_focus_system_notification(app: &AppHandle, body: &str) -> Result<(), 
 }
 
 #[cfg(not(target_os = "windows"))]
-fn deliver_focus_system_notification(app: &AppHandle, body: &str) -> Result<(), String> {
+fn deliver_focus_system_notification(
+    app: &AppHandle,
+    title: &str,
+    body: &str,
+) -> Result<(), String> {
     app.notification()
         .builder()
-        .title("蛋定专注")
+        .title(title)
         .body(body)
         .auto_cancel()
         .show()

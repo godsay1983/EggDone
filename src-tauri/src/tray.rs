@@ -12,6 +12,7 @@ use tauri::{
 
 use crate::{
     db::Database,
+    i18n::{AppLocale, FocusTooltipSnapshot, I18nState},
     panel_position::{self, Rect, Size},
 };
 
@@ -146,6 +147,7 @@ fn duration_since(later: Instant, earlier: Instant) -> Duration {
 
 pub fn create_tray(app: &AppHandle) -> tauri::Result<TrayIcon> {
     let menu = build_tray_menu(app, &[])?;
+    let locale = app.state::<I18nState>().locale();
 
     let tray_icon = app
         .default_window_icon()
@@ -154,7 +156,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<TrayIcon> {
 
     let tray = TrayIconBuilder::with_id(TRAY_ID)
         .icon(tray_icon)
-        .tooltip("蛋定 Todo")
+        .tooltip(locale.app_title())
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
@@ -226,18 +228,36 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<TrayIcon> {
 }
 
 fn build_tray_menu(app: &AppHandle, today_task_titles: &[String]) -> tauri::Result<Menu<Wry>> {
-    let toggle_item = MenuItem::with_id(app, "toggle", "打开 / 隐藏面板", true, None::<&str>)?;
-    let new_item = MenuItem::with_id(app, "new", "新增任务", true, None::<&str>)?;
-    let today_item = MenuItem::with_id(app, "today", "今天任务", true, None::<&str>)?;
-    let focus_start_item = MenuItem::with_id(app, "focus-start", "开始专注", true, None::<&str>)?;
-    let focus_toggle_item =
-        MenuItem::with_id(app, "focus-toggle", "暂停 / 继续专注", true, None::<&str>)?;
-    let focus_end_item = MenuItem::with_id(app, "focus-end", "结束专注", true, None::<&str>)?;
+    let locale = app.state::<I18nState>().locale();
+    let toggle_item = MenuItem::with_id(app, "toggle", locale.tray_toggle(), true, None::<&str>)?;
+    let new_item = MenuItem::with_id(app, "new", locale.tray_new_task(), true, None::<&str>)?;
+    let today_item = MenuItem::with_id(app, "today", locale.tray_today(), true, None::<&str>)?;
+    let focus_start_item = MenuItem::with_id(
+        app,
+        "focus-start",
+        locale.tray_focus_start(),
+        true,
+        None::<&str>,
+    )?;
+    let focus_toggle_item = MenuItem::with_id(
+        app,
+        "focus-toggle",
+        locale.tray_focus_toggle(),
+        true,
+        None::<&str>,
+    )?;
+    let focus_end_item = MenuItem::with_id(
+        app,
+        "focus-end",
+        locale.tray_focus_end(),
+        true,
+        None::<&str>,
+    )?;
     let preview_separator = PredefinedMenuItem::separator(app)?;
     let separator = PredefinedMenuItem::separator(app)?;
     let focus_separator = PredefinedMenuItem::separator(app)?;
-    let about_item = MenuItem::with_id(app, "about", "关于 EggDone", true, None::<&str>)?;
-    let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+    let about_item = MenuItem::with_id(app, "about", locale.tray_about(), true, None::<&str>)?;
+    let quit_item = MenuItem::with_id(app, "quit", locale.tray_quit(), true, None::<&str>)?;
     let preview_items = today_task_titles
         .iter()
         .take(TODAY_TASK_MENU_LIMIT)
@@ -318,7 +338,18 @@ pub(crate) fn update_task_badge(app: &AppHandle) {
     };
     let badge = draw_task_badge(base, remaining, total);
     let _ = tray.set_icon(Some(badge));
-    let _ = tray.set_tooltip(Some(task_tooltip(remaining, total, today_due)));
+    let i18n_state = app.state::<I18nState>();
+    let locale = i18n_state.locale();
+    let tooltip = match i18n_state.focus_tooltip() {
+        Some(snapshot) => focus_tooltip(
+            locale,
+            &snapshot.phase,
+            snapshot.remaining_ms,
+            snapshot.title.as_deref(),
+        ),
+        None => locale.task_tooltip(remaining, total, today_due),
+    };
+    let _ = tray.set_tooltip(Some(tooltip));
     if let Ok(menu) = build_tray_menu(app, &today_task_titles) {
         let _ = tray.set_menu(Some(menu));
     }
@@ -333,16 +364,18 @@ pub(crate) fn update_focus_tooltip(
     let Some(tray) = app.tray_by_id(TRAY_ID) else {
         return;
     };
-    let tooltip = focus_tooltip(phase, remaining_ms, title);
+    let i18n_state = app.state::<I18nState>();
+    i18n_state.set_focus_tooltip(FocusTooltipSnapshot {
+        phase: phase.to_string(),
+        remaining_ms,
+        title: title.map(str::to_string),
+    });
+    let tooltip = focus_tooltip(i18n_state.locale(), phase, remaining_ms, title);
     let _ = tray.set_tooltip(Some(tooltip));
 }
 
-fn task_tooltip(remaining: u32, total: u32, today_due: u32) -> String {
-    format!("蛋定 Todo · {remaining}/{total} 项未完成 · 今天 {today_due} 项")
-}
-
-fn focus_tooltip(phase: &str, remaining_ms: u64, title: Option<&str>) -> String {
-    let phase_label = if phase == "break" { "休息" } else { "专注" };
+fn focus_tooltip(locale: AppLocale, phase: &str, remaining_ms: u64, title: Option<&str>) -> String {
+    let phase_label = locale.focus_phase(phase);
     let total_seconds = remaining_ms.div_ceil(1000);
     let minutes = total_seconds / 60;
     let seconds = total_seconds % 60;
@@ -720,18 +753,30 @@ mod tests {
     #[test]
     fn tooltip_mentions_today_due_count() {
         assert_eq!(
-            task_tooltip(3, 4, 2),
+            AppLocale::ZhCn.task_tooltip(3, 4, 2),
             "蛋定 Todo · 3/4 项未完成 · 今天 2 项"
+        );
+        assert_eq!(
+            AppLocale::EnUs.task_tooltip(3, 4, 2),
+            "EggDone · 3/4 incomplete · 2 today"
         );
     }
 
     #[test]
     fn focus_tooltip_includes_phase_time_and_task() {
         assert_eq!(
-            focus_tooltip("focus", 24 * 60 * 1000 + 59 * 1000, Some("写周报")),
+            focus_tooltip(
+                AppLocale::ZhCn,
+                "focus",
+                24 * 60 * 1000 + 59 * 1000,
+                Some("写周报")
+            ),
             "专注 24:59 · 写周报"
         );
-        assert_eq!(focus_tooltip("break", 5 * 60 * 1000, None), "休息 05:00");
+        assert_eq!(
+            focus_tooltip(AppLocale::EnUs, "break", 5 * 60 * 1000, None),
+            "Break 05:00"
+        );
     }
 
     #[test]
