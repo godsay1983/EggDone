@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { translator } from "$lib/i18n";
   import type { Note, NoteAttachment, NoteColor } from "$lib/types";
   import NoteCard from "./NoteCard.svelte";
 
@@ -16,14 +17,14 @@
 
 <section class="note-list" aria-live="polite">
   {#if loading}
-    <div class="status">正在整理便签…</div>
+    <div class="status">{$translator("note.loading")}</div>
   {:else if error && items.length === 0}
     <div class="status error">{error}</div>
   {:else if items.length === 0}
     <div class="empty-state note-empty">
       <img class="empty-mascot" src="/eggdone-icon.png" alt="" aria-hidden="true" />
-      <strong>{searchActive ? "没有找到匹配便签" : "随手记下一点想法"}</strong>
-      <span>{searchActive ? "换个关键词试试" : "便签会自动保存在本机"}</span>
+      <strong>{searchActive ? $translator("note.noMatch") : $translator("note.emptyTitle")}</strong>
+      <span>{searchActive ? $translator("note.searchHint") : $translator("note.emptyHint")}</span>
     </div>
   {:else}
     {#if error}<div class="inline-error" role="alert">{error}</div>{/if}

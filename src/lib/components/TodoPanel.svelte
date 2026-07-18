@@ -605,8 +605,8 @@
     noteAttachmentBusy = true;
     noteAttachmentError = "";
     try {
-      const note = await ensureNoteForAttachment(files[0], "图片便签");
-      if (!note) throw new Error("请先保存便签后再添加图片");
+      const note = await ensureNoteForAttachment(files[0], $translator("note.imageDraftTitle"));
+      if (!note) throw new Error($translator("attachment.saveNoteBeforeImage"));
       const existing = noteAttachmentsByNote[note.uuid] ?? [];
       const imageCount = existing.filter((attachment) => attachment.kind === "image").length;
       const available = Math.max(0, 9 - imageCount);
@@ -627,8 +627,8 @@
     noteAttachmentBusy = true;
     noteAttachmentError = "";
     try {
-      const note = await ensureNoteForAttachment(files[0], "附件便签");
-      if (!note) throw new Error("请先保存便签后再添加附件");
+      const note = await ensureNoteForAttachment(files[0], $translator("note.fileDraftTitle"));
+      if (!note) throw new Error($translator("attachment.saveNoteBeforeFile"));
       for (const file of files) {
         await noteAttachmentApi.createFile(note.uuid, file);
       }
@@ -2105,7 +2105,7 @@
   {#if selectedNote === null}
     {#if listView === "notes"}
       <button class="quick-add note-quick-add" type="button" onclick={() => void createNote()}>
-        <span>新建便签</span><strong>+</strong>
+        <span>{$translator("note.add")}</span><strong>+</strong>
       </button>
     {:else}
       <form class="quick-add" onsubmit={(event) => { event.preventDefault(); void addTodo(); }}>
@@ -2986,15 +2986,15 @@
 
 {#if deletedNote}
   <div class="undo-toast" role="status">
-    <span>已删除“{deletedNote.title || "无标题便签"}”</span>
-    <button type="button" onclick={() => void undoNoteDelete()}>撤销</button>
+    <span>{$translator("note.deleted", { title: deletedNote.title || $translator("note.untitled") })}</span>
+    <button type="button" onclick={() => void undoNoteDelete()}>{$translator("common.undo")}</button>
   </div>
 {/if}
 
 {#if deletedNoteAttachment}
   <div class="undo-toast" role="status">
-    <span>已删除图片“{deletedNoteAttachment.display_name}”</span>
-    <button type="button" onclick={() => void undoNoteAttachmentDelete()}>撤销</button>
+    <span>{$translator("attachment.deletedImage", { name: deletedNoteAttachment.display_name })}</span>
+    <button type="button" onclick={() => void undoNoteAttachmentDelete()}>{$translator("common.undo")}</button>
   </div>
 {/if}
 

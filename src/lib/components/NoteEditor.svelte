@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { languageState, translator, type TranslationKey } from "$lib/i18n";
+  import { formatFileSize } from "$lib/i18n/formatters";
   import type { Note, NoteAttachment, NoteColor } from "$lib/types";
 
   export let note: Note;
@@ -117,12 +119,6 @@
     return extension && extension.length <= 8 ? extension : "FILE";
   }
 
-  function formatBytes(bytes: number) {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
-  }
-
   async function openAttachment(attachment: NoteAttachment) {
     viewerLoading = true;
     viewerError = "";
@@ -155,20 +151,24 @@
 
   function attachmentSummary() {
     if (imageAttachments.length > 0 && fileAttachments.length > 0) {
-      return `${imageAttachments.length} 张图片 · ${fileAttachments.length} 个文件`;
+      return `${$translator("note.imagesCount", { count: imageAttachments.length })} · ${$translator("note.filesCount", { count: fileAttachments.length })}`;
     }
-    if (imageAttachments.length > 0) return `${imageAttachments.length} 张图片`;
-    return `${fileAttachments.length} 个文件`;
+    if (imageAttachments.length > 0) return $translator("note.imagesCount", { count: imageAttachments.length });
+    return $translator("note.filesCount", { count: fileAttachments.length });
   }
 
   function attachmentState(attachment: NoteAttachment) {
-    if (attachment.transfer_state === "failed") return "处理失败";
-    if (attachment.transfer_state === "downloading") return "下载中";
-    if (attachment.transfer_state === "cached") return "已缓存";
-    if (attachment.transfer_state === "uploading") return "上传中";
-    if (attachment.transfer_state === "pending_upload") return "等待同步";
-    if (attachment.transfer_state === "remote_only") return "需要下载";
-    return "已同步";
+    if (attachment.transfer_state === "failed") return $translator("attachment.failed");
+    if (attachment.transfer_state === "downloading") return $translator("attachment.downloading");
+    if (attachment.transfer_state === "cached") return $translator("attachment.cached");
+    if (attachment.transfer_state === "uploading") return $translator("attachment.uploading");
+    if (attachment.transfer_state === "pending_upload") return $translator("attachment.pendingUpload");
+    if (attachment.transfer_state === "remote_only") return $translator("attachment.needsDownload");
+    return $translator("attachment.synced");
+  }
+
+  function colorName(color: NoteColor) {
+    return $translator(`note.color${color === "default" ? "Default" : color[0].toUpperCase() + color.slice(1)}` as TranslationKey);
   }
 </script>
 
@@ -177,13 +177,13 @@
 <section
   class="note-editor"
   data-note-color={note.color}
-  aria-label="编辑便签"
+  aria-label={$translator("note.edit")}
   ondragover={(event) => event.preventDefault()}
   ondrop={dropAttachments}
 >
   <header>
-    <button type="button" onclick={() => void onDone()}>返回</button>
-    <span>{error ? error : saving ? "保存中…" : draft ? "开始输入后自动保存" : "已保存在本机"}</span>
+    <button type="button" onclick={() => void onDone()}>{$translator("common.back")}</button>
+    <span>{error ? error : saving ? $translator("note.saving") : draft ? $translator("note.autoSaveHint") : $translator("note.savedLocal")}</span>
     <input bind:this={imageInput} class="note-file-input" type="file" accept="image/jpeg,image/png,image/webp" multiple onchange={selectImages} />
     <input bind:this={attachmentInput} class="note-file-input" type="file" accept=".pdf,.txt,.md,.markdown,.docx,.xlsx,.pptx,.zip" multiple onchange={selectAttachments} />
     <div class="note-add-control">
@@ -193,39 +193,39 @@
         aria-expanded={addMenuOpen}
         disabled={attachmentBusy}
         onclick={() => (addMenuOpen = !addMenuOpen)}
-      >添加</button>
+      >{$translator("attachment.add")}</button>
       {#if addMenuOpen}
         <div class="note-add-menu">
-          <button type="button" onclick={() => { addMenuOpen = false; imageInput.click(); }}>添加图片</button>
-          <button type="button" onclick={() => { addMenuOpen = false; attachmentInput.click(); }}>添加文件</button>
+          <button type="button" onclick={() => { addMenuOpen = false; imageInput.click(); }}>{$translator("attachment.addImage")}</button>
+          <button type="button" onclick={() => { addMenuOpen = false; attachmentInput.click(); }}>{$translator("attachment.addFile")}</button>
         </div>
       {/if}
     </div>
-    <button class="primary" type="button" onclick={() => void onDone()}>完成</button>
+    <button class="primary" type="button" onclick={() => void onDone()}>{$translator("common.done")}</button>
   </header>
   <input
     bind:this={titleInput}
     bind:value={title}
     maxlength="100"
-    placeholder="便签标题"
-    aria-label="便签标题"
+    placeholder={$translator("note.titlePlaceholder")}
+    aria-label={$translator("note.titlePlaceholder")}
     autocomplete="off"
     oninput={changed}
   />
   <textarea
     bind:value={content}
     maxlength="20000"
-    placeholder="写下想法、资料或临时记录…"
-    aria-label="便签内容"
+    placeholder={$translator("note.contentPlaceholder")}
+    aria-label={$translator("note.contentPlaceholder")}
     autocomplete="off"
     oninput={changed}
     onpaste={pasteImages}
   ></textarea>
   {#if attachments.length > 0}
-    <section class="note-attachment-summary" aria-label="便签附件摘要">
+    <section class="note-attachment-summary" aria-label={$translator("note.attachments")}>
       <button class="note-attachment-summary-heading" type="button" onclick={() => (attachmentManagerOpen = true)}>
-        <span><strong>附件 {attachments.length}</strong><small>{attachmentSummary()}</small></span>
-        <em>管理</em>
+        <span><strong>{$translator("attachment.summary", { count: attachments.length })}</strong><small>{attachmentSummary()}</small></span>
+        <em>{$translator("common.manage")}</em>
       </button>
       <div class="note-attachment-strip">
         {#each attachments as attachment (attachment.uuid)}
@@ -233,7 +233,7 @@
             {#if attachment.kind === "image" && attachmentPreviewUrls[attachment.uuid]}
               <img src={attachmentPreviewUrls[attachment.uuid]} alt="" aria-hidden="true" />
             {:else}
-              <span>{attachment.kind === "image" ? "图片" : fileKind(attachment)}</span>
+              <span>{attachment.kind === "image" ? $translator("attachment.image") : fileKind(attachment)}</span>
               {#if attachment.kind === "file"}<small>{attachment.display_name}</small>{/if}
             {/if}
             {#if attachment.transfer_state === "failed"}<em>!</em>{/if}
@@ -243,19 +243,19 @@
     </section>
   {/if}
   <footer>
-    <div class="note-color-picker" aria-label="便签颜色">
+    <div class="note-color-picker" aria-label={$translator("note.color")}>
       {#each colors as color}
         <button
           class:active={note.color === color}
           data-note-color={color}
           type="button"
-          aria-label={`切换为${color}颜色`}
+          aria-label={$translator("note.changeToColor", { color: colorName(color) })}
           onclick={() => void onColor(note, color)}
         ></button>
       {/each}
     </div>
-    <button type="button" onclick={() => void onPin(note, !note.pinned)}>{note.pinned ? "取消置顶" : "置顶"}</button>
-    <button class="danger" type="button" onclick={() => void onDelete(note)}>{draft ? "放弃" : "删除"}</button>
+    <button type="button" onclick={() => void onPin(note, !note.pinned)}>{note.pinned ? $translator("note.unpin") : $translator("note.pin")}</button>
+    <button class="danger" type="button" onclick={() => void onDelete(note)}>{draft ? $translator("note.discard") : $translator("common.delete")}</button>
   </footer>
 </section>
 
@@ -264,7 +264,7 @@
     class="note-attachment-manager"
     role="dialog"
     aria-modal="true"
-    aria-label="管理便签附件"
+    aria-label={$translator("attachment.managerLabel")}
     tabindex="-1"
     onkeydown={handleViewerKeydown}
     onclick={(event) => {
@@ -273,16 +273,16 @@
   >
     <div data-note-color={note.color}>
       <header>
-        <span><strong>管理附件</strong><small>{attachmentSummary()}</small></span>
-        <button type="button" disabled={attachmentBusy} onclick={() => imageInput.click()}>添加图片</button>
-        <button type="button" disabled={attachmentBusy} onclick={() => attachmentInput.click()}>添加文件</button>
-        <button class="manager-close" type="button" aria-label="关闭附件管理" onclick={() => (attachmentManagerOpen = false)}>×</button>
+        <span><strong>{$translator("attachment.manage")}</strong><small>{attachmentSummary()}</small></span>
+        <button type="button" disabled={attachmentBusy} onclick={() => imageInput.click()}>{$translator("attachment.addImage")}</button>
+        <button type="button" disabled={attachmentBusy} onclick={() => attachmentInput.click()}>{$translator("attachment.addFile")}</button>
+        <button class="manager-close" type="button" aria-label={$translator("attachment.closeManager")} onclick={() => (attachmentManagerOpen = false)}>×</button>
       </header>
       <div class="note-attachment-manager-scroll">
         {#if imageAttachments.length > 0}
           <section>
-            <h3>图片</h3>
-            <div class="note-attachment-grid" aria-label="便签图片">
+            <h3>{$translator("attachment.image")}</h3>
+            <div class="note-attachment-grid" aria-label={$translator("attachment.images")}>
               {#each imageAttachments as attachment (attachment.uuid)}
                 {@const index = attachmentKindIndex(attachment)}
                 <article class:failed={attachment.transfer_state === "failed"}>
@@ -290,18 +290,18 @@
                     {#if attachmentPreviewUrls[attachment.uuid]}
                       <img src={attachmentPreviewUrls[attachment.uuid]} alt={attachment.display_name} />
                     {:else}
-                      <span>{attachment.transfer_state === "remote_only" ? "下载预览" : "正在准备"}</span>
+                      <span>{attachment.transfer_state === "remote_only" ? $translator("attachment.needsPreview") : $translator("attachment.preparing")}</span>
                     {/if}
                   </button>
                   <div>
                     <small title={attachment.transfer_error ?? attachment.display_name}>{attachmentState(attachment)}</small>
                     {#if attachment.transfer_state === "failed"}
-                      <button type="button" disabled={attachmentBusy} onclick={() => void onRetryAttachment(attachment)}>重试</button>
+                      <button type="button" disabled={attachmentBusy} onclick={() => void onRetryAttachment(attachment)}>{$translator("attachment.retry")}</button>
                     {:else}
-                      <button class="attachment-order-button" type="button" title="向前移动" aria-label="向前移动" disabled={attachmentBusy || index <= 0} onclick={() => void onMoveAttachment(attachment, -1)}>←</button>
-                      <button class="attachment-order-button" type="button" title="向后移动" aria-label="向后移动" disabled={attachmentBusy || index >= attachmentKindCount(attachment) - 1} onclick={() => void onMoveAttachment(attachment, 1)}>→</button>
+                      <button class="attachment-order-button" type="button" title={$translator("attachment.moveForward")} aria-label={$translator("attachment.moveForward")} disabled={attachmentBusy || index <= 0} onclick={() => void onMoveAttachment(attachment, -1)}>←</button>
+                      <button class="attachment-order-button" type="button" title={$translator("attachment.moveBackward")} aria-label={$translator("attachment.moveBackward")} disabled={attachmentBusy || index >= attachmentKindCount(attachment) - 1} onclick={() => void onMoveAttachment(attachment, 1)}>→</button>
                     {/if}
-                    <button class="danger" type="button" disabled={attachmentBusy} onclick={() => void onDeleteAttachment(attachment)}>删除</button>
+                    <button class="danger" type="button" disabled={attachmentBusy} onclick={() => void onDeleteAttachment(attachment)}>{$translator("common.delete")}</button>
                   </div>
                 </article>
               {/each}
@@ -310,25 +310,25 @@
         {/if}
         {#if fileAttachments.length > 0}
           <section>
-            <h3>文件</h3>
-            <div class="note-file-list" aria-label="便签附件">
+            <h3>{$translator("attachment.file")}</h3>
+            <div class="note-file-list" aria-label={$translator("note.attachments")}>
               {#each fileAttachments as attachment (attachment.uuid)}
                 {@const index = attachmentKindIndex(attachment)}
                 <article class:failed={attachment.transfer_state === "failed"}>
                   <span class="note-file-kind" aria-hidden="true">{fileKind(attachment)}</span>
                   <div class="note-file-info">
                     <strong title={attachment.display_name}>{attachment.display_name}</strong>
-                    <small title={attachment.transfer_error ?? attachment.display_name}>{formatBytes(attachment.byte_size)} · {attachmentState(attachment)}</small>
+                    <small title={attachment.transfer_error ?? attachment.display_name}>{formatFileSize(attachment.byte_size, $languageState.resolvedLocale)} · {attachmentState(attachment)}</small>
                   </div>
                   {#if attachment.transfer_state === "failed"}
-                    <button type="button" disabled={attachmentBusy} onclick={() => void onRetryAttachment(attachment)}>重试</button>
+                    <button type="button" disabled={attachmentBusy} onclick={() => void onRetryAttachment(attachment)}>{$translator("attachment.retry")}</button>
                   {:else}
-                    <button type="button" disabled={attachmentBusy} onclick={() => void openFile(attachment)}>打开</button>
-                    <button type="button" disabled={attachmentBusy} onclick={() => void saveAttachment(attachment)}>保存</button>
+                    <button type="button" disabled={attachmentBusy} onclick={() => void openFile(attachment)}>{$translator("attachment.open")}</button>
+                    <button type="button" disabled={attachmentBusy} onclick={() => void saveAttachment(attachment)}>{$translator("attachment.save")}</button>
                   {/if}
-                  <button class="attachment-order-button" type="button" title="向前移动" aria-label="向前移动" disabled={attachmentBusy || index <= 0} onclick={() => void onMoveAttachment(attachment, -1)}>←</button>
-                  <button class="attachment-order-button" type="button" title="向后移动" aria-label="向后移动" disabled={attachmentBusy || index >= attachmentKindCount(attachment) - 1} onclick={() => void onMoveAttachment(attachment, 1)}>→</button>
-                  <button class="danger" type="button" disabled={attachmentBusy} onclick={() => void onDeleteAttachment(attachment)}>删除</button>
+                  <button class="attachment-order-button" type="button" title={$translator("attachment.moveForward")} aria-label={$translator("attachment.moveForward")} disabled={attachmentBusy || index <= 0} onclick={() => void onMoveAttachment(attachment, -1)}>←</button>
+                  <button class="attachment-order-button" type="button" title={$translator("attachment.moveBackward")} aria-label={$translator("attachment.moveBackward")} disabled={attachmentBusy || index >= attachmentKindCount(attachment) - 1} onclick={() => void onMoveAttachment(attachment, 1)}>→</button>
+                  <button class="danger" type="button" disabled={attachmentBusy} onclick={() => void onDeleteAttachment(attachment)}>{$translator("common.delete")}</button>
                 </article>
               {/each}
               {#if fileActionError}<p class="note-file-error">{fileActionError}</p>{/if}
@@ -345,7 +345,7 @@
     class="note-image-viewer"
     role="dialog"
     aria-modal="true"
-    aria-label="查看图片"
+    aria-label={$translator("attachment.viewer")}
     tabindex="-1"
     onclick={(event) => {
       if (event.target === event.currentTarget) closeViewer();
@@ -355,15 +355,15 @@
     <div>
       <header>
         <strong>{viewerAttachment.display_name}</strong>
-        <button class="viewer-close" type="button" title="关闭" aria-label="关闭图片查看器" onclick={closeViewer}>×</button>
+        <button class="viewer-close" type="button" title={$translator("common.close")} aria-label={$translator("attachment.viewerClose")} onclick={closeViewer}>×</button>
       </header>
       {#if viewerLoading}
-        <span>正在读取原图…</span>
+        <span>{$translator("attachment.loadingOriginal")}</span>
       {:else if viewerUrl}
         <img src={viewerUrl} alt={viewerAttachment.display_name} />
-        <a href={viewerUrl} download={viewerAttachment.display_name}>保存原图</a>
+        <a href={viewerUrl} download={viewerAttachment.display_name}>{$translator("attachment.saveOriginal")}</a>
       {:else}
-        <span>{viewerError || "原图暂不可用"}</span>
+        <span>{viewerError || $translator("attachment.viewerUnavailable")}</span>
       {/if}
     </div>
   </div>

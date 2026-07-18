@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { languageState, translator, type TranslationKey } from "$lib/i18n";
+  import { formatDate } from "$lib/i18n/formatters";
   import type { Note, NoteAttachment, NoteColor } from "$lib/types";
 
   export let note: Note;
@@ -12,8 +14,8 @@
   const colors: NoteColor[] = ["default", "yellow", "pink", "green", "blue"];
   let menuOpen = false;
 
-  $: preview = note.content.trim() || "点击打开便签";
-  $: title = note.title.trim() || preview.split(/\r?\n/, 1)[0] || "无标题便签";
+  $: preview = note.content.trim() || $translator("note.openHint");
+  $: title = note.title.trim() || preview.split(/\r?\n/, 1)[0] || $translator("note.untitled");
   $: imageAttachments = attachments.filter((attachment) => attachment.kind === "image");
   $: fileAttachments = attachments.filter((attachment) => attachment.kind === "file");
 
@@ -21,13 +23,17 @@
     const extension = attachment.display_name.split(".").pop()?.toUpperCase();
     return extension && extension.length <= 8 ? extension : "FILE";
   }
+
+  function colorName(color: NoteColor) {
+    return $translator(`note.color${color === "default" ? "Default" : color[0].toUpperCase() + color.slice(1)}` as TranslationKey);
+  }
 </script>
 
 <article class="note-card" data-note-color={note.color}>
   <button class="note-card-body" type="button" onclick={() => onOpen(note)}>
     <div class="note-card-heading">
       <strong>{title}</strong>
-      {#if note.pinned}<span title="已置顶">置顶</span>{/if}
+      {#if note.pinned}<span title={$translator("note.pinned")}>{$translator("note.pin")}</span>{/if}
     </div>
     <p class:with-attachments={attachments.length > 0}>{preview}</p>
     {#if attachments.length > 0}
@@ -37,13 +43,13 @@
             {#if attachmentPreviewUrls[imageAttachments[0].uuid]}
               <img src={attachmentPreviewUrls[imageAttachments[0].uuid]} alt="" aria-hidden="true" />
             {:else}
-              <span>图片</span>
+              <span>{$translator("attachment.image")}</span>
             {/if}
           </div>
           <span class="note-card-media-info">
-            <strong>{imageAttachments.length} 张图片</strong>
+            <strong>{$translator("note.imagesCount", { count: imageAttachments.length })}</strong>
             <small title={imageAttachments[0].display_name}>{imageAttachments[0].display_name}</small>
-            {#if fileAttachments.length > 0}<em>另有 {fileAttachments.length} 个文件</em>{/if}
+            {#if fileAttachments.length > 0}<em>{$translator("note.otherFiles", { count: fileAttachments.length })}</em>{/if}
           </span>
         </div>
       {:else if fileAttachments.length > 0}
@@ -54,23 +60,23 @@
         </div>
       {/if}
     {/if}
-    <small>{new Date(note.updated_at).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</small>
+    <small>{formatDate(note.updated_at, { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }, $languageState.resolvedLocale)}</small>
   </button>
   <div class="note-card-actions">
-    <button type="button" title={note.pinned ? "取消置顶" : "置顶"} onclick={() => void onPin(note, !note.pinned)}>
-      {note.pinned ? "取消置顶" : "置顶"}
+    <button type="button" title={note.pinned ? $translator("note.unpin") : $translator("note.pin")} onclick={() => void onPin(note, !note.pinned)}>
+      {note.pinned ? $translator("note.unpin") : $translator("note.pin")}
     </button>
-    <button type="button" aria-expanded={menuOpen} onclick={() => (menuOpen = !menuOpen)}>换色</button>
-    <button class="danger" type="button" onclick={() => void onDelete(note)}>删除</button>
+    <button type="button" aria-expanded={menuOpen} onclick={() => (menuOpen = !menuOpen)}>{$translator("note.changeColor")}</button>
+    <button class="danger" type="button" onclick={() => void onDelete(note)}>{$translator("common.delete")}</button>
   </div>
   {#if menuOpen}
-    <div class="note-color-picker" aria-label="便签颜色">
+    <div class="note-color-picker" aria-label={$translator("note.color")}>
       {#each colors as color}
         <button
           class:active={note.color === color}
           data-note-color={color}
           type="button"
-          aria-label={`切换为${color}颜色`}
+          aria-label={$translator("note.changeToColor", { color: colorName(color) })}
           onclick={() => { menuOpen = false; void onColor(note, color); }}
         ></button>
       {/each}
