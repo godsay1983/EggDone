@@ -657,7 +657,9 @@ footer {
 }
 
 .summary-menu-button {
-  min-width: 34px;
+  min-width: 40px;
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .summary-menu {

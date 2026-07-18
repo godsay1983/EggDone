@@ -74,8 +74,8 @@ export const enUS = {
   "todo.willCreate": "Will create “{title}”",
   "todo.disableParsing": "Use original text",
   "todo.incompleteCount": {
-    one: "{count} incomplete",
-    other: "{count} incomplete",
+    one: "{count} left",
+    other: "{count} left",
   },
   "todo.details": "Task details",
   "todo.dragDisabled": "Dragging is unavailable",
