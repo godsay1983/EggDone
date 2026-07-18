@@ -5,6 +5,7 @@
   import { flip } from "svelte/animate";
   import { onMount, tick } from "svelte";
 
+  import { languageState, translator } from "$lib/i18n";
   import { todoApi } from "$lib/api/todoApi";
   import type { TodoScheduleInput } from "$lib/api/todoApi";
   import {
@@ -84,58 +85,61 @@
     | "later"
     | "unscheduled";
 
-  const groupColorOptions: Array<{ value: GroupColor; label: string }> = [
-    { value: "yellow", label: "蛋黄" },
-    { value: "green", label: "薄荷" },
-    { value: "blue", label: "晴空" },
-    { value: "peach", label: "蜜桃" },
-    { value: "lavender", label: "薰衣草" },
-    { value: "gray", label: "米灰" },
+  let groupColorOptions: Array<{ value: GroupColor; label: string }> = [];
+  $: groupColorOptions = [
+    { value: "yellow", label: $translator("group.colorYellow") },
+    { value: "green", label: $translator("group.colorGreen") },
+    { value: "blue", label: $translator("group.colorBlue") },
+    { value: "peach", label: $translator("group.colorPeach") },
+    { value: "lavender", label: $translator("group.colorLavender") },
+    { value: "gray", label: $translator("group.colorGray") },
   ];
 
-  const quadrantDefinitions: Array<{
+  let quadrantDefinitions: Array<{
     key: QuadrantKey;
     title: string;
     subtitle: string;
     tone: string;
-  }> = [
+  }> = [];
+  $: quadrantDefinitions = [
     {
       key: "importantUrgent",
-      title: "立刻做",
-      subtitle: "重要且紧急",
+      title: $translator("matrix.q1.title"),
+      subtitle: $translator("matrix.q1.subtitle"),
       tone: "warm",
     },
     {
       key: "importantNotUrgent",
-      title: "安排做",
-      subtitle: "重要不紧急",
+      title: $translator("matrix.q2.title"),
+      subtitle: $translator("matrix.q2.subtitle"),
       tone: "gold",
     },
     {
       key: "normalUrgent",
-      title: "顺手做",
-      subtitle: "不重要但紧急",
+      title: $translator("matrix.q3.title"),
+      subtitle: $translator("matrix.q3.subtitle"),
       tone: "blue",
     },
     {
       key: "normalNotUrgent",
-      title: "有空再说",
-      subtitle: "不重要不紧急",
+      title: $translator("matrix.q4.title"),
+      subtitle: $translator("matrix.q4.subtitle"),
       tone: "gray",
     },
   ];
 
-  const agendaDefinitions: Array<{
+  let agendaDefinitions: Array<{
     key: AgendaKey;
     title: string;
     subtitle: string;
-  }> = [
-    { key: "overdue", title: "逾期", subtitle: "已经过期，优先看一眼" },
-    { key: "today", title: "今天", subtitle: "今天要处理" },
-    { key: "tomorrow", title: "明天", subtitle: "提前安排" },
-    { key: "week", title: "本周内", subtitle: "接下来几天" },
-    { key: "later", title: "更晚", subtitle: "未来安排" },
-    { key: "unscheduled", title: "无到期日", subtitle: "还没有明确时间" },
+  }> = [];
+  $: agendaDefinitions = [
+    { key: "overdue", title: $translator("agenda.overdue.title"), subtitle: $translator("agenda.overdue.subtitle") },
+    { key: "today", title: $translator("agenda.today.title"), subtitle: $translator("agenda.today.subtitle") },
+    { key: "tomorrow", title: $translator("agenda.tomorrow.title"), subtitle: $translator("agenda.tomorrow.subtitle") },
+    { key: "week", title: $translator("agenda.week.title"), subtitle: $translator("agenda.week.subtitle") },
+    { key: "later", title: $translator("agenda.later.title"), subtitle: $translator("agenda.later.subtitle") },
+    { key: "unscheduled", title: $translator("agenda.unscheduled.title"), subtitle: $translator("agenda.unscheduled.subtitle") },
   ];
   let title = "";
   let quickAddParsingDisabledFor = "";
@@ -1013,9 +1017,9 @@
   }
 
   function groupLabel(group: string, groups: TodoGroup[]) {
-    if (group === "all") return "全部";
-    if (group === "ungrouped") return "未分组";
-    return groups.find((item) => item.uuid === group)?.name ?? "分组";
+    if (group === "all") return $translator("nav.all");
+    if (group === "ungrouped") return $translator("todo.noGroup");
+    return groups.find((item) => item.uuid === group)?.name ?? $translator("todo.group");
   }
 
   function groupColorValue(color: string): GroupColor {
@@ -1041,12 +1045,12 @@
   function footerSyncLabel(
     kind: import("$lib/sync/autoSync").SyncStatusKind,
   ) {
-    if (kind === "syncing") return "同步中";
-    if (kind === "synced") return "已同步";
-    if (kind === "offline") return "离线";
-    if (kind === "conflict") return "有冲突";
-    if (kind === "failed") return "同步失败";
-    return "未同步";
+    if (kind === "syncing") return $translator("sync.syncing");
+    if (kind === "synced") return $translator("sync.synced");
+    if (kind === "offline") return $translator("sync.offline");
+    if (kind === "conflict") return $translator("sync.conflict");
+    if (kind === "failed") return $translator("sync.failed");
+    return $translator("sync.notSynced");
   }
 
   function openFocusPanel() {
@@ -1364,17 +1368,15 @@
   }
 
   function agendaDayLabel(dateKey: string, date: Date) {
-    if (dateKey === localDateString(0)) return "今天";
-    if (dateKey === localDateString(1)) return "明天";
-    return ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][
-      date.getDay()
-    ];
+    if (dateKey === localDateString(0)) return $translator("todo.today");
+    if (dateKey === localDateString(1)) return $translator("todo.tomorrow");
+    return new Intl.DateTimeFormat($languageState.resolvedLocale, { weekday: "short" }).format(date);
   }
 
   function selectedAgendaLabel() {
     const dateKey = selectedAgendaDate ?? localDateString(0);
-    if (dateKey === localDateString(0)) return "今天";
-    if (dateKey === localDateString(1)) return "明天";
+    if (dateKey === localDateString(0)) return $translator("todo.today");
+    if (dateKey === localDateString(1)) return $translator("todo.tomorrow");
     return dateKey.slice(5).replace("-", "/");
   }
 
@@ -2019,8 +2021,8 @@
     <div class="brand">
       <img class="mascot" src="/eggdone-icon.png" alt="" aria-hidden="true" />
       <div>
-        <h1>蛋定 Todo</h1>
-        <p>拖拖蛋陪你慢慢完成</p>
+        <h1>{$translator("app.name")}</h1>
+        <p>{$translator("app.companionTagline")}</p>
       </div>
     </div>
 
@@ -2028,8 +2030,8 @@
       <button
         class="focus-button"
         type="button"
-        aria-label="专注"
-        title="专注"
+        aria-label={$translator("nav.focus")}
+        title={$translator("nav.focus")}
         onclick={openFocusPanel}
       >
         <svg viewBox="0 0 20 20" aria-hidden="true">
@@ -2041,8 +2043,8 @@
       <button
         class="settings-button"
         type="button"
-        aria-label="设置"
-        title="设置"
+        aria-label={$translator("nav.settings")}
+        title={$translator("nav.settings")}
         onclick={() => {
           showAbout = false;
           showDataManager = false;
@@ -2059,8 +2061,8 @@
       <button
         class="data-button"
         type="button"
-        aria-label="数据管理"
-        title="数据管理"
+        aria-label={$translator("nav.data")}
+        title={$translator("nav.data")}
         onclick={() => {
           showAbout = false;
           showSettings = false;
@@ -2076,8 +2078,8 @@
       <button
         class="theme-button"
         type="button"
-        aria-label={theme === "light" ? "切换到暗色主题" : "切换到亮色主题"}
-        title={theme === "light" ? "切换到暗色主题" : "切换到亮色主题"}
+        aria-label={theme === "light" ? $translator("settings.switchDark") : $translator("settings.switchLight")}
+        title={theme === "light" ? $translator("settings.switchDark") : $translator("settings.switchLight")}
         onclick={toggleTheme}
       >
         {#if theme === "light"}
@@ -2092,7 +2094,7 @@
         {/if}
       </button>
 
-      <button class="close-button" type="button" aria-label="隐藏面板" title="隐藏面板" onclick={() => todoApi.hidePanel()}>
+      <button class="close-button" type="button" aria-label={$translator("common.hidePanel")} title={$translator("common.hidePanel")} onclick={() => todoApi.hidePanel()}>
         <svg viewBox="0 0 20 20" aria-hidden="true">
           <path d="m5 5 10 10m0-10L5 15" />
         </svg>
@@ -2111,11 +2113,11 @@
           bind:this={inputElement}
           bind:value={title}
           maxlength="200"
-          placeholder={`准备完成什么？${groupLabel(selectedGroup, $todos.groups)} · 回车添加`}
-          aria-label="新任务内容"
+          placeholder={$translator("todo.quickPlaceholder", { group: groupLabel(selectedGroup, $todos.groups) })}
+          aria-label={$translator("todo.newTaskContent")}
           autocomplete="off"
         />
-        <button type="submit" disabled={!title.trim() || adding} aria-label="添加任务">
+        <button type="submit" disabled={!title.trim() || adding} aria-label={$translator("todo.add")}>
           {adding ? "…" : "+"}
         </button>
       </form>
@@ -2124,23 +2126,23 @@
   {#if quickAddPreview && listView !== "notes"}
     <div class="quick-add-preview" role="status">
       <span>
-        将创建“{quickAddPreview.title}”
-        {#if quickAddPreview.label}，到期 {quickAddPreview.label}{/if}
-        {#if quickAddPreview.groupName}，分组 {quickAddPreview.groupName}{/if}
-        {#if quickAddPreview.priority === 1}，标记重要{/if}
+        {$translator("todo.willCreate", { title: quickAddPreview.title })}
+        {#if quickAddPreview.label} · {$translator("todo.dueAt", { time: quickAddPreview.label })}{/if}
+        {#if quickAddPreview.groupName} · {$translator("todo.group")}: {quickAddPreview.groupName}{/if}
+        {#if quickAddPreview.priority === 1} · {$translator("todo.important")}{/if}
       </span>
-      <button type="button" onclick={disableQuickAddParsing}>不解析</button>
+      <button type="button" onclick={disableQuickAddParsing}>{$translator("todo.disableParsing")}</button>
     </div>
   {/if}
 
   {#if listView !== "notes"}
-  <section class="group-filter" aria-label="任务分组">
+  <section class="group-filter" aria-label={$translator("group.taskGroups")}>
     {#if groupScrollOverflowing}
       <button
         class="group-scroll-control"
         type="button"
-        aria-label="向左浏览分组"
-        title="向左浏览分组"
+        aria-label={$translator("group.scrollLeft")}
+        title={$translator("group.scrollLeft")}
         disabled={!groupScrollCanMoveLeft}
         onclick={() => scrollGroups(-1)}
       >
@@ -2153,7 +2155,7 @@
       class:overflowing={groupScrollOverflowing}
       class:dragging={groupScrollDragging}
       role="group"
-      aria-label="可横向浏览的任务分组"
+      aria-label={$translator("group.browse")}
       onscroll={updateGroupScrollState}
       onwheel={handleGroupScrollWheel}
       onpointerdown={handleGroupScrollPointerDown}
@@ -2168,7 +2170,7 @@
         type="button"
         onclick={() => selectGroupFromScroll("all")}
       >
-        全部
+        {$translator("nav.all")}
       </button>
       <button
         class:active={selectedGroup === "ungrouped"}
@@ -2176,10 +2178,10 @@
         data-group-filter="ungrouped"
         data-group-drop-target="ungrouped"
         type="button"
-        title="拖到这里移动到未分组"
+        title={$translator("group.dropUngrouped")}
         onclick={() => selectGroupFromScroll("ungrouped")}
       >
-        未分组
+        {$translator("todo.noGroup")}
       </button>
       {#each $todos.groups as group (group.uuid)}
         <button
@@ -2190,7 +2192,7 @@
           data-group-filter={group.uuid}
           data-group-drop-target={group.uuid}
           type="button"
-          title={`拖到这里移动到${group.name}`}
+          title={$translator("group.dropNamed", { group: group.name })}
           onclick={() => selectGroupFromScroll(group.uuid)}
         >
           <span class="group-dot" aria-hidden="true"></span>
@@ -2202,8 +2204,8 @@
       <button
         class="group-scroll-control"
         type="button"
-        aria-label="向右浏览分组"
-        title="向右浏览分组"
+        aria-label={$translator("group.scrollRight")}
+        title={$translator("group.scrollRight")}
         disabled={!groupScrollCanMoveRight}
         onclick={() => scrollGroups(1)}
       >
@@ -2221,12 +2223,12 @@
         <input
           bind:value={groupName}
           maxlength="30"
-          placeholder="新分组"
-          aria-label="新分组名称"
+          placeholder={$translator("group.newPlaceholder")}
+          aria-label={$translator("group.name")}
           disabled={groupSaving}
         />
         <button type="submit" disabled={!groupName.trim() || groupSaving}>
-          {groupSaving ? "…" : "保存"}
+          {groupSaving ? "…" : $translator("common.save")}
         </button>
         <button
           type="button"
@@ -2236,7 +2238,7 @@
             groupName = "";
           }}
         >
-          取消
+          {$translator("common.cancel")}
         </button>
       </form>
     {:else}
@@ -2244,16 +2246,16 @@
         <button
           class="group-manage-toggle"
           type="button"
-          title="管理当前分组"
+          title={$translator("group.manageCurrent")}
           onclick={openGroupManager}
         >
-          管理
+          {$translator("common.manage")}
         </button>
       {/if}
       <button
         class="group-add"
         type="button"
-        title="新建分组"
+        title={$translator("group.create")}
         onclick={() => (creatingGroup = true)}
       >
         +
@@ -2274,7 +2276,7 @@
         <input
           bind:value={editingGroupName}
           maxlength="30"
-          aria-label="分组名称"
+          aria-label={$translator("group.name")}
           disabled={groupSaving || groupDeleting}
         />
         <button
@@ -2286,19 +2288,19 @@
             editingGroupName.trim() === selectedGroupObject.name
           }
         >
-          保存
+          {$translator("common.save")}
         </button>
       </div>
 
       <div class="group-manager-tools">
-        <div class="group-color-options" aria-label="分组颜色">
+        <div class="group-color-options" aria-label={$translator("group.color")}>
           {#each groupColorOptions as option}
             <button
               class="color-swatch"
               class:active={groupColorValue(selectedGroupObject.color) === option.value}
               data-group-color={option.value}
               type="button"
-              title={`切换为${option.label}`}
+              title={$translator("group.changeColor", { color: option.label })}
               disabled={groupSaving || groupDeleting}
               onclick={() => void updateSelectedGroupColor(option.value)}
             >
@@ -2310,8 +2312,8 @@
         <div class="group-manager-actions">
           <button
             type="button"
-            aria-label="上移分组"
-            title="上移分组"
+            aria-label={$translator("group.moveUp")}
+            title={$translator("group.moveUp")}
             disabled={groupSaving || groupDeleting || selectedGroupIndex <= 0}
             onclick={() => void moveSelectedGroup(-1)}
           >
@@ -2319,8 +2321,8 @@
           </button>
           <button
             type="button"
-            aria-label="下移分组"
-            title="下移分组"
+            aria-label={$translator("group.moveDown")}
+            title={$translator("group.moveDown")}
             disabled={
               groupSaving ||
               groupDeleting ||
@@ -2337,7 +2339,7 @@
             disabled={groupSaving || groupDeleting}
             onclick={() => void deleteSelectedGroup()}
           >
-            {confirmingGroupDelete ? "确认删除？" : "删除"}
+            {confirmingGroupDelete ? $translator("todo.confirmClear") : $translator("common.delete")}
           </button>
           <button
             type="button"
@@ -2347,7 +2349,7 @@
               confirmingGroupDelete = false;
             }}
           >
-            关闭
+            {$translator("common.close")}
           </button>
         </div>
       </div>
@@ -2365,16 +2367,16 @@
         bind:value={searchQuery}
         type="search"
         maxlength="200"
-        placeholder={listView === "notes" ? "搜索便签" : "搜索任务"}
-        aria-label={listView === "notes" ? "搜索便签" : "搜索任务"}
+        placeholder={listView === "notes" ? $translator("nav.notes") : $translator("search.tasks")}
+        aria-label={listView === "notes" ? $translator("nav.notes") : $translator("search.tasks")}
         autocomplete="off"
         onkeydown={handleSearchKeydown}
       />
       {#if searchQuery}
         <button
           type="button"
-          aria-label="清空搜索"
-          title="清空搜索"
+          aria-label={$translator("search.clear")}
+          title={$translator("search.clear")}
           onclick={() => {
             searchQuery = "";
             searchInput?.focus();
@@ -2386,14 +2388,14 @@
 
   {#if selectedNote === null}
   <section class="summary">
-    <div class="view-switch" aria-label="任务视图">
+    <div class="view-switch" aria-label={$translator("group.taskGroups")}>
       <button
         class:active={listView === "all"}
         type="button"
         aria-pressed={listView === "all"}
         onclick={() => setListView("all")}
       >
-        全部
+        {$translator("nav.all")}
       </button>
       <button
         class:active={listView === "today"}
@@ -2401,7 +2403,7 @@
         aria-pressed={listView === "today"}
         onclick={() => setListView("today")}
       >
-        今天{todayCount > 0 ? ` ${todayCount}` : ""}
+        {$translator("nav.today")}{todayCount > 0 ? ` ${todayCount}` : ""}
       </button>
       <button
         class:active={listView === "quadrants"}
@@ -2409,7 +2411,7 @@
         aria-pressed={listView === "quadrants"}
         onclick={() => setListView("quadrants")}
       >
-        四象限
+        {$translator("nav.matrix")}
       </button>
       <button
         class:active={listView === "calendar"}
@@ -2417,7 +2419,7 @@
         aria-pressed={listView === "calendar"}
         onclick={() => setListView("calendar")}
       >
-        日历
+        {$translator("nav.calendar")}
       </button>
       <button
         class:active={listView === "notes"}
@@ -2425,21 +2427,21 @@
         aria-pressed={listView === "notes"}
         onclick={() => setListView("notes")}
       >
-        便签
+        {$translator("nav.notes")}
       </button>
     </div>
     <div bind:this={summaryActionsElement} class="summary-actions">
-      <span class="count">{listView === "notes" ? `${$notes.items.length} 张便签` : `${$remainingCount} 项未完成`}</span>
+      <span class="count">{listView === "notes" ? $translator("note.count", { count: $notes.items.length }) : $translator("todo.incompleteCount", { count: $remainingCount })}</span>
       <button
         class:active={summaryMenuOpen || showSearch || batchMode}
         class="summary-menu-button"
         type="button"
-        aria-label="打开更多操作"
+        aria-label={$translator("search.openMore")}
         aria-haspopup="menu"
         aria-expanded={summaryMenuOpen}
         onclick={() => (summaryMenuOpen = !summaryMenuOpen)}
       >
-        更多
+        {$translator("common.more")}
       </button>
       {#if summaryMenuOpen}
         <div class="summary-menu" role="menu">
@@ -2449,7 +2451,7 @@
             role="menuitem"
             onclick={() => void toggleSearch()}
           >
-            {showSearch ? "关闭搜索" : listView === "notes" ? "搜索便签" : "搜索任务"}
+            {showSearch ? $translator("search.close") : listView === "notes" ? $translator("nav.notes") : $translator("search.tasks")}
           </button>
           {#if listView !== "notes" && $completedCount > 0 && listView === "all"}
             <button
@@ -2458,7 +2460,7 @@
               role="menuitem"
               onclick={toggleCompletedVisibility}
             >
-              {showCompleted ? "隐藏已完成" : "显示已完成"}
+              {showCompleted ? $translator("todo.hideCompleted") : $translator("todo.showCompleted")}
             </button>
           {/if}
           {#if listView !== "notes" && $completedCount > 0}
@@ -2467,7 +2469,7 @@
               role="menuitem"
               onclick={() => void archiveCompleted()}
             >
-              归档已完成
+              {$translator("todo.archiveCompleted")}
             </button>
             <button
               class:confirming={confirmingClear}
@@ -2475,7 +2477,7 @@
               role="menuitem"
               onclick={requestClearCompleted}
             >
-              {confirmingClear ? "确认清除？" : "清除已完成"}
+              {confirmingClear ? $translator("todo.confirmClear") : $translator("todo.clearCompleted")}
             </button>
           {/if}
           {#if listView !== "notes" && renderedTodos.length > 0}
@@ -2485,7 +2487,7 @@
               role="menuitem"
               onclick={toggleBatchMode}
             >
-              {batchMode ? "退出批量" : "批量操作"}
+              {batchMode ? $translator("batch.exit") : $translator("batch.actions")}
             </button>
           {/if}
         </div>
@@ -2495,30 +2497,30 @@
   {/if}
 
   {#if listView !== "notes" && batchMode && renderedTodos.length > 0}
-    <section class="batch-toolbar" aria-label="批量操作">
-      <span>{batchSelectionCount > 0 ? `已选 ${batchSelectionCount}` : "选择任务"}</span>
+    <section class="batch-toolbar" aria-label={$translator("batch.actions")}>
+      <span>{batchSelectionCount > 0 ? $translator("todo.selectedCount", { count: batchSelectionCount }) : $translator("todo.selectTasks")}</span>
       <button
         type="button"
         disabled={batchBusy || batchSelectionCount === renderedTodos.length}
         onclick={selectAllRenderedTodos}
       >
-        全选
+        {$translator("common.selectAll")}
       </button>
       <button
         type="button"
         disabled={batchBusy || batchSelectionCount === 0}
         onclick={clearBatchSelection}
       >
-        清空
+        {$translator("common.clear")}
       </button>
       <button
         type="button"
         disabled={batchBusy || batchIncompleteSelectedCount === 0}
         onclick={() => void completeSelectedTodos()}
       >
-        完成
+        {$translator("common.done")}
       </button>
-      <label class:placeholder={batchMoveTarget === ""} aria-label="批量移动到分组">
+      <label class:placeholder={batchMoveTarget === ""} aria-label={$translator("batch.moveGroup")}>
         <select
           bind:value={batchMoveTarget}
           disabled={batchBusy || batchSelectionCount === 0}
@@ -2530,7 +2532,7 @@
           }}
         >
           <option value="" disabled hidden></option>
-          <option value="ungrouped">未分组</option>
+          <option value="ungrouped">{$translator("todo.noGroup")}</option>
           {#each $todos.groups as group (group.uuid)}
             <option value={group.uuid}>{group.name}</option>
           {/each}
@@ -2542,7 +2544,7 @@
         disabled={batchBusy || batchSelectionCount === 0}
         onclick={() => void deleteSelectedTodos()}
       >
-        删除
+        {$translator("common.delete")}
       </button>
     </section>
   {/if}
@@ -2585,41 +2587,41 @@
   {:else}
   <section class="todo-list" aria-live="polite">
     {#if $todos.loading}
-      <div class="status">正在唤醒拖拖蛋…</div>
+      <div class="status">{$translator("empty.loading")}</div>
     {:else if $todos.error && $todos.items.length === 0}
       <div class="status error">
         <span>{$todos.error}</span>
-        <button type="button" onclick={() => todos.load()}>重试</button>
+        <button type="button" onclick={() => todos.load()}>{$translator("common.retry")}</button>
       </div>
     {:else if $todos.items.length === 0}
       <div class="empty-state">
         <img class="empty-mascot" src="/eggdone-icon.png" alt="" aria-hidden="true" />
-        <strong>今天也要蛋定完成</strong>
-        <span>先写下一件小事吧</span>
+        <strong>{$translator("empty.title")}</strong>
+        <span>{$translator("empty.subtitle")}</span>
       </div>
     {:else if renderedTodos.length === 0}
       <div class="empty-state filtered-empty">
         <strong>
           {searchActive
-            ? "没有找到匹配任务"
+            ? $translator("search.noMatch")
             : listView === "today"
-              ? "今天还没有到期任务"
+              ? $translator("empty.todayTitle")
               : listView === "quadrants"
-                ? "四象限里还没有匹配任务"
+                ? $translator("empty.matrixTitle")
                 : listView === "calendar"
-                  ? "日程里还没有匹配任务"
-              : "已完成任务已隐藏"}
+                  ? $translator("empty.calendarTitle")
+              : $translator("empty.completedHidden")}
         </strong>
         <span>
           {searchActive
-            ? "换个关键词试试"
+            ? $translator("search.tryAnother")
             : listView === "today"
-              ? "可以给任务设置今天或更早的到期日"
+              ? $translator("empty.todayHint")
               : listView === "quadrants"
-                ? "可以先新增任务或调整筛选条件"
+                ? $translator("empty.matrixHint")
                 : listView === "calendar"
-                  ? "给任务设置到期时间后会自动归入日程"
-              : "需要时可以重新显示"}
+                  ? $translator("empty.calendarHint")
+              : $translator("empty.completedHint")}
         </span>
       </div>
     {:else}
@@ -2627,7 +2629,7 @@
         <div class="inline-error" role="alert">{$todos.error}</div>
       {/if}
       {#if listView === "quadrants"}
-        <div class="quadrant-overview" aria-label="四象限概览">
+        <div class="quadrant-overview" aria-label={$translator("matrix.fullName")}>
           {#each quadrantDefinitions as quadrant (quadrant.key)}
             <button
               class:active={selectedQuadrant === quadrant.key}
@@ -2650,7 +2652,7 @@
             type="button"
             onclick={() => (selectedQuadrant = "all")}
           >
-            显示全部象限
+            {$translator("matrix.showAll")}
           </button>
         {/if}
         <div class="quadrant-sections">
@@ -2666,7 +2668,7 @@
                 <small>{sectionTodos.length}</small>
               </header>
               {#if sectionTodos.length === 0}
-                <div class="quadrant-empty">这里暂时没有任务</div>
+                <div class="quadrant-empty">{$translator("matrix.empty")}</div>
               {:else}
                 {#each sectionTodos as todo (todo.id)}
                   {@const group = sectionTodos.filter((item) => item.completed === todo.completed && item.pinned === todo.pinned)}
@@ -2711,14 +2713,14 @@
           {/each}
         </div>
       {:else if listView === "calendar"}
-        <section class="agenda-nav" aria-label="日程日期">
+        <section class="agenda-nav" aria-label={$translator("nav.calendar")}>
           <div class="agenda-week-actions">
             <button type="button" onclick={() => shiftAgendaWeek(-7)}>
-              上一周
+              {$translator("calendar.previousWeek")}
             </button>
-            <button type="button" onclick={jumpAgendaToday}>今天</button>
+            <button type="button" onclick={jumpAgendaToday}>{$translator("calendar.today")}</button>
             <button type="button" onclick={() => shiftAgendaWeek(7)}>
-              下一周
+              {$translator("calendar.nextWeek")}
             </button>
           </div>
           {#key `${agendaWeekStartAt}-${agendaWeekVersion}`}
@@ -2743,7 +2745,7 @@
               type="button"
               onclick={() => (agendaDatePickerOpen = !agendaDatePickerOpen)}
             >
-              跳转日期
+              {$translator("calendar.jumpDate")}
             </button>
             {#if selectedAgendaDate}
               <button
@@ -2751,7 +2753,7 @@
                 type="button"
                 onclick={() => (selectedAgendaDate = null)}
               >
-                显示全部
+                {$translator("calendar.showAll")}
               </button>
             {/if}
           </div>
@@ -2774,12 +2776,12 @@
                 <header>
                   <div>
                     <strong>{selectedAgendaLabel()}</strong>
-                    <span>选中日期任务</span>
+                    <span>{$translator("calendar.selectedDate")}</span>
                   </div>
                   <small>{sectionTodos.length}</small>
                 </header>
                 {#if sectionTodos.length === 0}
-                  <div class="agenda-empty">这一天还没有任务</div>
+                  <div class="agenda-empty">{$translator("calendar.emptyDate")}</div>
                 {:else}
                   {#each sectionTodos as todo (todo.id)}
                     {@const group = sectionTodos.filter((item) => item.completed === todo.completed && item.pinned === todo.pinned)}
@@ -2975,10 +2977,10 @@
   <div class="undo-toast" role="status">
     <span>
       {undoTodos.length === 1
-        ? `已删除“${undoTodos[0].title}”`
-        : `已删除 ${undoTodos.length} 个重复任务`}
+        ? $translator("todo.deletedOne", { title: undoTodos[0].title })
+        : $translator("todo.deletedSeries", { count: undoTodos.length })}
     </span>
-    <button type="button" onclick={() => void undoDelete()}>撤销</button>
+    <button type="button" onclick={() => void undoDelete()}>{$translator("common.undo")}</button>
   </div>
 {/if}
 

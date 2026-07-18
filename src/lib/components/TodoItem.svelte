@@ -2,6 +2,7 @@
   import { onMount, tick } from "svelte";
   import { fly } from "svelte/transition";
 
+  import { languageState, translator } from "$lib/i18n";
   import type { TodoScheduleInput } from "$lib/api/todoApi";
   import type {
     RepeatDeleteScope,
@@ -92,7 +93,7 @@
   let noteInput: HTMLTextAreaElement;
   let itemElement: HTMLElement;
   let animationDuration = 140;
-  $: dueLabel = formatDueLabel(todo);
+  $: dueLabel = localizedDueLabel(todo);
   $: dueTone = getDueTone(todo);
   $: notePreview = todo.note?.trim() ?? "";
   $: currentGroup =
@@ -210,7 +211,7 @@
         ? null
         : dateTimeLocalToTimestamp(`${date}T${customDueTime}`);
     if (date !== null && dueAt === null) {
-      scheduleError = "请选择有效的到期时间";
+      scheduleError = $translator("todo.invalidDue");
       return;
     }
     const repeatRule = date && repeatChoice !== "none" ? repeatChoice : null;
@@ -218,7 +219,7 @@
       ? reminderAtForDate(date, reminderChoice, customReminderDateTime)
       : null;
     if (date && reminderChoice === "custom" && reminderAt === null) {
-      scheduleError = "请选择提醒时间";
+      scheduleError = $translator("todo.invalidReminder");
       return;
     }
 
@@ -233,11 +234,11 @@
           reminder_at: reminderAt,
           repeat_rule: repeatRule,
         },
-        chooseRepeatEditScope("修改到期时间和重复规则"),
+        chooseRepeatEditScope($translator("todo.schedule")),
       );
       scheduleOpen = false;
     } catch {
-      scheduleError = "到期时间保存失败，请重试";
+      scheduleError = $translator("todo.scheduleSaveFailed");
     } finally {
       scheduleSaving = false;
     }
@@ -257,7 +258,7 @@
 
   function formatReminderLabel(reminderAt: number | null) {
     if (reminderAt === null) return "";
-    return new Intl.DateTimeFormat("zh-CN", {
+    return new Intl.DateTimeFormat($languageState.resolvedLocale, {
       month: "numeric",
       day: "numeric",
       hour: "2-digit",
@@ -266,11 +267,20 @@
   }
 
   function repeatLabel(rule: RepeatRule | null) {
-    if (rule === "daily") return "每天";
-    if (rule === "weekly") return "每周";
-    if (rule === "monthly") return "每月";
-    if (rule === "weekdays") return "工作日";
+    if (rule === "daily") return $translator("todo.repeatDaily");
+    if (rule === "weekly") return $translator("todo.repeatWeekly");
+    if (rule === "monthly") return $translator("todo.repeatMonthly");
+    if (rule === "weekdays") return $translator("todo.repeatWeekdays");
     return "";
+  }
+
+  function localizedDueLabel(value: Todo) {
+    const label = formatDueLabel(value);
+    if (label === "今天") return $translator("todo.today");
+    if (label === "明天") return $translator("todo.tomorrow");
+    if (label.startsWith("今天 ")) return `${$translator("todo.today")} ${label.slice(3)}`;
+    if (label.startsWith("明天 ")) return `${$translator("todo.tomorrow")} ${label.slice(3)}`;
+    return label;
   }
 
   function groupColorValue(color: string | undefined) {
@@ -289,7 +299,7 @@
   function chooseRepeatEditScope(action: string): RepeatEditScope {
     if (todo.repeat_rule === null) return "single";
     return window.confirm(
-      `这是重复任务。${action}要应用到后续任务吗？\n\n确定：后续任务\n取消：仅此任务`,
+      $translator("todo.repeatScopePrompt", { action }),
     )
       ? "future"
       : "single";
@@ -302,7 +312,7 @@
       await onGroupChange(
         todo,
         value === "ungrouped" ? null : value,
-        chooseRepeatEditScope("移动分组"),
+        chooseRepeatEditScope($translator("todo.moveTo")),
       );
       actionsOpen = false;
     } finally {
@@ -315,7 +325,7 @@
 
     const nextTitle = editTitle.trim();
     if (!nextTitle) {
-      editError = "任务内容不能为空";
+      editError = $translator("todo.emptyTitle");
       return;
     }
     if (nextTitle === todo.title) {
@@ -326,10 +336,10 @@
     saving = true;
     editError = "";
     try {
-      await onEdit(todo.id, nextTitle, chooseRepeatEditScope("修改标题"));
+      await onEdit(todo.id, nextTitle, chooseRepeatEditScope($translator("common.edit")));
       editing = false;
     } catch {
-      editError = "保存失败，请重试";
+      editError = $translator("todo.editFailed");
       await tick();
       editInput?.focus();
     } finally {
@@ -351,10 +361,10 @@
     noteSaving = true;
     noteError = "";
     try {
-      await onNote(todo.id, normalizedNote, chooseRepeatEditScope("修改备注"));
+      await onNote(todo.id, normalizedNote, chooseRepeatEditScope($translator("todo.editNote")));
       noteOpen = false;
     } catch {
-      noteError = "备注保存失败，请重试";
+      noteError = $translator("todo.noteSaveFailed");
       await tick();
       noteInput?.focus();
     } finally {
@@ -405,7 +415,7 @@
       class:checked={batchSelected}
       class="batch-select"
       type="button"
-      aria-label={batchSelected ? `取消选择：${todo.title}` : `选择：${todo.title}`}
+      aria-label={batchSelected ? $translator("todo.unselect", { title: todo.title }) : $translator("todo.select", { title: todo.title })}
       aria-pressed={batchSelected}
       onclick={(event) => {
         event.stopPropagation();
@@ -423,13 +433,13 @@
   <button
     class="drag-handle"
     type="button"
-    aria-label={`拖动排序：${todo.title}`}
+    aria-label={$translator("todo.dragToSortOrGroup")}
     title={
       dragDisabled
-        ? "当前不可拖动"
+        ? $translator("todo.dragDisabled")
         : reorderDisabled
-          ? "拖动到分组"
-          : "拖动排序，也可拖到分组"
+          ? $translator("todo.dragToGroup")
+          : $translator("todo.dragToSortOrGroup")
     }
     disabled={dragDisabled}
     onpointerdown={(event) => {
@@ -453,7 +463,7 @@
     class="checkbox"
     class:checked={todo.completed}
     type="button"
-    aria-label={todo.completed ? "标记为未完成" : "标记为已完成"}
+    aria-label={todo.completed ? $translator("todo.markIncomplete") : $translator("todo.markCompleted")}
     onclick={() => void onToggle(todo)}
     disabled={editing}
   >
@@ -470,7 +480,7 @@
         bind:this={editInput}
         bind:value={editTitle}
         maxlength="200"
-        aria-label={`编辑任务：${todo.title}`}
+        aria-label={$translator("todo.editTitle", { title: todo.title })}
         disabled={saving}
         onkeydown={handleEditKeydown}
       />
@@ -483,7 +493,7 @@
         <button
           class="todo-note"
           type="button"
-          title="编辑备注"
+          title={$translator("todo.editNote")}
           onclick={() => void openNoteEditor()}
         >
           {notePreview}
@@ -495,7 +505,7 @@
             <span
               class="todo-group-badge"
               data-group-color={currentGroupColor}
-              title={`分组：${currentGroup.name}`}
+              title={`${$translator("todo.group")}: ${currentGroup.name}`}
             >
               <span class="group-dot" aria-hidden="true"></span>
               {currentGroup.name}
@@ -505,20 +515,20 @@
             <button
               class="pin-badge"
               type="button"
-              title="取消置顶"
+              title={$translator("todo.unpin")}
               onclick={() => void onPin(todo, false)}
             >
-              置顶
+              {$translator("todo.pin")}
             </button>
           {/if}
           {#if todo.priority === 1}
             <button
               class="priority-badge"
               type="button"
-              title="取消重要"
+              title={$translator("todo.unimportant")}
               onclick={() => void onPriority(todo, 0)}
             >
-              重要
+              {$translator("todo.important")}
             </button>
           {/if}
           {#if dueLabel}
@@ -527,44 +537,44 @@
               class:today={dueTone === "today"}
               class="due-badge"
               type="button"
-              title="修改到期时间"
+              title={$translator("todo.setDue")}
               onclick={toggleSchedule}
             >
-              {dueTone === "overdue" ? "逾期 " : ""}{dueLabel}
+              {dueTone === "overdue" ? `${$translator("todo.overdue")} ` : ""}{dueLabel}
             </button>
           {/if}
           {#if todo.reminder_at !== null}
             <button
               class="reminder-badge"
               type="button"
-              title="修改提醒时间"
+              title={$translator("todo.reminder")}
               onclick={toggleSchedule}
             >
-              提醒 {formatReminderLabel(todo.reminder_at)}
+              {$translator("todo.reminderAt", { time: formatReminderLabel(todo.reminder_at) })}
             </button>
           {/if}
           {#if todo.repeat_rule !== null}
             <button
               class="repeat-badge"
               type="button"
-              title="修改重复规则"
+              title={$translator("todo.repeat")}
               onclick={toggleSchedule}
             >
-              重复 {repeatLabel(todo.repeat_rule)}
+              {$translator("todo.repeat")} {repeatLabel(todo.repeat_rule)}
             </button>
           {/if}
         </div>
       {/if}
       {#if scheduleOpen}
-        <div class="schedule-popover" role="dialog" aria-label="设置到期时间">
-          <strong>到期时间</strong>
+        <div class="schedule-popover" role="dialog" aria-label={$translator("todo.setDue")}>
+          <strong>{$translator("todo.due")}</strong>
           <div class="schedule-actions">
-            <button type="button" disabled={scheduleSaving} onclick={() => void setSchedule(localDateString(0))}>今天</button>
-            <button type="button" disabled={scheduleSaving} onclick={() => void setSchedule(localDateString(1))}>明天</button>
-            <button type="button" disabled={scheduleSaving} onclick={() => void setSchedule(localDateString(7))}>下周</button>
+            <button type="button" disabled={scheduleSaving} onclick={() => void setSchedule(localDateString(0))}>{$translator("todo.today")}</button>
+            <button type="button" disabled={scheduleSaving} onclick={() => void setSchedule(localDateString(1))}>{$translator("todo.tomorrow")}</button>
+            <button type="button" disabled={scheduleSaving} onclick={() => void setSchedule(localDateString(7))}>{$translator("todo.nextWeek")}</button>
           </div>
           <label>
-            <span>日期</span>
+            <span>{$translator("todo.date")}</span>
             <input
               type="date"
               bind:value={customDate}
@@ -573,14 +583,14 @@
             />
           </label>
           <label>
-            <span>时间</span>
+            <span>{$translator("todo.time")}</span>
             <input
               type="time"
               bind:value={customDueTime}
               disabled={scheduleSaving}
             />
           </label>
-          <div class="schedule-time-actions" aria-label="常用到期时间">
+          <div class="schedule-time-actions" aria-label={$translator("todo.commonDueTimes")}>
             {#each ["09:00", "12:00", "18:00", "21:00"] as time}
               <button
                 class:active={customDueTime === time}
@@ -593,21 +603,21 @@
             {/each}
           </div>
           <label>
-            <span>提醒</span>
+            <span>{$translator("todo.reminder")}</span>
             <select
               bind:value={reminderChoice}
               disabled={scheduleSaving}
               onchange={handleReminderChoiceChange}
             >
-              <option value="none">不提醒</option>
-              <option value="same-day-9">当天 9:00</option>
-              <option value="previous-day-9">提前一天 9:00</option>
-              <option value="custom">指定时间</option>
+              <option value="none">{$translator("todo.noReminder")}</option>
+              <option value="same-day-9">{$translator("todo.reminderSameDay")}</option>
+              <option value="previous-day-9">{$translator("todo.reminderPreviousDay")}</option>
+              <option value="custom">{$translator("todo.reminderCustom")}</option>
             </select>
           </label>
           {#if reminderChoice === "custom"}
             <label>
-              <span>提醒时间</span>
+              <span>{$translator("todo.reminder")}</span>
               <input
                 type="datetime-local"
                 bind:value={customReminderDateTime}
@@ -616,31 +626,31 @@
             </label>
           {/if}
           <label>
-            <span>重复</span>
+            <span>{$translator("todo.repeat")}</span>
             <select bind:value={repeatChoice} disabled={scheduleSaving}>
-              <option value="none">不重复</option>
-              <option value="daily">每天</option>
-              <option value="weekly">每周</option>
-              <option value="monthly">每月</option>
-              <option value="weekdays">工作日</option>
+              <option value="none">{$translator("todo.noRepeat")}</option>
+              <option value="daily">{$translator("todo.repeatDaily")}</option>
+              <option value="weekly">{$translator("todo.repeatWeekly")}</option>
+              <option value="monthly">{$translator("todo.repeatMonthly")}</option>
+              <option value="weekdays">{$translator("todo.repeatWeekdays")}</option>
             </select>
           </label>
           <div class="schedule-footer">
-            <button type="button" disabled={scheduleSaving} onclick={() => void setSchedule(null)}>清除</button>
-            <button type="button" disabled={scheduleSaving || !canSaveSchedule} onclick={() => void setSchedule(customDate)}>保存</button>
+            <button type="button" disabled={scheduleSaving} onclick={() => void setSchedule(null)}>{$translator("common.clear")}</button>
+            <button type="button" disabled={scheduleSaving || !canSaveSchedule} onclick={() => void setSchedule(customDate)}>{$translator("common.save")}</button>
           </div>
           {#if scheduleError}<small>{scheduleError}</small>{/if}
         </div>
       {/if}
       {#if noteOpen}
-        <div class="note-popover" role="dialog" aria-label="编辑备注">
-          <strong>备注</strong>
+        <div class="note-popover" role="dialog" aria-label={$translator("todo.editNote")}>
+          <strong>{$translator("todo.note")}</strong>
           <textarea
             bind:this={noteInput}
             bind:value={noteDraft}
             maxlength="1000"
             rows="4"
-            placeholder="补充一点上下文，纯文本即可"
+            placeholder={$translator("todo.notePlaceholder")}
             disabled={noteSaving}
             onkeydown={handleNoteKeydown}
           ></textarea>
@@ -653,12 +663,12 @@
                 onclick={() => {
                   noteOpen = false;
                   noteError = "";
-                }}>取消</button
+                }}>{$translator("common.cancel")}</button
               >
               <button
                 type="button"
                 disabled={noteSaving}
-                onclick={() => void saveNote()}>保存</button
+                onclick={() => void saveNote()}>{$translator("common.save")}</button
               >
             </div>
           </div>
@@ -673,8 +683,8 @@
       class:active={actionsOpen}
       class="more-button"
       type="button"
-      aria-label={`更多操作：${todo.title}`}
-      title="更多操作"
+      aria-label={`${$translator("common.more")}: ${todo.title}`}
+      title={$translator("common.more")}
       aria-haspopup="menu"
       aria-expanded={actionsOpen}
       onclick={toggleActions}
@@ -693,14 +703,14 @@
           role="menuitem"
           onclick={() => void openNoteEditor()}
         >
-          {todo.note ? "编辑备注" : "添加备注"}
+          {todo.note ? $translator("todo.editNote") : $translator("todo.addNote")}
         </button>
         <button type="button" role="menuitem" onclick={toggleSchedule}>
-          设置到期时间
+          {$translator("todo.setDue")}
         </button>
         {#if groups.length > 0}
           <label class="group-move">
-            <span>移动到</span>
+            <span>{$translator("todo.moveTo")}</span>
             <select
               value={todo.group_uuid ?? "ungrouped"}
               disabled={groupSaving}
@@ -709,7 +719,7 @@
                 void moveToGroup(value);
               }}
             >
-              <option value="ungrouped">未分组</option>
+              <option value="ungrouped">{$translator("todo.noGroup")}</option>
               {#each groups as group (group.uuid)}
                 <option value={group.uuid}>{group.name}</option>
               {/each}
@@ -725,7 +735,7 @@
               void onSnooze(todo, snoozeReminderAt());
             }}
           >
-            稍后 10 分钟
+            {$translator("todo.snoozeTenMinutes")}
           </button>
           <button
             type="button"
@@ -735,7 +745,7 @@
               void onSnooze(todo, laterTodayReminderAt());
             }}
           >
-            今天晚些时候
+            {$translator("todo.laterToday")}
           </button>
         {/if}
         <button
@@ -746,7 +756,7 @@
             void onPin(todo, !todo.pinned);
           }}
         >
-          {todo.pinned ? "取消置顶" : "置顶"}
+          {todo.pinned ? $translator("todo.unpin") : $translator("todo.pin")}
         </button>
         <button
           type="button"
@@ -756,7 +766,7 @@
             void onPriority(todo, todo.priority === 1 ? 0 : 1);
           }}
         >
-          {todo.priority === 1 ? "取消重要" : "设为重要"}
+          {todo.priority === 1 ? $translator("todo.unimportant") : $translator("todo.setImportant")}
         </button>
         <button
           type="button"
@@ -766,7 +776,7 @@
             onFocus(todo);
           }}
         >
-          专注做这件事
+          {$translator("todo.startFocus")}
         </button>
         <button
           type="button"
@@ -777,7 +787,7 @@
             void onMove(todo, -1);
           }}
         >
-          上移
+          {$translator("todo.moveUp")}
         </button>
         <button
           type="button"
@@ -788,7 +798,7 @@
             void onMove(todo, 1);
           }}
         >
-          下移
+          {$translator("todo.moveDown")}
         </button>
         {#if todo.repeat_rule !== null}
           <button
@@ -800,7 +810,7 @@
               void onDelete(todo.id, "single");
             }}
           >
-            删除本次
+            {$translator("todo.deleteOccurrence")}
           </button>
           <button
             class="danger"
@@ -811,7 +821,7 @@
               void onDelete(todo.id, "series");
             }}
           >
-            删除整个重复
+            {$translator("todo.deleteSeries")}
           </button>
         {:else}
           <button
@@ -823,7 +833,7 @@
               void onDelete(todo.id);
             }}
           >
-            删除
+            {$translator("common.delete")}
           </button>
         {/if}
       </div>
