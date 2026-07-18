@@ -21,14 +21,16 @@
 
 ## DI1：TypeScript 国际化基础层
 
-- [ ] 新增 `src/lib/i18n/`、强类型字典和 `t()`。
-- [ ] 建立 `zh-CN` 与 `en-US` 字典键一致性测试。
-- [ ] 实现插值、复数、缺失键和回退规则。
-- [ ] 实现日期、时间、相对时间、数字和文件大小格式化器。
-- [ ] 实现 `LanguageMode`、解析后语言和 Svelte store。
-- [ ] 使用 `eggdone-language` 保存本机偏好。
-- [ ] 监听系统 `languagechange` 并更新跟随系统模式。
-- [ ] 更新 `<html lang>`，为屏幕阅读器提供正确语言。
+- [x] 新增 `src/lib/i18n/`、强类型字典和 `t()`。
+- [x] 建立 `zh-CN` 与 `en-US` 字典键一致性测试。
+- [x] 实现插值、复数、缺失键和回退规则。
+- [x] 实现日期、时间、相对时间、数字和文件大小格式化器。
+- [x] 实现 `LanguageMode`、解析后语言和 Svelte store。
+- [x] 使用 `eggdone-language` 保存本机偏好。
+- [x] 监听系统 `languagechange` 并更新跟随系统模式。
+- [x] 更新 `<html lang>`，为屏幕阅读器提供正确语言。
+
+本阶段验证：`pnpm check`、58 项单元测试和 `pnpm build` 通过。设置页已提供跟随系统、简体中文和 English 三种模式，桌面端可即时切换并持久化。
 
 完成条件：测试组件可以实时切换中英文，刷新后语言保持正确。
 

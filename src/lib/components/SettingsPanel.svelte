@@ -13,6 +13,13 @@
     saveBreakDurationMinutes,
     saveFocusDurationMinutes,
   } from "$lib/utils/focusSettings";
+  import {
+    languageState,
+    setLanguageMode,
+    translator,
+    type LanguageMode,
+    type TranslationKey,
+  } from "$lib/i18n";
   import type { DefaultListViewMode } from "$lib/utils/viewPreferences";
   import { onMount } from "svelte";
   import SyncSettings from "./SyncSettings.svelte";
@@ -27,6 +34,11 @@
   let error = settings.shortcutError ?? settings.autostartError ?? "";
   let focusDurationMinutes = 25;
   let breakDurationMinutes = 5;
+  const languageOptions: Array<{ mode: LanguageMode; label: TranslationKey }> = [
+    { mode: "system", label: "settings.languageSystem" },
+    { mode: "zh-CN", label: "settings.languageSimplifiedChinese" },
+    { mode: "en-US", label: "settings.languageEnglish" },
+  ];
 
   onMount(() => {
     focusDurationMinutes = getFocusDurationMinutes();
@@ -92,6 +104,10 @@
   function setBreakDuration(minutes: number) {
     breakDurationMinutes = saveBreakDurationMinutes(minutes);
   }
+
+  function selectLanguage(mode: LanguageMode) {
+    setLanguageMode(mode);
+  }
 </script>
 
 <svelte:window
@@ -104,17 +120,40 @@
   <button
     class="settings-dismiss"
     type="button"
-    aria-label="关闭设置"
+    aria-label={$translator("common.close")}
     onclick={onClose}
   ></button>
   <section class="settings-card" aria-labelledby="settings-title">
     <header>
       <div>
-        <h2 id="settings-title">设置</h2>
-        <p>桌面快捷操作</p>
+        <h2 id="settings-title">{$translator("settings.title")}</h2>
+        <p>{$translator("settings.subtitle")}</p>
       </div>
-      <button type="button" aria-label="关闭设置" onclick={onClose}>×</button>
+      <button type="button" aria-label={$translator("common.close")} onclick={onClose}>×</button>
     </header>
+
+    <section class="language-settings-section" aria-labelledby="language-settings-title">
+      <div class="language-settings-heading">
+        <strong id="language-settings-title">{$translator("settings.language")}</strong>
+        <span>{$translator("settings.languageHelp")}</span>
+      </div>
+      <div
+        class="language-options"
+        role="group"
+        aria-label={$translator("settings.language")}
+      >
+        {#each languageOptions as option}
+          <button
+            type="button"
+            class:active={$languageState.mode === option.mode}
+            aria-pressed={$languageState.mode === option.mode}
+            onclick={() => selectLanguage(option.mode)}
+          >
+            {$translator(option.label)}
+          </button>
+        {/each}
+      </div>
+    </section>
 
     <div class="setting-row">
       <div>

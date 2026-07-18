@@ -3648,6 +3648,59 @@ footer button {
   opacity: 0.5;
 }
 
+.language-settings-section {
+  padding: 10px 2px 12px;
+  border-top: 1px solid #eee7da;
+}
+
+.language-settings-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.language-settings-heading strong {
+  color: #554b3d;
+  font-size: 11px;
+}
+
+.language-settings-heading span {
+  color: #9c8e79;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.language-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.language-options button {
+  min-height: 30px;
+  padding: 5px 6px;
+  border: 1px solid #e2d8c8;
+  border-radius: 999px;
+  color: #766a58;
+  background: #faf7f0;
+  font-size: 9px;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.language-options button:hover {
+  border-color: #d9ad31;
+  color: #6f5413;
+}
+
+.language-options button.active {
+  border-color: #d9ad31;
+  color: #5f4610;
+  background: #f6c94c;
+  box-shadow: 0 4px 12px rgb(217 173 49 / 22%);
+}
+
 .focus-settings-section {
   padding-bottom: 10px;
 }
@@ -5088,6 +5141,35 @@ html[data-theme="dark"] .preference-select select {
   border-color: #534b3f;
   color: #ded4c4;
   background: #312e28;
+}
+
+html[data-theme="dark"] .language-settings-section {
+  border-color: #4c4439;
+}
+
+html[data-theme="dark"] .language-settings-heading strong {
+  color: #f3eadc;
+}
+
+html[data-theme="dark"] .language-settings-heading span {
+  color: #b8aa96;
+}
+
+html[data-theme="dark"] .language-options button {
+  border-color: #5a5044;
+  color: #d8cbb8;
+  background: #39342d;
+}
+
+html[data-theme="dark"] .language-options button:hover {
+  border-color: #d5aa38;
+  color: #ffe6a0;
+}
+
+html[data-theme="dark"] .language-options button.active {
+  border-color: #d5aa38;
+  color: #211b13;
+  background: #e5b83f;
 }
 
 html[data-theme="dark"] .duration-setting > span {
