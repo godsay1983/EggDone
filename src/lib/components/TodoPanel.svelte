@@ -3050,7 +3050,7 @@
     <div class="about-card" role="dialog" aria-modal="true" aria-labelledby="about-title">
       <img class="about-mascot" src="/eggdone-icon.png" alt="" aria-hidden="true" />
       <h2 id="about-title">EggDone</h2>
-      <p>蛋定 Todo 1.0.4</p>
+      <p>蛋定 Todo 1.0.5</p>
       <small>原创角色「拖拖蛋」陪你轻松处理待办。</small>
       <button type="button" onclick={() => showAbout = false}>知道了</button>
     </div>
