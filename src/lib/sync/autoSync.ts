@@ -5,6 +5,7 @@ import {
   getSyncSettings,
   syncNow,
   type ManualSyncResult,
+  type RemoteSyncState,
   type SyncSettings,
 } from "$lib/api/syncApi";
 
@@ -19,6 +20,7 @@ export type SyncStatusKind =
 export interface SyncStatus {
   kind: SyncStatusKind;
   message: string;
+  detail?: string;
   updatedAt: number | null;
 }
 
@@ -179,7 +181,7 @@ async function checkRemoteAndSync() {
 
   remoteCheckRunning = true;
   try {
-    const remote = await getRemoteSyncState();
+    const remote = await getRemoteStateWithRetry();
     const changed =
       !remoteStateInitialized ||
       remote.todoObjectExists !== (knownTodoRemoteEtag !== null) ||
@@ -202,6 +204,22 @@ async function checkRemoteAndSync() {
   }
 }
 
+async function getRemoteStateWithRetry(): Promise<RemoteSyncState> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      return await getRemoteSyncState();
+    } catch (reason) {
+      lastError = reason;
+      if (!isRetryable(reason) || attempt === RETRY_DELAYS_MS.length) {
+        throw reason;
+      }
+      await delay(RETRY_DELAYS_MS[attempt]);
+    }
+  }
+  throw lastError;
+}
+
 function startForegroundPolling() {
   if (pollTimer || !enabled || !foreground) return;
   pollTimer = setInterval(() => {
@@ -217,23 +235,24 @@ function stopForegroundPolling() {
 }
 
 function setFailureStatus(reason: unknown) {
-  const message = errorMessage(reason);
-  const kind = isConflict(message)
+  const detail = errorMessage(reason);
+  const kind = isConflict(detail)
     ? "conflict"
-    : isRetryable(message)
+    : isRetryable(detail)
       ? "offline"
       : "failed";
   syncStatus.set({
     kind,
-    message: `${statusLabel(kind)}：${message}`,
+    message: failureMessage(kind),
+    detail,
     updatedAt: Date.now(),
   });
 }
 
-function statusLabel(kind: Exclude<SyncStatusKind, "idle" | "syncing" | "synced">) {
-  if (kind === "offline") return "离线";
-  if (kind === "conflict") return "同步冲突";
-  return "同步失败";
+function failureMessage(kind: Exclude<SyncStatusKind, "idle" | "syncing" | "synced">) {
+  if (kind === "offline") return "网络暂时不可用，将在下次同步时重试";
+  if (kind === "conflict") return "远端内容持续变化，请稍后再次同步";
+  return "同步未完成，请重试";
 }
 
 function isRetryable(reason: unknown) {
@@ -246,6 +265,11 @@ function isRetryable(reason: unknown) {
   ) {
     return false;
   }
+  const statusCode = message.match(/状态码\s*(\d{3})/);
+  if (statusCode) {
+    const code = Number(statusCode[1]);
+    return code === 408 || code === 425 || code === 429 || (code >= 500 && code <= 599);
+  }
   return [
     "连接",
     "网络",
@@ -254,8 +278,20 @@ function isRetryable(reason: unknown) {
     "offline",
     "connection",
     "dns",
+    "request",
+    "temporarily unavailable",
+    "connection reset",
+    "broken pipe",
     "下载同步文件失败",
     "上传同步文件失败",
+    "检查远端同步文件失败",
+    "下载便签同步文件失败",
+    "上传便签同步文件失败",
+    "下载附件元数据失败",
+    "上传附件元数据失败",
+    "检查远端附件失败",
+    "上传附件失败",
+    "下载附件失败",
   ].some((keyword) => message.includes(keyword));
 }
 

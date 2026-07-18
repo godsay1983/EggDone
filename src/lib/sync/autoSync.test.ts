@@ -87,6 +87,32 @@ describe("auto sync", () => {
     expect(get(syncStatus).kind).toBe("synced");
   });
 
+  it("retries transient note and attachment stage failures", async () => {
+    vi.useFakeTimers();
+    configureAutoSync(enabledSettings);
+    vi.mocked(syncApi.syncNow)
+      .mockRejectedValueOnce(
+        new Error("附件元数据同步失败：上传附件元数据失败，S3 服务返回状态码 503"),
+      )
+      .mockResolvedValueOnce({
+        message: "同步完成",
+        todoCount: 1,
+        noteCount: 1,
+        noteAttachmentCount: 1,
+        pendingAttachmentCount: 0,
+        conflictRetried: false,
+        todoRemoteEtag: '"etag"',
+        noteRemoteEtag: '"note-etag"',
+        noteAttachmentRemoteEtag: '"attachment-etag"',
+      });
+
+    const resultPromise = runManualSync();
+    await vi.advanceTimersByTimeAsync(1_500);
+
+    await expect(resultPromise).resolves.toMatchObject({ noteAttachmentCount: 1 });
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(2);
+  });
+
   it("reports conflicts without network retries", async () => {
     configureAutoSync(enabledSettings);
     vi.mocked(syncApi.syncNow).mockRejectedValue(
@@ -149,5 +175,40 @@ describe("auto sync", () => {
     await vi.advanceTimersByTimeAsync(60_000);
     expect(syncApi.getRemoteSyncState).toHaveBeenCalledTimes(2);
     expect(syncApi.syncNow).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries a transient ETag check before reporting failure", async () => {
+    vi.useFakeTimers();
+    configureAutoSync(enabledSettings);
+    vi.mocked(syncApi.getRemoteSyncState)
+      .mockRejectedValueOnce(
+        new Error("检查远端同步文件失败，S3 服务返回状态码 503"),
+      )
+      .mockResolvedValueOnce({
+        todoObjectExists: true,
+        todoEtag: '"etag-remote"',
+        noteObjectExists: true,
+        noteEtag: '"note-etag-remote"',
+        noteAttachmentObjectExists: true,
+        noteAttachmentEtag: '"attachment-etag-remote"',
+      });
+    vi.mocked(syncApi.syncNow).mockResolvedValue({
+      message: "同步完成",
+      todoCount: 1,
+      noteCount: 1,
+      noteAttachmentCount: 1,
+      pendingAttachmentCount: 0,
+      conflictRetried: false,
+      todoRemoteEtag: '"etag-remote"',
+      noteRemoteEtag: '"note-etag-remote"',
+      noteAttachmentRemoteEtag: '"attachment-etag-remote"',
+    });
+
+    setAutoSyncForeground(true);
+    await vi.advanceTimersByTimeAsync(1_500);
+
+    expect(syncApi.getRemoteSyncState).toHaveBeenCalledTimes(2);
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(1);
+    expect(get(syncStatus).kind).toBe("synced");
   });
 });

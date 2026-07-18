@@ -2931,7 +2931,7 @@
       )}
       class="footer-sync-status"
       type="button"
-      title={$syncStatus.message}
+      title={$syncStatus.detail ?? $syncStatus.message}
       onclick={() => {
         showAbout = false;
         showDataManager = false;

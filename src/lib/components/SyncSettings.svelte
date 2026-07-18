@@ -184,7 +184,11 @@
   </div>
 
   {#if settings?.enabled}
-    <p class:status-error={["offline", "conflict", "failed"].includes($syncStatus.kind)} class="sync-status">
+    <p
+      class:status-error={["offline", "conflict", "failed"].includes($syncStatus.kind)}
+      class="sync-status"
+      title={$syncStatus.detail ?? $syncStatus.message}
+    >
       {$syncStatus.message}
       {#if $syncStatus.updatedAt}
         <small>{new Date($syncStatus.updatedAt).toLocaleTimeString()}</small>
