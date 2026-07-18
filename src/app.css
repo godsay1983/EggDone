@@ -3323,8 +3323,8 @@ footer button {
 .data-card {
   position: relative;
   z-index: 1;
-  width: 306px;
-  max-height: 500px;
+  width: min(360px, calc(100vw - 24px));
+  max-height: min(560px, calc(100vh - 24px));
   overflow-y: auto;
   padding: 17px;
   border: 1px solid #e9dfcf;
@@ -3401,6 +3401,7 @@ footer button {
   color: #9c8e79;
   font-size: 9px;
   line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .data-actions button:disabled,
@@ -3430,9 +3431,17 @@ footer button {
 
 .import-preview > div:not(.preview-actions) {
   display: flex;
-  gap: 10px;
+  flex-direction: column;
+  gap: 4px;
   margin-top: 8px;
   color: #6f6048;
+}
+
+.import-preview,
+.import-preview span,
+.data-message,
+.data-error {
+  overflow-wrap: anywhere;
 }
 
 .preview-actions {

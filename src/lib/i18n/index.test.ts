@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import { formatFileSize, formatRelativeTime } from "./formatters";
 import {
+  getLanguageState,
   normalizeLanguageMode,
   resolveSystemLanguage,
+  setLanguageMode,
   translate,
   type TranslationKey,
 } from "./index";
@@ -50,5 +52,13 @@ describe("desktop i18n foundation", () => {
   it("formats relative time and binary file sizes", () => {
     expect(formatFileSize(1536, "en-US")).toBe("1.5 KiB");
     expect(formatRelativeTime(0, 60_000, "en-US")).toBe("1 minute ago");
+  });
+
+  it("switches the active language in place without reloading component state", () => {
+    const draft = { title: "Draft title", content: "Unsaved body" };
+    setLanguageMode("en-US");
+    expect(getLanguageState()).toEqual({ mode: "en-US", resolvedLocale: "en-US" });
+    expect(draft).toEqual({ title: "Draft title", content: "Unsaved body" });
+    setLanguageMode("system");
   });
 });

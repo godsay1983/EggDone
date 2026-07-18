@@ -6,6 +6,8 @@
     type ImportPreview,
     type ImportResult,
   } from "$lib/api/dataApi";
+  import { formatFileSize } from "$lib/i18n/formatters";
+  import { languageState, translator } from "$lib/i18n";
 
   export let onClose: () => void;
   export let onImported: () => Promise<void>;
@@ -22,7 +24,7 @@
   async function exportData() {
     await runAction(async () => {
       const path = await dataApi.exportTodos();
-      if (path) message = "任务、便签和附件元数据 JSON 已导出";
+      if (path) message = $translator("data.exportJsonSuccess");
     });
   }
 
@@ -62,7 +64,7 @@
   async function backupDatabase() {
     await runAction(async () => {
       const path = await dataApi.backupDatabase();
-      if (path) message = "SQLite 数据库已备份";
+      if (path) message = $translator("data.backupSqliteSuccess");
     });
   }
 
@@ -70,7 +72,10 @@
     await runAction(async () => {
       const result = await dataApi.exportFullBackup();
       if (result) {
-        message = `完整备份已导出：${result.attachment_count} 个附件，${result.file_count} 个文件`;
+        message = $translator("data.exportFullBackupSuccess", {
+          attachments: result.attachment_count,
+          files: result.file_count,
+        });
       }
     });
   }
@@ -89,14 +94,18 @@
   }
 
   function importMessage(result: ImportResult) {
-    const restored = result.restored_file_count > 0 ? `；恢复文件 ${result.restored_file_count} 个` : "";
-    return `导入完成：任务新增 ${result.added}、更新 ${result.updated}、保持 ${result.unchanged}；便签新增 ${result.note_added}、更新 ${result.note_updated}、保持 ${result.note_unchanged}；附件新增 ${result.attachment_added}、更新 ${result.attachment_updated}、保持 ${result.attachment_unchanged}${restored}`;
-  }
-
-  function formatBytes(value: number) {
-    if (value < 1024) return `${value} B`;
-    if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KiB`;
-    return `${(value / 1024 / 1024).toFixed(1)} MiB`;
+    return $translator("data.importComplete", {
+      taskAdded: result.added,
+      taskUpdated: result.updated,
+      taskUnchanged: result.unchanged,
+      noteAdded: result.note_added,
+      noteUpdated: result.note_updated,
+      noteUnchanged: result.note_unchanged,
+      attachmentAdded: result.attachment_added,
+      attachmentUpdated: result.attachment_updated,
+      attachmentUnchanged: result.attachment_unchanged,
+      restoredFiles: result.restored_file_count,
+    });
   }
 </script>
 
@@ -110,7 +119,7 @@
   <button
     class="data-dismiss"
     type="button"
-    aria-label="关闭数据管理"
+    aria-label={$translator("data.close")}
     onclick={onClose}
   ></button>
   <div
@@ -123,55 +132,55 @@
   >
     <header>
       <div>
-        <h2 id="data-title">数据管理</h2>
-        <p>导出、恢复或备份本地任务、便签和附件</p>
+        <h2 id="data-title">{$translator("data.title")}</h2>
+        <p>{$translator("data.subtitle")}</p>
       </div>
-      <button type="button" aria-label="关闭数据管理" onclick={onClose}>×</button>
+      <button type="button" aria-label={$translator("data.close")} onclick={onClose}>×</button>
     </header>
 
     <div class="data-actions">
       <button type="button" disabled={busy} onclick={() => void exportData()}>
-        <strong>导出 JSON</strong>
-        <span>包含分组、任务、便签和附件元数据，不含附件文件</span>
+        <strong>{$translator("data.exportJson")}</strong>
+        <span>{$translator("data.exportJsonHelp")}</span>
       </button>
       <button type="button" disabled={busy} onclick={() => void chooseImport()}>
-        <strong>导入 JSON</strong>
-        <span>按 UUID 合并，不覆盖较新的本地数据</span>
+        <strong>{$translator("data.importJson")}</strong>
+        <span>{$translator("data.importJsonHelp")}</span>
       </button>
       <button type="button" disabled={busy} onclick={() => void backupDatabase()}>
-        <strong>备份 SQLite</strong>
-        <span>保存完整数据库快照</span>
+        <strong>{$translator("data.backupSqlite")}</strong>
+        <span>{$translator("data.backupSqliteHelp")}</span>
       </button>
       <button type="button" disabled={busy} onclick={() => void exportFullBackup()}>
-        <strong>导出完整备份</strong>
-        <span>包含任务、便签、附件原文件和图片预览</span>
+        <strong>{$translator("data.exportFullBackup")}</strong>
+        <span>{$translator("data.exportFullBackupHelp")}</span>
       </button>
       <button type="button" disabled={busy} onclick={() => void chooseFullBackupImport()}>
-        <strong>导入完整备份</strong>
-        <span>校验清单和摘要后，恢复任务、便签及附件文件</span>
+        <strong>{$translator("data.importFullBackup")}</strong>
+        <span>{$translator("data.importFullBackupHelp")}</span>
       </button>
     </div>
 
     {#if preview}
       <div class="import-preview">
-        <strong>确认导入 {preview.file_name}？</strong>
-        <span>任务 {preview.total} 项，便签 {preview.note_total} 项，附件 {preview.attachment_total} 项</span>
+        <strong>{$translator("data.confirmImportFile", { name: preview.file_name })}</strong>
+        <span>{$translator("data.previewSummary", { tasks: preview.total, notes: preview.note_total, attachments: preview.attachment_total })}</span>
         <div>
-          <span>任务：新增 {preview.added}，更新 {preview.updated}，保持 {preview.unchanged}</span>
-          <span>便签：新增 {preview.note_added}，更新 {preview.note_updated}，保持 {preview.note_unchanged}</span>
-          <span>附件：新增 {preview.attachment_added}，更新 {preview.attachment_updated}，保持 {preview.attachment_unchanged}</span>
+          <span>{$translator("data.taskChanges", { added: preview.added, updated: preview.updated, unchanged: preview.unchanged })}</span>
+          <span>{$translator("data.noteChanges", { added: preview.note_added, updated: preview.note_updated, unchanged: preview.note_unchanged })}</span>
+          <span>{$translator("data.attachmentChanges", { added: preview.attachment_added, updated: preview.attachment_updated, unchanged: preview.attachment_unchanged })}</span>
           {#if preview.attachment_files_included}
-            <span>已校验 {preview.backup_file_count} 个附件文件，共 {formatBytes(preview.backup_total_bytes)}，确认后将恢复到本地。</span>
+            <span>{$translator("data.backupValidated", { files: preview.backup_file_count, size: formatFileSize(preview.backup_total_bytes, $languageState.resolvedLocale) })}</span>
           {:else}
-            <span>附件文件不包含在 JSON 中，导入后将从已配置的对象存储按需下载。</span>
+            <span>{$translator("data.jsonAttachmentsHelp")}</span>
           {/if}
         </div>
         <div class="preview-actions">
           <button type="button" disabled={busy} onclick={() => { preview = null; importKind = null; }}>
-            取消
+            {$translator("common.cancel")}
           </button>
           <button type="button" disabled={busy} onclick={() => void confirmImport()}>
-            确认合并
+            {$translator("data.confirmMerge")}
           </button>
         </div>
       </div>
