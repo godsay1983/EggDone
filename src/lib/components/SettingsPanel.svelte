@@ -157,8 +157,8 @@
 
     <div class="setting-row">
       <div>
-        <strong>全局快捷键</strong>
-        <span>快速打开面板并聚焦输入框</span>
+        <strong>{$translator("settings.shortcutTitle")}</strong>
+        <span>{$translator("settings.shortcutHelp")}</span>
       </div>
       <label class="switch">
         <input
@@ -173,7 +173,7 @@
     </div>
 
     <label class="shortcut-select">
-      <span>快捷键组合</span>
+      <span>{$translator("settings.shortcutCombination")}</span>
       <select
         value={settings.shortcut}
         disabled={busy || !settings.shortcutEnabled}
@@ -187,8 +187,8 @@
 
     <div class="setting-row">
       <div>
-        <strong>开机自动运行</strong>
-        <span>启动后静默驻留系统托盘</span>
+        <strong>{$translator("settings.autostartTitle")}</strong>
+        <span>{$translator("settings.autostartHelp")}</span>
       </div>
       <label class="switch">
         <input
@@ -202,7 +202,7 @@
     </div>
 
     <label class="preference-select">
-      <span>启动默认视图</span>
+      <span>{$translator("settings.defaultView")}</span>
       <select
         value={defaultListViewMode}
         onchange={(event) =>
@@ -210,47 +210,47 @@
             event.currentTarget.value as DefaultListViewMode,
           )}
       >
-        <option value="remember">记住上次</option>
-        <option value="all">全部</option>
-        <option value="today">今天</option>
-        <option value="quadrants">四象限</option>
-        <option value="calendar">日历</option>
+        <option value="remember">{$translator("settings.rememberLastView")}</option>
+        <option value="all">{$translator("nav.all")}</option>
+        <option value="today">{$translator("nav.today")}</option>
+        <option value="quadrants">{$translator("nav.matrix")}</option>
+        <option value="calendar">{$translator("nav.calendar")}</option>
       </select>
     </label>
 
     <section class="focus-settings-section" aria-labelledby="focus-settings-title">
       <div class="setting-row focus-settings-heading">
         <div>
-          <strong id="focus-settings-title">专注时长</strong>
-          <span>新一轮番茄钟使用这里的时长，当前暂停中的会话不被打断</span>
+          <strong id="focus-settings-title">{$translator("settings.focusDuration")}</strong>
+          <span>{$translator("settings.focusDurationHelp")}</span>
         </div>
       </div>
 
       <div class="duration-setting">
-        <span>专注</span>
-        <div class="duration-options" role="group" aria-label="专注时长">
+        <span>{$translator("settings.focus")}</span>
+        <div class="duration-options" role="group" aria-label={$translator("settings.focusDuration")}>
           {#each FOCUS_DURATION_OPTIONS as minutes}
             <button
               type="button"
               class:active={focusDurationMinutes === minutes}
               onclick={() => setFocusDuration(minutes)}
             >
-              {minutes} 分钟
+              {$translator("settings.minutes", { count: minutes })}
             </button>
           {/each}
         </div>
       </div>
 
       <div class="duration-setting">
-        <span>休息</span>
-        <div class="duration-options" role="group" aria-label="休息时长">
+        <span>{$translator("settings.break")}</span>
+        <div class="duration-options" role="group" aria-label={$translator("settings.break")}>
           {#each BREAK_DURATION_OPTIONS as minutes}
             <button
               type="button"
               class:active={breakDurationMinutes === minutes}
               onclick={() => setBreakDuration(minutes)}
             >
-              {minutes} 分钟
+              {$translator("settings.minutes", { count: minutes })}
             </button>
           {/each}
         </div>
