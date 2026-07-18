@@ -17,6 +17,7 @@
     type NoteAttachmentCacheStats,
   } from "$lib/api/noteAttachmentApi";
   import { translator } from "$lib/i18n";
+  import { localizedErrorMessage } from "$lib/i18n/errors";
   import { formatFileSize, formatTime } from "$lib/i18n/formatters";
 
   let settings: SyncSettings | null = null;
@@ -162,7 +163,8 @@
   }
 
   function errorMessage(reason: unknown) {
-    return localizedSyncMessage(reason instanceof Error ? reason.message : String(reason));
+    const raw = reason instanceof Error ? reason.message : String(reason);
+    return raw.startsWith("EGGDONE_ERROR::") ? localizedErrorMessage(raw) : localizedSyncMessage(raw);
   }
 
   function localizedSyncMessage(raw: string) {

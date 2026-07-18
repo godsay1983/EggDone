@@ -1,8 +1,10 @@
+import type { RepeatRule } from "$lib/types";
+
 export interface QuickAddSchedule {
   due_date: string | null;
   due_at: number | null;
-  reminder_at: null;
-  repeat_rule: null;
+  reminder_at: number | null;
+  repeat_rule: RepeatRule | null;
 }
 
 export interface QuickAddResult {
@@ -23,7 +25,20 @@ const DATE_TOKEN_PATTERNS = [
   { pattern: /后天/, offsetDays: 2, label: "后天" },
   { pattern: /明天/, offsetDays: 1, label: "明天" },
   { pattern: /今天/, offsetDays: 0, label: "今天" },
+  { pattern: /\bday after tomorrow\b/i, offsetDays: 2, label: "day after tomorrow" },
+  { pattern: /\btomorrow\b/i, offsetDays: 1, label: "tomorrow" },
+  { pattern: /\btoday\b/i, offsetDays: 0, label: "today" },
 ];
+
+const ENGLISH_WEEKDAY_MAP = new Map([
+  ["sunday", 0],
+  ["monday", 1],
+  ["tuesday", 2],
+  ["wednesday", 3],
+  ["thursday", 4],
+  ["friday", 5],
+  ["saturday", 6],
+]);
 
 const WEEKDAY_MAP = new Map([
   ["一", 1],
@@ -49,15 +64,19 @@ export function parseQuickAdd(
   const dateMatch = findDateToken(originalTitle, now);
   const groupMatch = findGroupToken(originalTitle, groupNames);
   const priorityMatch = findPriorityToken(originalTitle);
-  if (!dateMatch && !groupMatch && !priorityMatch) {
+  const reminderMatch = findReminderToken(originalTitle);
+  const repeatMatch = findRepeatToken(originalTitle);
+  if (!dateMatch && !groupMatch && !priorityMatch && !reminderMatch && !repeatMatch) {
     return emptyResult(originalTitle);
   }
 
-  const timeMatch = findTimeToken(originalTitle);
+  const timeMatch = findTimeToken(originalTitle, reminderMatch?.token ?? null);
   const tokens = [
     ...(priorityMatch ? [priorityMatch] : []),
     ...(dateMatch ? [dateMatch.token] : []),
     ...(timeMatch ? [timeMatch.token] : []),
+    ...(reminderMatch ? [reminderMatch.token] : []),
+    ...(repeatMatch ? [repeatMatch.token] : []),
     ...(groupMatch ? [groupMatch.token] : []),
   ];
   const title = removeTokens(originalTitle, tokens);
@@ -65,7 +84,7 @@ export function parseQuickAdd(
     return emptyResult(originalTitle);
   }
 
-  if (!dateMatch) {
+  if (!dateMatch && !reminderMatch && !repeatMatch) {
     return {
       title,
       schedule: null,
@@ -75,9 +94,14 @@ export function parseQuickAdd(
     };
   }
 
+  const scheduleDate = dateMatch?.date ?? localDateString(0, now);
+  const reminderAt = reminderMatch
+    ? localDateTimeToTimestamp(scheduleDate, reminderMatch.hour, reminderMatch.minute)
+    : null;
+
   if (timeMatch) {
     const dueAt = localDateTimeToTimestamp(
-      dateMatch.date,
+      scheduleDate,
       timeMatch.hour,
       timeMatch.minute,
     );
@@ -87,10 +111,10 @@ export function parseQuickAdd(
       schedule: {
         due_date: null,
         due_at: dueAt,
-        reminder_at: null,
-        repeat_rule: null,
+        reminder_at: reminderAt,
+        repeat_rule: repeatMatch?.rule ?? null,
       },
-      label: `${dateMatch.label} ${timeMatch.text}`,
+      label: [dateMatch?.label, timeMatch.text, repeatMatch?.label].filter(Boolean).join(" "),
       groupName: groupMatch?.name ?? null,
       priority: priorityMatch ? 1 : 0,
     };
@@ -99,12 +123,12 @@ export function parseQuickAdd(
   return {
     title,
     schedule: {
-      due_date: dateMatch.date,
+      due_date: scheduleDate,
       due_at: null,
-      reminder_at: null,
-      repeat_rule: null,
+      reminder_at: reminderAt,
+      repeat_rule: repeatMatch?.rule ?? null,
     },
-    label: dateMatch.label,
+    label: [dateMatch?.label, repeatMatch?.label].filter(Boolean).join(" "),
     groupName: groupMatch?.name ?? null,
     priority: priorityMatch ? 1 : 0,
   };
@@ -121,7 +145,7 @@ function emptyResult(title: string): QuickAddResult {
 }
 
 function findPriorityToken(input: string): MatchedToken | null {
-  const match = /^[!！](?=$|[\s，,])/.exec(input);
+  const match = /^(?:[!！]|important\b)(?=$|[\s，,])/i.exec(input);
   if (!match || match.index === undefined) return null;
   return tokenFromMatch(match);
 }
@@ -138,36 +162,91 @@ function findDateToken(input: string, now: Date) {
   }
 
   const weekdayMatch = /(下)?(?:周|星期)([一二三四五六日天])/.exec(input);
-  if (!weekdayMatch || weekdayMatch.index === undefined) return null;
-  const targetWeekday = WEEKDAY_MAP.get(weekdayMatch[2]);
+  if (weekdayMatch && weekdayMatch.index !== undefined) {
+    const targetWeekday = WEEKDAY_MAP.get(weekdayMatch[2]);
+    if (targetWeekday !== undefined) {
+      return {
+        date: localDateString(
+          daysUntilWeekday(now.getDay(), targetWeekday, weekdayMatch[1] === "下"),
+          now,
+        ),
+        label: weekdayMatch[0],
+        token: tokenFromMatch(weekdayMatch),
+      };
+    }
+  }
+
+  const englishWeekday = /\b(next\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/i.exec(input);
+  if (!englishWeekday || englishWeekday.index === undefined) return null;
+  const targetWeekday = ENGLISH_WEEKDAY_MAP.get(englishWeekday[2].toLowerCase());
   if (targetWeekday === undefined) return null;
   return {
-    date: localDateString(
-      daysUntilWeekday(now.getDay(), targetWeekday, weekdayMatch[1] === "下"),
-      now,
-    ),
-    label: weekdayMatch[0],
-    token: tokenFromMatch(weekdayMatch),
+    date: localDateString(daysUntilWeekday(now.getDay(), targetWeekday, Boolean(englishWeekday[1])), now),
+    label: englishWeekday[0],
+    token: tokenFromMatch(englishWeekday),
   };
 }
 
-function findTimeToken(input: string) {
-  const match = /(?:^|[\s，,])([01]?\d|2[0-3])[:：]([0-5]\d)(?=$|[\s，,])/.exec(
-    input,
-  );
+function findTimeToken(input: string, excluded: MatchedToken | null) {
+  const pattern = /(?:^|[\s，,])(?:at\s+)?(\d{1,2})(?:[:：]([0-5]\d))?\s*(am|pm)?(?=$|[\s，,])/gi;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(input)) !== null) {
+    if (match.index === undefined) continue;
+    if (!/\bat\s/i.test(match[0]) && !/[:：]/.test(match[0]) && !/(?:am|pm)/i.test(match[0])) {
+      continue;
+    }
+    const leadingSeparator = /^\s|^，|^,/.test(match[0]) ? 1 : 0;
+    const start = match.index + leadingSeparator;
+    const end = match.index + match[0].length;
+    if (excluded && start < excluded.end && end > excluded.start) continue;
+    const parsed = parseClock(match[1], match[2], match[3]);
+    if (!parsed) continue;
+    return {
+      ...parsed,
+      text: `${String(parsed.hour).padStart(2, "0")}:${String(parsed.minute).padStart(2, "0")}`,
+      token: { start, end },
+    };
+  }
+  return null;
+}
+
+function findReminderToken(input: string) {
+  const match = /(?:提醒|remind(?:\s+me)?)(?:\s*(?:在|at))?\s*(\d{1,2})(?:[:：]([0-5]\d))?\s*(am|pm)?\b/i.exec(input);
   if (!match || match.index === undefined) return null;
-  const leadingSeparator = match[0].length - `${match[1]}:${match[2]}`.length;
-  const start = match.index + Math.max(0, leadingSeparator);
-  const text = `${match[1].padStart(2, "0")}:${match[2]}`;
+  const parsed = parseClock(match[1], match[2], match[3]);
+  if (!parsed) return null;
   return {
-    hour: Number(match[1]),
-    minute: Number(match[2]),
-    text,
-    token: {
-      start,
-      end: start + match[1].length + 1 + match[2].length,
-    },
+    ...parsed,
+    token: tokenFromMatch(match),
   };
+}
+
+function findRepeatToken(input: string): { rule: RepeatRule; label: string; token: MatchedToken } | null {
+  const candidates: Array<{ pattern: RegExp; rule: RepeatRule }> = [
+    { pattern: /(?:每天|\bevery day\b|\bdaily\b)/i, rule: "daily" },
+    { pattern: /(?:工作日|\bweekdays\b)/i, rule: "weekdays" },
+    { pattern: /(?:每周|\bevery week\b|\bweekly\b)/i, rule: "weekly" },
+    { pattern: /(?:每月|\bevery month\b|\bmonthly\b)/i, rule: "monthly" },
+  ];
+  for (const candidate of candidates) {
+    const match = candidate.pattern.exec(input);
+    if (!match || match.index === undefined) continue;
+    return { rule: candidate.rule, label: match[0], token: tokenFromMatch(match) };
+  }
+  return null;
+}
+
+function parseClock(hourText: string, minuteText?: string, meridiemText?: string) {
+  let hour = Number(hourText);
+  const minute = Number(minuteText ?? "0");
+  const meridiem = meridiemText?.toLowerCase();
+  if (meridiem) {
+    if (hour < 1 || hour > 12) return null;
+    if (meridiem === "am") hour = hour === 12 ? 0 : hour;
+    if (meridiem === "pm") hour = hour === 12 ? 12 : hour + 12;
+  }
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return { hour, minute };
 }
 
 function findGroupToken(input: string, groupNames: string[]) {

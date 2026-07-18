@@ -1,6 +1,7 @@
 import { derived, writable } from "svelte/store";
 
 import { noteApi } from "$lib/api/noteApi";
+import { localizedErrorMessage } from "$lib/i18n/errors";
 import { scheduleAutoSync } from "$lib/sync/autoSync";
 import type { Note, NoteColor } from "$lib/types";
 
@@ -236,7 +237,7 @@ function sortNotes(left: Note, right: Note) {
 }
 
 function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
+  return localizedErrorMessage(error);
 }
 
 export const notes = createNoteStore();

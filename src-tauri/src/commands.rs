@@ -935,10 +935,17 @@ pub fn hide_panel(window: WebviewWindow) -> Result<(), String> {
 #[tauri::command]
 pub fn open_focus_window(app: AppHandle) -> Result<(), String> {
     let Some(window) = app.get_webview_window("focus") else {
-        return Err("专注窗口未初始化".to_string());
+        return Err(crate::error_codes::coded(
+            crate::error_codes::FOCUS_UNAVAILABLE,
+            "focus window is not initialized",
+        ));
     };
-    window.show().map_err(|error| error.to_string())?;
-    window.set_focus().map_err(|error| error.to_string())
+    window.show().map_err(|error| {
+        crate::error_codes::coded(crate::error_codes::FOCUS_UNAVAILABLE, error.to_string())
+    })?;
+    window.set_focus().map_err(|error| {
+        crate::error_codes::coded(crate::error_codes::FOCUS_UNAVAILABLE, error.to_string())
+    })
 }
 
 #[tauri::command]
@@ -988,6 +995,7 @@ pub fn set_focus_window_compact(app: AppHandle, compact: bool) -> Result<(), Str
 #[tauri::command]
 pub fn publish_focus_notification(app: AppHandle, completed_phase: String) -> Result<(), String> {
     reminders::deliver_focus_notification(&app, &completed_phase)
+        .map_err(|error| crate::error_codes::coded(crate::error_codes::REMINDER_FAILED, error))
 }
 
 #[tauri::command]
@@ -1086,7 +1094,9 @@ pub async fn test_sync_connection(
         let connection = lock_database(&database)?;
         s3_sync::prepare_connection_test(&connection)?
     };
-    s3_sync::test_connection(prepared).await
+    s3_sync::test_connection(prepared)
+        .await
+        .map_err(crate::error_codes::sync)
 }
 
 #[tauri::command]
@@ -1097,7 +1107,9 @@ pub async fn get_remote_sync_state(
         let connection = lock_database(&database)?;
         s3_sync::prepare_manual_sync(&connection)?
     };
-    s3_sync::get_remote_state(&prepared).await
+    s3_sync::get_remote_state(&prepared)
+        .await
+        .map_err(crate::error_codes::sync)
 }
 
 #[tauri::command]
@@ -1191,6 +1203,17 @@ pub async fn delete_remote_note_asset(
 
 #[tauri::command]
 pub async fn sync_now(
+    app: AppHandle,
+    database: State<'_, Database>,
+    runtime: State<'_, SyncRuntime>,
+    asset_store: State<'_, NoteAssetStore>,
+) -> Result<ManualSyncResult, String> {
+    sync_now_inner(app, database, runtime, asset_store)
+        .await
+        .map_err(crate::error_codes::sync)
+}
+
+async fn sync_now_inner(
     app: AppHandle,
     database: State<'_, Database>,
     runtime: State<'_, SyncRuntime>,

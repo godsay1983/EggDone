@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { codedInvoke } from "$lib/i18n/errors";
 
 export interface ImportPreview {
   path: string;
@@ -42,30 +43,30 @@ export interface FullBackupExportResult {
 
 export const dataApi = {
   exportTodos(): Promise<string | null> {
-    return invoke<string | null>("export_todos");
+    return codedInvoke(invoke<string | null>("export_todos"), "DATA_EXCHANGE_FAILED");
   },
 
   exportFullBackup(): Promise<FullBackupExportResult | null> {
-    return invoke<FullBackupExportResult | null>("export_full_backup");
+    return codedInvoke(invoke<FullBackupExportResult | null>("export_full_backup"), "DATA_EXCHANGE_FAILED");
   },
 
   previewImport(): Promise<ImportPreview | null> {
-    return invoke<ImportPreview | null>("preview_todo_import");
+    return codedInvoke(invoke<ImportPreview | null>("preview_todo_import"), "DATA_EXCHANGE_FAILED");
   },
 
   confirmImport(path: string): Promise<ImportResult> {
-    return invoke<ImportResult>("confirm_todo_import", { path });
+    return codedInvoke(invoke<ImportResult>("confirm_todo_import", { path }), "DATA_EXCHANGE_FAILED");
   },
 
   previewFullBackupImport(): Promise<ImportPreview | null> {
-    return invoke<ImportPreview | null>("preview_full_backup_import");
+    return codedInvoke(invoke<ImportPreview | null>("preview_full_backup_import"), "DATA_EXCHANGE_FAILED");
   },
 
   confirmFullBackupImport(path: string): Promise<ImportResult> {
-    return invoke<ImportResult>("confirm_full_backup_import", { path });
+    return codedInvoke(invoke<ImportResult>("confirm_full_backup_import", { path }), "DATA_EXCHANGE_FAILED");
   },
 
   backupDatabase(): Promise<string | null> {
-    return invoke<string | null>("backup_database");
+    return codedInvoke(invoke<string | null>("backup_database"), "DATA_EXCHANGE_FAILED");
   },
 };

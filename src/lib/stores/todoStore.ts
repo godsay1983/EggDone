@@ -2,6 +2,7 @@ import { derived, get, writable } from "svelte/store";
 
 import { todoApi } from "$lib/api/todoApi";
 import type { TodoScheduleInput } from "$lib/api/todoApi";
+import { localizedErrorMessage } from "$lib/i18n/errors";
 import { scheduleAutoSync } from "$lib/sync/autoSync";
 import type {
   RepeatDeleteScope,
@@ -427,7 +428,7 @@ function replaceUpdatedTodos(items: Todo[], updatedTodos: Todo[]) {
 }
 
 function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
+  return localizedErrorMessage(error);
 }
 
 export const todos = createTodoStore();

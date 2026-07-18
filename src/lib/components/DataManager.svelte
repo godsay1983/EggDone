@@ -8,6 +8,7 @@
   } from "$lib/api/dataApi";
   import { formatFileSize } from "$lib/i18n/formatters";
   import { languageState, translator } from "$lib/i18n";
+  import { localizedErrorMessage } from "$lib/i18n/errors";
 
   export let onClose: () => void;
   export let onImported: () => Promise<void>;
@@ -87,7 +88,7 @@
     try {
       await action();
     } catch (reason) {
-      error = reason instanceof Error ? reason.message : String(reason);
+      error = localizedErrorMessage(reason);
     } finally {
       busy = false;
     }

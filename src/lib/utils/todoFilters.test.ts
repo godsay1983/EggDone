@@ -46,6 +46,11 @@ describe("filterTodos", () => {
       1, 3,
     ]);
     expect(items.map((todo) => todo.id)).toEqual([1, 2, 3]);
+    expect(items.map((todo) => todo.title)).toEqual([
+      "Write release notes",
+      "购买鸡蛋",
+      "WRITE tests",
+    ]);
   });
 
   it("trims the query and supports Chinese text", () => {

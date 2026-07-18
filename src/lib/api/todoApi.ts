@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { codedInvoke } from "$lib/i18n/errors";
 
 import type {
   RepeatDeleteScope,
@@ -158,11 +159,14 @@ export const todoApi = {
   },
 
   openFocusWindow(): Promise<void> {
-    return invoke<void>("open_focus_window");
+    return codedInvoke(invoke<void>("open_focus_window"), "FOCUS_UNAVAILABLE");
   },
 
   publishFocusNotification(completedPhase: "focus" | "break"): Promise<void> {
-    return invoke<void>("publish_focus_notification", { completedPhase });
+    return codedInvoke(
+      invoke<void>("publish_focus_notification", { completedPhase }),
+      "REMINDER_FAILED",
+    );
   },
 
   updateFocusTrayTooltip(

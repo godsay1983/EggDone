@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { parseQuickAdd } from "./quickAdd";
+import fixtures from "../../../docs/fixtures/quick-add-bilingual.json";
 
 describe("parseQuickAdd", () => {
   const now = new Date("2026-06-10T12:00:00+08:00");
@@ -108,5 +109,27 @@ describe("parseQuickAdd", () => {
       groupName: "工作",
       priority: 1,
     });
+  });
+
+  it.each(fixtures)("parses shared bilingual fixture: $name", (fixture) => {
+    const result = parseQuickAdd(fixture.input, now);
+    const dueDate = new Date(now);
+    dueDate.setDate(dueDate.getDate() + fixture.dueOffsetDays);
+    const [dueHour, dueMinute] = fixture.dueTime.split(":").map(Number);
+
+    expect(result.title).toBe(fixture.expectedTitle);
+    expect(result.priority).toBe(fixture.priority);
+    expect(result.schedule?.repeat_rule).toBe(fixture.repeatRule);
+    expect(result.schedule?.due_at).toBe(
+      new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate(), dueHour, dueMinute).getTime(),
+    );
+    if (fixture.reminderTime === null) {
+      expect(result.schedule?.reminder_at).toBeNull();
+    } else {
+      const [hour, minute] = fixture.reminderTime.split(":").map(Number);
+      expect(result.schedule?.reminder_at).toBe(
+        new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate(), hour, minute).getTime(),
+      );
+    }
   });
 });

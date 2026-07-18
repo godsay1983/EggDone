@@ -6,6 +6,7 @@
   import { onMount, tick } from "svelte";
 
   import { languageState, translator } from "$lib/i18n";
+  import { localizedErrorMessage } from "$lib/i18n/errors";
   import { todoApi } from "$lib/api/todoApi";
   import type { TodoScheduleInput } from "$lib/api/todoApi";
   import {
@@ -616,7 +617,7 @@
       await refreshNoteAttachments(note.uuid);
       scheduleAutoSync();
     } catch (reason) {
-      noteAttachmentError = reason instanceof Error ? reason.message : String(reason);
+      noteAttachmentError = localizedErrorMessage(reason);
     } finally {
       noteAttachmentBusy = false;
     }
@@ -635,7 +636,7 @@
       await refreshNoteAttachments(note.uuid);
       scheduleAutoSync();
     } catch (reason) {
-      noteAttachmentError = reason instanceof Error ? reason.message : String(reason);
+      noteAttachmentError = localizedErrorMessage(reason);
     } finally {
       noteAttachmentBusy = false;
     }
@@ -664,7 +665,7 @@
       scheduleAutoSync();
     } catch (reason) {
       deletedNoteAttachment = attachment;
-      noteAttachmentError = reason instanceof Error ? reason.message : String(reason);
+      noteAttachmentError = localizedErrorMessage(reason);
     }
   }
 
@@ -688,7 +689,7 @@
       }
       await refreshNoteAttachments(attachment.note_uuid);
     } catch (reason) {
-      noteAttachmentError = reason instanceof Error ? reason.message : String(reason);
+      noteAttachmentError = localizedErrorMessage(reason);
       await refreshNoteAttachments(attachment.note_uuid).catch(() => undefined);
     }
   }
@@ -709,7 +710,7 @@
       noteAttachmentsByNote = { ...noteAttachmentsByNote, [attachment.note_uuid]: saved };
       scheduleAutoSync();
     } catch (reason) {
-      noteAttachmentError = reason instanceof Error ? reason.message : String(reason);
+      noteAttachmentError = localizedErrorMessage(reason);
       await refreshNoteAttachments(attachment.note_uuid);
     } finally {
       noteAttachmentBusy = false;

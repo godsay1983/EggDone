@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { codedInvoke } from "$lib/i18n/errors";
 
 export interface SyncSettings {
   enabled: boolean;
@@ -66,13 +67,13 @@ export function deleteSyncCredentials(): Promise<void> {
 }
 
 export function testSyncConnection(): Promise<ConnectionTestResult> {
-  return invoke("test_sync_connection");
+  return codedInvoke(invoke("test_sync_connection"), "SYNC_FAILED");
 }
 
 export function syncNow(): Promise<ManualSyncResult> {
-  return invoke("sync_now");
+  return codedInvoke(invoke("sync_now"), "SYNC_FAILED");
 }
 
 export function getRemoteSyncState(): Promise<RemoteSyncState> {
-  return invoke("get_remote_sync_state");
+  return codedInvoke(invoke("get_remote_sync_state"), "SYNC_FAILED");
 }

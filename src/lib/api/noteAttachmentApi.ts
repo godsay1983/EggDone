@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
 import type { NoteAttachment } from "$lib/types";
+import { codedInvoke } from "$lib/i18n/errors";
 
 export interface NoteAttachmentCacheStats {
   totalBytes: number;
@@ -16,18 +17,22 @@ function bytesToUrl(bytes: number[], mimeType: string) {
   return URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: mimeType }));
 }
 
+function attachmentInvoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+  return codedInvoke(invoke<T>(command, args), "ATTACHMENT_FAILED");
+}
+
 export const noteAttachmentApi = {
   list(noteUuid: string): Promise<NoteAttachment[]> {
-    return invoke<NoteAttachment[]>("list_note_attachments", { noteUuid });
+    return attachmentInvoke<NoteAttachment[]>("list_note_attachments", { noteUuid });
   },
 
   reorder(noteUuid: string, orderedUuids: string[]): Promise<NoteAttachment[]> {
-    return invoke<NoteAttachment[]>("reorder_note_attachments", { noteUuid, orderedUuids });
+    return attachmentInvoke<NoteAttachment[]>("reorder_note_attachments", { noteUuid, orderedUuids });
   },
 
   async createImage(noteUuid: string, file: File): Promise<NoteAttachment> {
     const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
-    return invoke<NoteAttachment>("create_note_image_attachment", {
+    return attachmentInvoke<NoteAttachment>("create_note_image_attachment", {
       noteUuid,
       displayName: file.name,
       bytes,
@@ -36,7 +41,7 @@ export const noteAttachmentApi = {
 
   async createFile(noteUuid: string, file: File): Promise<NoteAttachment> {
     const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
-    return invoke<NoteAttachment>("create_note_file_attachment", {
+    return attachmentInvoke<NoteAttachment>("create_note_file_attachment", {
       noteUuid,
       displayName: file.name,
       bytes,
@@ -44,40 +49,40 @@ export const noteAttachmentApi = {
   },
 
   async previewUrl(attachment: NoteAttachment): Promise<string> {
-    const bytes = await invoke<number[]>("read_note_attachment_preview", {
+    const bytes = await attachmentInvoke<number[]>("read_note_attachment_preview", {
       uuid: attachment.uuid,
     });
     return bytesToUrl(bytes, attachment.preview_mime_type ?? "image/jpeg");
   },
 
   async originalUrl(attachment: NoteAttachment): Promise<string> {
-    const bytes = await invoke<number[]>("read_note_attachment_original", {
+    const bytes = await attachmentInvoke<number[]>("read_note_attachment_original", {
       uuid: attachment.uuid,
     });
     return bytesToUrl(bytes, attachment.mime_type);
   },
 
   openFile(attachment: NoteAttachment): Promise<void> {
-    return invoke<void>("open_note_file_attachment", { uuid: attachment.uuid });
+    return attachmentInvoke<void>("open_note_file_attachment", { uuid: attachment.uuid });
   },
 
   delete(uuid: string): Promise<NoteAttachment> {
-    return invoke<NoteAttachment>("delete_note_attachment", { uuid });
+    return attachmentInvoke<NoteAttachment>("delete_note_attachment", { uuid });
   },
 
   restore(uuid: string): Promise<NoteAttachment> {
-    return invoke<NoteAttachment>("restore_note_attachment", { uuid });
+    return attachmentInvoke<NoteAttachment>("restore_note_attachment", { uuid });
   },
 
   retry(uuid: string): Promise<NoteAttachment> {
-    return invoke<NoteAttachment>("retry_note_attachment", { uuid });
+    return attachmentInvoke<NoteAttachment>("retry_note_attachment", { uuid });
   },
 
   cacheStats(): Promise<NoteAttachmentCacheStats> {
-    return invoke<NoteAttachmentCacheStats>("get_note_attachment_cache_stats");
+    return attachmentInvoke<NoteAttachmentCacheStats>("get_note_attachment_cache_stats");
   },
 
   clearCache(): Promise<NoteAttachmentCacheStats> {
-    return invoke<NoteAttachmentCacheStats>("clear_note_attachment_cache");
+    return attachmentInvoke<NoteAttachmentCacheStats>("clear_note_attachment_cache");
   },
 };

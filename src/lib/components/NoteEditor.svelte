@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { languageState, translator, type TranslationKey } from "$lib/i18n";
   import { formatFileSize } from "$lib/i18n/formatters";
+  import { localizedErrorMessage } from "$lib/i18n/errors";
   import type { Note, NoteAttachment, NoteColor } from "$lib/types";
 
   export let note: Note;
@@ -83,7 +84,7 @@
     try {
       await onOpenFile(attachment);
     } catch (reason) {
-      fileActionError = reason instanceof Error ? reason.message : String(reason);
+      fileActionError = localizedErrorMessage(reason);
     }
   }
 
@@ -97,7 +98,7 @@
       anchor.click();
       setTimeout(() => URL.revokeObjectURL(url), 0);
     } catch (reason) {
-      fileActionError = reason instanceof Error ? reason.message : String(reason);
+      fileActionError = localizedErrorMessage(reason);
     }
   }
 
@@ -126,7 +127,7 @@
     try {
       viewerUrl = await onOpenAttachment(attachment);
     } catch (reason) {
-      viewerError = reason instanceof Error ? reason.message : String(reason);
+      viewerError = localizedErrorMessage(reason);
     } finally {
       viewerLoading = false;
     }

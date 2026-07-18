@@ -1,6 +1,7 @@
 mod commands;
 mod data_exchange;
 mod db;
+mod error_codes;
 mod i18n;
 mod note_asset_store;
 mod note_attachment_sync;
