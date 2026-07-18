@@ -1,7 +1,23 @@
 import { describe, expect, it } from "vitest";
 
 import { parseQuickAdd } from "./quickAdd";
-import fixtures from "../../../docs/fixtures/quick-add-bilingual.json";
+import contract from "../../../docs/fixtures/quick-add-i18n-v1.json";
+
+interface ContractExpected {
+  title: string;
+  due: { kind: "date" | "datetime"; local_date: string; local_time: string | null } | null;
+  reminder: { local_date: string; local_time: string } | null;
+  repeat_rule: "daily" | "weekdays" | "weekly" | "monthly" | null;
+  group_uuid: string | null;
+  priority: 0 | 1;
+  parse_applied: boolean;
+}
+
+interface ContractCase {
+  id: string;
+  input: string;
+  expected: ContractExpected;
+}
 
 describe("parseQuickAdd", () => {
   const now = new Date("2026-06-10T12:00:00+08:00");
@@ -111,25 +127,55 @@ describe("parseQuickAdd", () => {
     });
   });
 
-  it.each(fixtures)("parses shared bilingual fixture: $name", (fixture) => {
-    const result = parseQuickAdd(fixture.input, now);
-    const dueDate = new Date(now);
-    dueDate.setDate(dueDate.getDate() + fixture.dueOffsetDays);
-    const [dueHour, dueMinute] = fixture.dueTime.split(":").map(Number);
+  it.each(contract.cases as ContractCase[])("matches shared i18n contract: $id", (fixture) => {
+    const referenceNow = new Date(contract.reference.now_local);
+    const groupNames = contract.reference.groups.map((group) => group.name);
+    const result = parseQuickAdd(fixture.input, referenceNow, groupNames);
+    const expected = fixture.expected;
+    const expectedGroupName = contract.reference.groups.find(
+      (group) => group.uuid === expected.group_uuid,
+    )?.name ?? null;
 
-    expect(result.title).toBe(fixture.expectedTitle);
-    expect(result.priority).toBe(fixture.priority);
-    expect(result.schedule?.repeat_rule).toBe(fixture.repeatRule);
-    expect(result.schedule?.due_at).toBe(
-      new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate(), dueHour, dueMinute).getTime(),
-    );
-    if (fixture.reminderTime === null) {
-      expect(result.schedule?.reminder_at).toBeNull();
-    } else {
-      const [hour, minute] = fixture.reminderTime.split(":").map(Number);
-      expect(result.schedule?.reminder_at).toBe(
-        new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate(), hour, minute).getTime(),
-      );
-    }
+    expect(result.title).toBe(expected.title);
+    expect(result.groupName).toBe(expectedGroupName);
+    expect(result.priority).toBe(expected.priority);
+    expect(result.schedule?.repeat_rule ?? null).toBe(expected.repeat_rule);
+    expect(Boolean(result.schedule || result.groupName || result.priority || result.title !== fixture.input))
+      .toBe(expected.parse_applied);
+    assertContractDue(result.schedule, expected.due);
+    assertContractReminder(result.schedule?.reminder_at ?? null, expected.reminder);
   });
 });
+
+function assertContractDue(
+  schedule: ReturnType<typeof parseQuickAdd>["schedule"],
+  due: ContractExpected["due"],
+) {
+  if (due === null) {
+    expect(schedule?.due_date ?? null).toBeNull();
+    expect(schedule?.due_at ?? null).toBeNull();
+    return;
+  }
+  if (due.kind === "date") {
+    expect(schedule?.due_date).toBe(due.local_date);
+    expect(schedule?.due_at).toBeNull();
+    return;
+  }
+  expect(schedule?.due_date).toBeNull();
+  expect(schedule?.due_at).toBe(localTimestamp(due.local_date, due.local_time ?? "00:00"));
+}
+
+function assertContractReminder(
+  reminderAt: number | null,
+  reminder: ContractExpected["reminder"],
+) {
+  expect(reminderAt).toBe(
+    reminder === null ? null : localTimestamp(reminder.local_date, reminder.local_time),
+  );
+}
+
+function localTimestamp(date: string, time: string) {
+  const [year, month, day] = date.split("-").map(Number);
+  const [hour, minute] = time.split(":").map(Number);
+  return new Date(year, month - 1, day, hour, minute, 0, 0).getTime();
+}

@@ -1,13 +1,14 @@
 {
   "name": "eggdone",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "蛋定 Todo - 轻量级托盘 Todo 桌面应用",
   "type": "module",
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
     "build:windows": "tauri build --bundles nsis",
-    "release:check": "pnpm check && pnpm test && pnpm build && cd src-tauri && cargo fmt -- --check && cargo check && cargo test",
+    "i18n:check": "node scripts/check-i18n-catalogs.mjs && node scripts/check-i18n-hardcodes.mjs",
+    "release:check": "pnpm i18n:check && pnpm check && pnpm test && pnpm build && cd src-tauri && cargo fmt -- --check && cargo check && cargo test",
     "test": "vitest run",
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",

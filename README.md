@@ -48,6 +48,7 @@ EggDone 同时提供**纯血鸿蒙（HarmonyOS NEXT）**移动版本，支持手
 - 可选开机自动运行，并静默进入托盘
 - 显示未完成任务数量和空状态
 - 亮色和暗色主题切换，首次启动跟随系统并记住选择
+- 界面支持简体中文、English 和跟随系统语言，切换语言不重载当前编辑内容
 - 面板无边框、置顶、跳过任务栏，失焦自动隐藏
 - 面板按托盘所在显示器定位，并限制在显示器工作区内
 - 区分托盘点击与普通失焦，避免弹层和原生下拉操作误隐藏
@@ -87,6 +88,7 @@ pnpm tauri dev
 
 ```bash
 pnpm check
+pnpm i18n:check
 pnpm build
 pnpm test
 cd src-tauri
@@ -118,6 +120,8 @@ pnpm build:windows
 ```bash
 pnpm release:check
 ```
+
+`pnpm i18n:check` 会检查中英文字典键、占位符以及 Svelte 模板中的用户可见中文硬编码。超长伪本地化文案由测试生成，不会打包为可选语言。
 
 手动回归和 Windows 发布流程见：
 

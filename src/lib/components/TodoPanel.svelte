@@ -4,6 +4,7 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { flip } from "svelte/animate";
   import { onMount, tick } from "svelte";
+  import packageMetadata from "../../../package.json";
 
   import { languageState, translator } from "$lib/i18n";
   import { localizedErrorMessage } from "$lib/i18n/errors";
@@ -2934,7 +2935,7 @@
   {/if}
 
   <footer>
-    <span>一步一点，不着急</span>
+    <span>{$translator("footer.encouragement")}</span>
     <button
       class:syncing={$syncStatus.kind === "syncing"}
       class:sync-ok={$syncStatus.kind === "synced"}
@@ -2959,7 +2960,7 @@
         showDataManager = false;
         showSettings = false;
         showAbout = true;
-      }}>关于</button
+      }}>{$translator("footer.about")}</button
     >
   </footer>
 </main>
@@ -3062,13 +3063,13 @@
 
 {#if showAbout}
   <div class="about-backdrop">
-    <button class="about-dismiss" type="button" aria-label="关闭关于窗口" onclick={() => showAbout = false}></button>
+    <button class="about-dismiss" type="button" aria-label={$translator("about.close")} onclick={() => showAbout = false}></button>
     <div class="about-card" role="dialog" aria-modal="true" aria-labelledby="about-title">
       <img class="about-mascot" src="/eggdone-icon.png" alt="" aria-hidden="true" />
       <h2 id="about-title">EggDone</h2>
-      <p>蛋定 Todo 1.0.5</p>
-      <small>原创角色「拖拖蛋」陪你轻松处理待办。</small>
-      <button type="button" onclick={() => showAbout = false}>知道了</button>
+      <p>{$translator("about.version", { version: packageMetadata.version })}</p>
+      <small>{$translator("about.description")}</small>
+      <button type="button" onclick={() => showAbout = false}>{$translator("about.acknowledge")}</button>
     </div>
   </div>
 {/if}

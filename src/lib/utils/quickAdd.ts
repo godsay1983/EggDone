@@ -275,9 +275,11 @@ function daysUntilWeekday(
   targetWeekday: number,
   nextWeek: boolean,
 ) {
-  let offset = (targetWeekday - currentWeekday + 7) % 7;
-  if (nextWeek) offset += offset === 0 ? 7 : 7;
-  return offset;
+  if (!nextWeek) return (targetWeekday - currentWeekday + 7) % 7;
+  let daysToNextMonday = (8 - currentWeekday) % 7;
+  if (daysToNextMonday === 0) daysToNextMonday = 7;
+  const mondayOffset = targetWeekday === 0 ? 6 : targetWeekday - 1;
+  return daysToNextMonday + mondayOffset;
 }
 
 function localDateString(offsetDays: number, baseDate: Date) {
