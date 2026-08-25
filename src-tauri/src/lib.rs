@@ -91,6 +91,12 @@ pub fn run() {
                     let app = window.app_handle().clone();
                     std::thread::spawn(move || {
                         std::thread::sleep(std::time::Duration::from_millis(300));
+                        // Revalidate interaction and dialog grace before hiding: the
+                        // queued task is stale if the user grabbed the panel again
+                        // within the delay window.
+                        if !app.state::<tray::PanelState>().handle_blur() {
+                            return;
+                        }
                         let Some(panel) = app.get_webview_window("main") else {
                             return;
                         };

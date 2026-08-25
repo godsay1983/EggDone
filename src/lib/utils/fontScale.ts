@@ -1,8 +1,11 @@
+import { emit } from "@tauri-apps/api/event";
+
 import type { TranslationKey } from "$lib/i18n";
 
 export type FontScaleLevel = "standard" | "large" | "xlarge";
 
 export const FONT_SCALE_KEY = "eggdone-font-scale";
+export const FONT_SCALE_CHANGED_EVENT = "eggdone-font-scale-changed";
 
 export const fontScaleOptions: Array<{
   value: FontScaleLevel;
@@ -31,5 +34,8 @@ export function applyFontScale(level: FontScaleLevel) {
 export function saveFontScale(level: FontScaleLevel): FontScaleLevel {
   localStorage.setItem(FONT_SCALE_KEY, level);
   applyFontScale(level);
+  // Keep an already-open focus window in sync without a reload; every window
+  // shares the same --font-scale variable.
+  void emit(FONT_SCALE_CHANGED_EVENT, level).catch(() => {});
   return level;
 }

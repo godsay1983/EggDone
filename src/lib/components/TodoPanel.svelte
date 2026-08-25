@@ -1037,15 +1037,25 @@
     }
   }
 
+  let panelDragPointerId: number | null = null;
+
+  function cancelPanelDrag(event: PointerEvent) {
+    if (panelDragPointerId === event.pointerId) panelDragPointerId = null;
+  }
+
   async function startPanelDrag(event: PointerEvent) {
     if (event.button !== 0) return;
+    panelDragPointerId = event.pointerId;
     // Confirm the interaction grace before entering the native drag loop.
     // Starting a system drag on Windows briefly drops window focus, and an
     // unguarded blur would hide the panel right as the user grabs it. Awaiting
     // the IPC round-trip closes the race between the async mark and the
     // synchronous drag loop that `data-tauri-drag-region` cannot.
     await todoApi.markPanelInteraction().catch(() => {});
+    // Abort if the pointer was released while awaiting the IPC round-trip.
+    if (panelDragPointerId !== event.pointerId) return;
     await getCurrentWindow().startDragging().catch(() => {});
+    panelDragPointerId = null;
   }
 
   function applyTheme(nextTheme: Theme) {
@@ -2035,6 +2045,8 @@
 
 <svelte:window
   onpointerdown={markPanelInteraction}
+  onpointerup={cancelPanelDrag}
+  onpointercancel={cancelPanelDrag}
   onkeydown={handlePanelKeydown}
 />
 

@@ -3179,9 +3179,12 @@ footer button {
 }
 
 .focus-window-shell.compact .focus-window-header h1 {
-  width: 28px;
+  width: auto;
+  min-width: 28px;
   margin: 0;
+  overflow: hidden;
   font-size: calc(13px * var(--font-scale));
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
