@@ -21,6 +21,12 @@
     type TranslationKey,
   } from "$lib/i18n";
   import type { DefaultListViewMode } from "$lib/utils/viewPreferences";
+  import {
+    fontScaleOptions,
+    getFontScale,
+    saveFontScale,
+    type FontScaleLevel,
+  } from "$lib/utils/fontScale";
   import { onMount } from "svelte";
   import SyncSettings from "./SyncSettings.svelte";
 
@@ -34,6 +40,7 @@
   let error = settings.shortcutError ?? settings.autostartError ?? "";
   let focusDurationMinutes = 25;
   let breakDurationMinutes = 5;
+  let fontScale: FontScaleLevel = "standard";
   const languageOptions: Array<{ mode: LanguageMode; label: TranslationKey }> = [
     { mode: "system", label: "settings.languageSystem" },
     { mode: "zh-CN", label: "settings.languageSimplifiedChinese" },
@@ -43,6 +50,7 @@
   onMount(() => {
     focusDurationMinutes = getFocusDurationMinutes();
     breakDurationMinutes = getBreakDurationMinutes();
+    fontScale = getFontScale();
   });
 
   async function setShortcutEnabled(enabled: boolean) {
@@ -108,6 +116,10 @@
   function selectLanguage(mode: LanguageMode) {
     setLanguageMode(mode);
   }
+
+  function setFontScale(level: FontScaleLevel) {
+    fontScale = saveFontScale(level);
+  }
 </script>
 
 <svelte:window
@@ -148,6 +160,29 @@
             class:active={$languageState.mode === option.mode}
             aria-pressed={$languageState.mode === option.mode}
             onclick={() => selectLanguage(option.mode)}
+          >
+            {$translator(option.label)}
+          </button>
+        {/each}
+      </div>
+    </section>
+
+    <section class="language-settings-section" aria-labelledby="font-settings-title">
+      <div class="language-settings-heading">
+        <strong id="font-settings-title">{$translator("settings.fontSize")}</strong>
+        <span>{$translator("settings.fontSizeHelp")}</span>
+      </div>
+      <div
+        class="language-options"
+        role="group"
+        aria-label={$translator("settings.fontSize")}
+      >
+        {#each fontScaleOptions as option}
+          <button
+            type="button"
+            class:active={fontScale === option.value}
+            aria-pressed={fontScale === option.value}
+            onclick={() => setFontScale(option.value)}
           >
             {$translator(option.label)}
           </button>

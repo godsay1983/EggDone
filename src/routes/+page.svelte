@@ -4,9 +4,14 @@
   import FocusWindow from "$lib/components/FocusWindow.svelte";
   import TodoPanel from "$lib/components/TodoPanel.svelte";
   import { initializeLanguage, languageState } from "$lib/i18n";
+  import { applyFontScale, getFontScale } from "$lib/utils/fontScale";
   import "../app.css";
 
-  if (browser) initializeLanguage();
+  if (browser) {
+    initializeLanguage();
+    // Apply the persisted font scale before the first paint to avoid a flash.
+    applyFontScale(getFontScale());
+  }
 
   let nativeLocale = "";
   $: if (browser && nativeLocale !== $languageState.resolvedLocale) {
