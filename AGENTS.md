@@ -22,6 +22,11 @@ MVP 核心链路必须保持可用：
 - `src-tauri/src/db.rs` 负责数据库连接、建表和迁移入口。
 - `src-tauri/src/tray.rs` 负责托盘、菜单、面板显隐和定位。
 - Linux 托盘由 `src-tauri/src/tray_ksni.rs` 经 StatusNotifierItem(ksni)实现,因为 tray-icon 的 GTK 后端不转发左键 Activate;ksni 不可用时回退 Tauri 托盘。
+- 同步域：`src-tauri/src/s3_sync.rs` 负责 S3/MinIO 配置、系统凭据和连接测试；`sync.rs` 负责 Todo 合并与冲突决胜；`note_sync.rs`、`note_attachment_sync.rs`、`note_asset_store.rs` 负责便签和附件的同步；前端 `src/lib/sync/autoSync.ts` 编排自动同步（本地修改 4 秒防抖、前台 60 秒 ETag 轮询、网络类错误有限退避）。
+- `notes.rs` 负责便签 CRUD，`note_attachments.rs` 负责附件存储；`reminders.rs` 负责系统提醒投递和去重；`schedule.rs` 只做日期与到期时间的本地日历换算，不包含业务逻辑。
+- `data_exchange.rs` 负责 JSON 导入导出、合并预览和 SQLite 备份快照。
+- 多语言：前端字典在 `src/lib/i18n/`（zh-CN/en-US），Rust 侧文案在 `src-tauri/src/i18n.rs`；`scripts/check-i18n-catalogs.mjs` 和 `scripts/check-i18n-hardcodes.mjs` 校验字典键、占位符和模板中的中文硬编码。
+- `error_codes.rs` 定义 `EGGDONE_ERROR::CODE::detail` 错误字符串协议，前端按前缀解析分类展示。
 - 不要把托盘、数据库和 command 逻辑重新堆入 `lib.rs`。
 
 ## 编码规范
@@ -54,10 +59,21 @@ MVP 核心链路必须保持可用：
 
 ```bash
 pnpm check
+pnpm i18n:check
+pnpm test
 pnpm build
 cd src-tauri
 cargo fmt -- --check
 cargo check
+cargo test
+```
+
+完整发布门禁为 `pnpm release:check`（依次执行 i18n:check、check、test、build 和全部 cargo 检查）。
+
+前端单测使用 Vitest，可运行单个文件或按模式筛选：
+
+```bash
+pnpm test -- src/lib/utils/todoDates.test.ts
 ```
 
 涉及托盘或窗口行为时，还需运行 `pnpm tauri dev` 手动验证：
@@ -75,4 +91,4 @@ cargo check
 - 保持改动聚焦，不顺带重构无关模块。
 - 不提交 `node_modules/`、`target/`、本地数据库或编辑器临时文件。
 - 更新用户可见行为时同步更新 README。
-- 第一阶段不加入云同步、账户系统、遥测或自动更新，除非需求明确提出。
+- 云同步（S3/MinIO）已实现；第一阶段仍不加入账户系统、遥测或自动更新，除非需求明确提出。
