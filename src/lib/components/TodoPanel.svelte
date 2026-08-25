@@ -1037,6 +1037,17 @@
     }
   }
 
+  async function startPanelDrag(event: PointerEvent) {
+    if (event.button !== 0) return;
+    // Confirm the interaction grace before entering the native drag loop.
+    // Starting a system drag on Windows briefly drops window focus, and an
+    // unguarded blur would hide the panel right as the user grabs it. Awaiting
+    // the IPC round-trip closes the race between the async mark and the
+    // synchronous drag loop that `data-tauri-drag-region` cannot.
+    await todoApi.markPanelInteraction().catch(() => {});
+    await getCurrentWindow().startDragging().catch(() => {});
+  }
+
   function applyTheme(nextTheme: Theme) {
     document.documentElement.dataset.theme = nextTheme;
     document
@@ -2029,7 +2040,7 @@
 
 <main class="panel-shell">
   <header class="panel-header">
-    <div class="brand">
+    <div class="brand" role="group" onpointerdown={startPanelDrag}>
       <img class="mascot" src="/eggdone-icon.png" alt="" aria-hidden="true" />
       <div>
         <h1>{$translator("app.name")}</h1>

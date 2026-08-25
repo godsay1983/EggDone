@@ -82,8 +82,24 @@ pub fn run() {
                     if !panel_state.handle_blur() {
                         return;
                     }
-                    // Keep the process alive and treat the panel like a native tray popover.
-                    let _ = window.hide();
+                    // Keep the process alive and treat the panel like a native tray
+                    // popover. Native resize/drag loops on Windows drop window focus
+                    // at the start and restore it while the loop is running; hiding
+                    // immediately would close the panel the moment the user grabs an
+                    // edge. Delay the hide and re-check focus/visibility so a
+                    // transient blur passes without hiding mid-interaction.
+                    let app = window.app_handle().clone();
+                    std::thread::spawn(move || {
+                        std::thread::sleep(std::time::Duration::from_millis(300));
+                        let Some(panel) = app.get_webview_window("main") else {
+                            return;
+                        };
+                        let visible = panel.is_visible().unwrap_or(false);
+                        let focused = panel.is_focused().unwrap_or(true);
+                        if visible && !focused {
+                            let _ = panel.hide();
+                        }
+                    });
                 }
                 _ => {}
             }

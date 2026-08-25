@@ -18,10 +18,9 @@
         "height": 560,
         "minWidth": 360,
         "minHeight": 420,
-        "maxWidth": 360,
         "visible": false,
         "decorations": false,
-        "resizable": false,
+        "resizable": true,
         "alwaysOnTop": true,
         "skipTaskbar": true,
         "shadow": true
@@ -36,7 +35,7 @@
         "minHeight": 390,
         "visible": false,
         "decorations": false,
-        "resizable": false,
+        "resizable": true,
         "alwaysOnTop": true,
         "skipTaskbar": true,
         "shadow": true
