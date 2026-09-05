@@ -1,0 +1,50 @@
+[
+  {
+    "id": "present",
+    "status": 200,
+    "etag": "\"v1\"",
+    "expected": "etag:\"v1\""
+  },
+  {
+    "id": "missing",
+    "status": 404,
+    "etag": null,
+    "expected": "missing"
+  },
+  {
+    "id": "denied-not-missing",
+    "status": 403,
+    "etag": null,
+    "expected": "denied"
+  },
+  {
+    "id": "unauthorized",
+    "status": 401,
+    "etag": null,
+    "expected": "RECURRENCE_HEAD_HTTP:401"
+  },
+  {
+    "id": "transient",
+    "status": 503,
+    "etag": null,
+    "expected": "RECURRENCE_HEAD_HTTP:503"
+  },
+  {
+    "id": "rate-limit",
+    "status": 429,
+    "etag": null,
+    "expected": "RECURRENCE_HEAD_HTTP:429"
+  },
+  {
+    "id": "missing-etag",
+    "status": 200,
+    "etag": null,
+    "expected": "RECURRENCE_ETAG_REQUIRED"
+  },
+  {
+    "id": "weak-etag",
+    "status": 200,
+    "etag": "W/\"v1\"",
+    "expected": "RECURRENCE_ETAG_REQUIRED"
+  }
+]

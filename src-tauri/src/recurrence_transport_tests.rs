@@ -13,15 +13,50 @@ use std::{
 
 const EMPTY: &str = r#"{"format_version":1,"rules":[]}"#;
 
+#[test]
+fn shared_rule_head_probe_cases() {
+    tauri::async_runtime::block_on(async {
+        let cases: serde_json::Value =
+            serde_json::from_str(include_str!("../../docs/fixtures/recurrence-probe-v1.json"))
+                .unwrap();
+        for case in cases.as_array().unwrap() {
+            let server = Server::new(vec![Reply::new(
+                case["status"].as_u64().unwrap() as u16,
+                case["etag"].as_str(),
+                b"",
+            )]);
+            let transport =
+                RecurrenceTransport::new(&server.bucket(), "account/todos.json", &[]).unwrap();
+            let result = transport.probe().await;
+            assert_eq!(
+                result.unwrap_or_else(|error| error),
+                case["expected"].as_str().unwrap()
+            );
+            let request = server.request();
+            assert!(request
+                .head
+                .starts_with("HEAD /rules-test/account/recurrence-rules.json "));
+            assert!(request.body.is_empty());
+            assert!(!request.head.to_lowercase().contains("if-match"));
+        }
+    });
+}
+
 pub(crate) struct Reply {
     status: u16,
     headers: String,
     body: Vec<u8>,
     chunked: bool,
     delay: Duration,
+    before_reply: Option<Box<dyn FnOnce() + Send>>,
 }
 
 impl Reply {
+    pub(crate) fn with_hook(mut self, hook: impl FnOnce() + Send + 'static) -> Self {
+        self.before_reply = Some(Box::new(hook));
+        self
+    }
+
     pub(crate) fn new(status: u16, etag: Option<&str>, body: &[u8]) -> Self {
         Self {
             status,
@@ -29,6 +64,7 @@ impl Reply {
             body: body.to_vec(),
             chunked: false,
             delay: Duration::ZERO,
+            before_reply: None,
         }
     }
 }
@@ -108,6 +144,9 @@ impl Server {
                     })
                     .unwrap();
                 thread::sleep(reply.delay);
+                if let Some(hook) = reply.before_reply {
+                    hook();
+                }
                 let framing = if reply.chunked {
                     "Transfer-Encoding: chunked\r\n".to_string()
                 } else {

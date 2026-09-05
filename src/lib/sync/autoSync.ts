@@ -1,4 +1,5 @@
 import { writable } from "svelte/store";
+import { RemotePollState } from "./remotePollState";
 
 import {
   getRemoteSyncState,
@@ -51,6 +52,7 @@ let remoteStateInitialized = false;
 let knownTodoRemoteEtag: string | null = null;
 let knownNoteRemoteEtag: string | null = null;
 let knownNoteAttachmentRemoteEtag: string | null = null;
+const pollState = new RemotePollState();
 
 export async function initializeAutoSync() {
   if (initialized) return;
@@ -68,6 +70,8 @@ export async function initializeAutoSync() {
 }
 
 export function configureAutoSync(settings: SyncSettings) {
+  pollState.reset();
+  clearDebounce();
   enabled = settings.enabled && settings.credentialsConfigured;
   remoteStateInitialized = false;
   knownTodoRemoteEtag = null;
@@ -89,6 +93,7 @@ export function configureAutoSync(settings: SyncSettings) {
 }
 
 export function setAutoSyncForeground(value: boolean) {
+  pollState.invalidateProbe();
   foreground = value;
   if (!foreground) {
     stopForegroundPolling();
@@ -193,8 +198,10 @@ function runSyncWithRetry(): Promise<ManualSyncResult> {
 }
 
 async function performSyncWithRetry(): Promise<ManualSyncResult> {
+  const generation = pollState.beginSync();
   let lastError: unknown;
   for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt += 1) {
+    if (!pollState.isGenerationCurrent(generation)) throw new Error("RECURRENCE_CONFIG_CHANGED");
     syncStatus.set({
       kind: "syncing",
       message:
@@ -203,6 +210,8 @@ async function performSyncWithRetry(): Promise<ManualSyncResult> {
     });
     try {
       const result = await syncNow();
+      if (!pollState.isGenerationCurrent(generation)) throw new Error("RECURRENCE_CONFIG_CHANGED");
+      if (result.recurrenceRemoteToken !== undefined) pollState.acknowledgeRules(generation, result.recurrenceRemoteToken);
       const cleanupNotice = result.message.includes("远端附件");
       syncStatus.set({
         kind: "synced",
@@ -224,6 +233,7 @@ async function performSyncWithRetry(): Promise<ManualSyncResult> {
       }
       return result;
     } catch (reason) {
+      if (!pollState.isGenerationCurrent(generation)) throw reason;
       lastError = reason;
       if (!isRetryable(reason) || attempt === RETRY_DELAYS_MS.length) {
         setFailureStatus(reason);
@@ -248,9 +258,13 @@ async function checkRemoteAndSync() {
   }
 
   remoteCheckRunning = true;
+  const ticket = pollState.capture();
+  let startedSync = false;
   try {
-    const remote = await getRemoteStateWithRetry();
+    const remote = await getRemoteStateWithRetry(() => pollState.isCurrent(ticket) && enabled && foreground);
+    if (!pollState.isCurrent(ticket) || !enabled || !foreground || running) return;
     const changed =
+      pollState.rulesChanged(remote.recurrenceToken) ||
       !remoteStateInitialized ||
       remote.todoObjectExists !== (knownTodoRemoteEtag !== null) ||
       remote.todoEtag !== knownTodoRemoteEtag ||
@@ -258,26 +272,29 @@ async function checkRemoteAndSync() {
       remote.noteEtag !== knownNoteRemoteEtag ||
       remote.noteAttachmentObjectExists !== (knownNoteAttachmentRemoteEtag !== null) ||
       remote.noteAttachmentEtag !== knownNoteAttachmentRemoteEtag;
-    remoteStateInitialized = true;
-    knownTodoRemoteEtag = remote.todoEtag;
-    knownNoteRemoteEtag = remote.noteEtag;
-    knownNoteAttachmentRemoteEtag = remote.noteAttachmentEtag;
     if (changed) {
-      await runAutomaticSync();
+      startedSync = true;
+      // Do not consume the observation on failure, or the next unchanged HEAD would skip retry.
+      const result = await runSyncWithRetry();
+      pollState.acknowledgeRules(ticket.generation, result.recurrenceRemoteToken ?? remote.recurrenceToken);
     }
   } catch (reason) {
-    setFailureStatus(reason);
+    if ((pollState.isCurrent(ticket) || (startedSync && pollState.isGenerationCurrent(ticket.generation))) &&
+      enabled && foreground) setFailureStatus(reason);
   } finally {
     remoteCheckRunning = false;
+    if (!pollState.isGenerationCurrent(ticket.generation) && enabled && foreground) void checkRemoteAndSync();
   }
 }
 
-async function getRemoteStateWithRetry(): Promise<RemoteSyncState> {
+async function getRemoteStateWithRetry(current: () => boolean): Promise<RemoteSyncState> {
   let lastError: unknown;
   for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt += 1) {
+    if (!current()) throw new Error("RECURRENCE_CONFIG_CHANGED");
     try {
       return await getRemoteSyncState();
     } catch (reason) {
+      if (!current()) throw reason;
       lastError = reason;
       if (!isRetryable(reason) || attempt === RETRY_DELAYS_MS.length) {
         throw reason;

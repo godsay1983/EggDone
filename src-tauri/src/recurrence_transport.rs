@@ -1,4 +1,4 @@
-//! Independent rule transport. The Todo-first sync coordinator is not enabled yet.
+//! Independent rule transport and read-only change probes.
 use std::time::Duration;
 
 use http::{HeaderMap, HeaderValue};
@@ -53,6 +53,23 @@ fn response_etag(headers: &HeaderMap) -> Result<String, String> {
 }
 
 impl RecurrenceTransport {
+    // A probe token detects change; it never authorizes a conditional upload.
+    pub async fn probe(&self) -> Result<String, String> {
+        let request = ReqwestRequest::new(&self.bucket, &self.object_key, Command::HeadObject)
+            .await
+            .map_err(|_| "RECURRENCE_TRANSPORT_NETWORK")?;
+        let response = request
+            .response()
+            .await
+            .map_err(|_| "RECURRENCE_TRANSPORT_NETWORK")?;
+        match response.status().as_u16() {
+            200 => Ok(format!("etag:{}", response_etag(response.headers())?)),
+            404 => Ok("missing".into()),
+            403 => Ok("denied".into()),
+            status => Err(format!("RECURRENCE_HEAD_HTTP:{status}")),
+        }
+    }
+
     pub fn new(bucket: &Bucket, todo_key: &str, occupied_keys: &[String]) -> Result<Self, String> {
         let object_key = recurrence_protocol::recurrence_object_key(todo_key, occupied_keys)?;
         Ok(Self {

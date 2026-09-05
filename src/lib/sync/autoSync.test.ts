@@ -175,6 +175,7 @@ describe("auto sync", () => {
     vi.useFakeTimers();
     configureAutoSync(enabledSettings);
     vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue({
+      recurrenceToken: 'missing',
       todoObjectExists: true,
       todoEtag: "\"etag-remote\"",
       noteObjectExists: true,
@@ -213,6 +214,7 @@ describe("auto sync", () => {
       )
       .mockResolvedValueOnce({
         todoObjectExists: true,
+        recurrenceToken: 'missing',
         todoEtag: '"etag-remote"',
         noteObjectExists: true,
         noteEtag: '"note-etag-remote"',
@@ -237,5 +239,108 @@ describe("auto sync", () => {
     expect(syncApi.getRemoteSyncState).toHaveBeenCalledTimes(2);
     expect(syncApi.syncNow).toHaveBeenCalledTimes(1);
     expect(get(syncStatus).kind).toBe("synced");
+  });
+});
+
+const remoteProbe = (recurrenceToken = 'etag:"rules-1"'): syncApi.RemoteSyncState => ({
+  recurrenceToken, todoObjectExists: true, todoEtag: '"t"',
+  noteObjectExists: true, noteEtag: '"n"', noteAttachmentObjectExists: true, noteAttachmentEtag: '"a"',
+});
+const syncResult = (): syncApi.ManualSyncResult => ({
+  message: "同步完成", todoCount: 1, noteCount: 1, noteAttachmentCount: 0, pendingAttachmentCount: 0,
+  conflictRetried: false, todoRemoteEtag: '"t"', noteRemoteEtag: '"n"', noteAttachmentRemoteEtag: '"a"',
+});
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: Error) => void;
+  const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+}
+
+describe("independent rule polling", () => {
+  it("uses the PUT receipt and detects a later peer write", async () => {
+    vi.useFakeTimers(); configureAutoSync(enabledSettings);
+    vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue(remoteProbe('etag:"before"'));
+    vi.mocked(syncApi.syncNow).mockResolvedValue({ ...syncResult(), recurrenceRemoteToken: 'etag:"own-put"' });
+    setAutoSyncForeground(true); await vi.advanceTimersByTimeAsync(0);
+    vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue(remoteProbe('etag:"own-put"'));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(1);
+    vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue(remoteProbe('etag:"peer-put"'));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(2);
+  });
+  it.each(['etag:"rules-2"', 'missing', 'denied'])("syncs a rule-only change: %s", async token => {
+    vi.useFakeTimers();
+    configureAutoSync(enabledSettings);
+    vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue(remoteProbe());
+    vi.mocked(syncApi.syncNow).mockResolvedValue(syncResult());
+    setAutoSyncForeground(true);
+    await vi.advanceTimersByTimeAsync(0);
+    vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue(remoteProbe(token));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not consume changed rule state when synchronization fails", async () => {
+    vi.useFakeTimers(); configureAutoSync(enabledSettings);
+    vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue(remoteProbe());
+    vi.mocked(syncApi.syncNow).mockResolvedValue(syncResult());
+    setAutoSyncForeground(true); await vi.advanceTimersByTimeAsync(0);
+    vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue(remoteProbe('etag:"rules-2"'));
+    vi.mocked(syncApi.syncNow).mockRejectedValueOnce(new Error("RECURRENCE_SYNC_CONFLICT"));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(get(syncStatus).kind).toBe("conflict");
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(3);
+    expect(get(syncStatus).kind).toBe("synced");
+  });
+
+  it.each([false, true])("discards old configuration probe, rejection=%s", async reject => {
+    vi.useFakeTimers(); configureAutoSync(enabledSettings);
+    const old = deferred<syncApi.RemoteSyncState>();
+    vi.mocked(syncApi.getRemoteSyncState).mockReturnValueOnce(old.promise).mockResolvedValue(remoteProbe());
+    vi.mocked(syncApi.syncNow).mockResolvedValue(syncResult());
+    setAutoSyncForeground(true);
+    configureAutoSync({ ...enabledSettings, bucket: "new-target" });
+    if (reject) old.reject(new Error("RECURRENCE_HEAD_HTTP:503")); else old.resolve(remoteProbe('etag:"old"'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(syncApi.getRemoteSyncState).toHaveBeenCalledTimes(2);
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(1);
+    expect(get(syncStatus).kind).toBe("synced");
+  });
+
+  it("discards a late probe after disabling sync", async () => {
+    vi.useFakeTimers(); configureAutoSync(enabledSettings);
+    const old = deferred<syncApi.RemoteSyncState>();
+    vi.mocked(syncApi.getRemoteSyncState).mockReturnValueOnce(old.promise);
+    setAutoSyncForeground(true);
+    configureAutoSync({ ...enabledSettings, enabled: false });
+    old.resolve(remoteProbe()); await vi.advanceTimersByTimeAsync(0);
+    expect(syncApi.syncNow).not.toHaveBeenCalled();
+    expect(get(syncStatus).kind).toBe("idle");
+  });
+
+  it("does not let an older probe overwrite a completed manual sync", async () => {
+    vi.useFakeTimers(); configureAutoSync(enabledSettings);
+    const old = deferred<syncApi.RemoteSyncState>();
+    vi.mocked(syncApi.getRemoteSyncState).mockReturnValueOnce(old.promise);
+    vi.mocked(syncApi.syncNow).mockResolvedValue(syncResult());
+    setAutoSyncForeground(true); await runManualSync();
+    old.reject(new Error("RECURRENCE_HEAD_HTTP:503")); await vi.advanceTimersByTimeAsync(0);
+    expect(get(syncStatus).kind).toBe("synced");
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not publish a late sync result after configuration changes", async () => {
+    configureAutoSync(enabledSettings);
+    const old = deferred<syncApi.ManualSyncResult>();
+    vi.mocked(syncApi.syncNow).mockReturnValueOnce(old.promise);
+    const result = expect(runManualSync()).rejects.toThrow("RECURRENCE_CONFIG_CHANGED");
+    configureAutoSync({ ...enabledSettings, enabled: false });
+    old.resolve(syncResult()); await result;
+    expect(get(syncStatus).kind).toBe("idle");
   });
 });

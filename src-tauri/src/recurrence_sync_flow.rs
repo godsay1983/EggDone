@@ -39,6 +39,7 @@ pub trait RecurrenceSyncPort {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct RecurrenceSyncResult {
+    pub rule_etag: String,
     pub attempts: usize,
     pub todo_acknowledged: bool,
     pub rules_acknowledged: bool,
@@ -94,6 +95,7 @@ pub async fn run(port: &mut impl RecurrenceSyncPort) -> Result<RecurrenceSyncRes
         let current = port.snapshot_is_current(&snapshot).await?;
         guard(port).await?;
         return Ok(RecurrenceSyncResult {
+            rule_etag: etag,
             attempts: attempt,
             todo_acknowledged,
             rules_acknowledged,

@@ -1191,7 +1191,7 @@ pub async fn get_remote_sync_state(
         let connection = lock_database(&database)?;
         s3_sync::prepare_manual_sync(&connection)?
     };
-    s3_sync::get_remote_state(&prepared)
+    s3_sync::get_remote_state(&prepared, &database)
         .await
         .map_err(crate::error_codes::sync)
 }
@@ -1542,7 +1542,7 @@ async fn sync_now_inner(
     let _ = app.emit_to("main", "notes-changed", ());
 
     ensure_sync_target(&database, prepared)?;
-    let state = s3_sync::get_remote_state(&prepared).await.ok();
+    let state = s3_sync::get_remote_state(&prepared, &database).await.ok();
     ensure_sync_target(&database, prepared)?;
     let conflict_retried =
         todo_conflict_retried || note_conflict_retried || attachment_conflict_retried;
@@ -1552,6 +1552,7 @@ async fn sync_now_inner(
         "任务、便签和附件同步完成".to_string()
     };
     Ok(ManualSyncResult {
+        recurrence_remote_token: todo.recurrence_token,
         message: cleanup_summary.append_to(sync_message),
         todo_count,
         note_count,

@@ -25,6 +25,7 @@ struct Session<'a> {
 }
 
 pub(crate) struct TodoRunResult {
+    pub recurrence_token: Option<String>,
     pub count: usize,
     pub conflict_retried: bool,
 }
@@ -81,6 +82,7 @@ pub(crate) async fn sync_todos(
             sync_runtime_state::retain_todos_pending(&db)?;
         }
         return Ok(TodoRunResult {
+            recurrence_token: Some(format!("etag:{}", result.rule_etag)),
             count: sync::build_document(&db, crate::db::now_millis())?
                 .todos
                 .len(),
@@ -146,6 +148,7 @@ impl Session<'_> {
                 self.require_current(&db)?;
                 sync_runtime_state::mark_domain_synced(&db, SyncDomain::Todos, revision)?;
                 return Ok(TodoRunResult {
+                    recurrence_token: None,
                     count: document.todos.len(),
                     conflict_retried: attempt > 0,
                 });
@@ -481,6 +484,56 @@ mod tests {
             let rules = recurrence_store::snapshot(&db).unwrap();
             assert!(rules.revision > rules.synced_revision);
             assert!(rules.etag.is_none());
+        });
+    }
+
+    #[test]
+    fn polling_rejects_configuration_changes_at_every_head_boundary() {
+        tauri::async_runtime::block_on(async {
+            for boundary in 0..4 {
+                for status in [200, 503] {
+                    let database = std::sync::Arc::new(Database {
+                        connection: Mutex::new(recurrence_snapshot::tests::setup(
+                            false, false, false,
+                        )),
+                    });
+                    let mut replies: Vec<Reply> = (0..boundary)
+                        .map(|_| Reply::new(200, Some("\"old\""), b""))
+                        .collect();
+                    let changed = database.clone();
+                    replies.push(
+                        Reply::new(status, Some("\"late\""), b"").with_hook(move || {
+                            let db = changed.connection.lock().unwrap();
+                            crate::sync_target::invalidate(&db).unwrap();
+                            crate::sync_target::activate(&db).unwrap();
+                        }),
+                    );
+                    let server = Server::new(replies);
+                    let prepared = PreparedManualSync::from_test_bucket(
+                        &database.connection.lock().unwrap(),
+                        server.bucket(),
+                    );
+                    assert_eq!(
+                        s3_sync::get_remote_state(&prepared, &database)
+                            .await
+                            .err()
+                            .unwrap(),
+                        "RECURRENCE_CONFIG_CHANGED"
+                    );
+                    for _ in 0..=boundary {
+                        assert!(server.request().head.starts_with("HEAD "));
+                    }
+                    let db = database.connection.lock().unwrap();
+                    let success: Option<i64> = db
+                        .query_row(
+                            "SELECT last_success_at FROM sync_runtime_state",
+                            [],
+                            |row| row.get(0),
+                        )
+                        .unwrap();
+                    assert!(success.is_none());
+                }
+            }
         });
     }
 

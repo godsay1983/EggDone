@@ -132,6 +132,7 @@ pub struct RemoteNoteAttachmentSyncObject {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoteSyncState {
+    pub recurrence_token: String,
     pub todo_object_exists: bool,
     pub todo_etag: Option<String>,
     pub note_object_exists: bool,
@@ -143,6 +144,8 @@ pub struct RemoteSyncState {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ManualSyncResult {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recurrence_remote_token: Option<String>,
     pub message: String,
     pub todo_count: usize,
     pub note_count: usize,
@@ -414,20 +417,42 @@ async fn get_object_state(
     }
 }
 
-pub async fn get_remote_state(prepared: &PreparedManualSync) -> Result<RemoteSyncState, String> {
-    let (todo_object_exists, todo_etag) = get_object_state(prepared, &prepared.object_key).await?;
-    let (note_object_exists, note_etag) =
-        get_object_state(prepared, &prepared.note_object_key).await?;
-    let (note_attachment_object_exists, note_attachment_etag) =
-        get_object_state(prepared, &prepared.note_attachment_object_key).await?;
-    Ok(RemoteSyncState {
-        todo_object_exists,
-        todo_etag,
-        note_object_exists,
-        note_etag,
-        note_attachment_object_exists,
-        note_attachment_etag,
-    })
+pub async fn get_remote_state(
+    prepared: &PreparedManualSync,
+    database: &crate::db::Database,
+) -> Result<RemoteSyncState, String> {
+    let guard = || {
+        let connection = database
+            .connection
+            .lock()
+            .map_err(|_| "RECURRENCE_DATABASE_LOCK")?;
+        prepared.require_current(&connection)
+    };
+    guard()?;
+    let result = async {
+        let (todo_object_exists, todo_etag) =
+            get_object_state(prepared, &prepared.object_key).await?;
+        guard()?;
+        let (note_object_exists, note_etag) =
+            get_object_state(prepared, &prepared.note_object_key).await?;
+        guard()?;
+        let (note_attachment_object_exists, note_attachment_etag) =
+            get_object_state(prepared, &prepared.note_attachment_object_key).await?;
+        guard()?;
+        let recurrence_token = prepared.recurrence_transport()?.probe().await?;
+        Ok(RemoteSyncState {
+            recurrence_token,
+            todo_object_exists,
+            todo_etag,
+            note_object_exists,
+            note_etag,
+            note_attachment_object_exists,
+            note_attachment_etag,
+        })
+    }
+    .await;
+    guard()?;
+    result
 }
 
 pub async fn download_note_attachment_remote(

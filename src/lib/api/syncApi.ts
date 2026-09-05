@@ -32,6 +32,7 @@ export interface ConnectionTestResult {
 }
 
 export interface ManualSyncResult {
+  recurrenceRemoteToken?: string;
   message: string;
   todoCount: number;
   noteCount: number;
@@ -44,6 +45,7 @@ export interface ManualSyncResult {
 }
 
 export interface RemoteSyncState {
+  recurrenceToken: string;
   todoObjectExists: boolean;
   todoEtag: string | null;
   noteObjectExists: boolean;
