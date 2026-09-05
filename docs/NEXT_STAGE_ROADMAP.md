@@ -11,11 +11,19 @@
 
 ## DNS0：基线和状态收口
 
-- [ ] 核对 `main`、版本、最新 handoff 和工作区状态。
-- [ ] 区分已有 Roadmap 中的代码完成项与人工验收项。
-- [ ] 更新 README 中当前能力和限制。
-- [ ] 记录 Windows 签名、自动更新、高 DPI、macOS 和 Linux 剩余门槛。
-- [ ] 运行现有 `pnpm release:check` 建立基线。
+- [x] 核对 `main`、版本、最新 handoff 和工作区状态。
+- [x] 区分已有 Roadmap 中的代码完成项与人工验收项。
+- [x] 更新 README 中当前能力和限制。
+- [x] 记录 Windows 签名、自动更新、高 DPI、macOS 和 Linux 剩余门槛。
+- [x] 运行现有 `pnpm release:check` 建立基线。
+
+### 2026-09-05 基线记录
+
+- `main` 基线版本为 `1.0.7`，最新 handoff 为 Linux ksni 托盘适配记录。
+- `pnpm release:check` 通过：438 个中英文字典键一致，Svelte 检查 0 错误、0 警告，前端 75 项测试和 Rust 110 项测试通过，生产构建成功。
+- Rust 仍有一个 `TraySnapshot.locale` 未读取警告，不影响当前基线，后续修改托盘结构时处理。
+- 便签、附件和国际化历史 Roadmap 的未勾选项已明确归类为人工验收证据。
+- 仍需人工完成 Windows 双语/主题/窄窗口、高 DPI 与多显示器、真实 S3 / MinIO、代码签名和自动更新检查；macOS 与 Linux 继续按发布平台分别回归。
 
 完成条件：文档、版本和实际功能一致，基线失败项有明确归属。
 

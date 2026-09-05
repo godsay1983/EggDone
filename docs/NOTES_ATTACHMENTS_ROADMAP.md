@@ -4,6 +4,8 @@
 
 本 Roadmap 是已完成便签功能的扩展，不重新打开 `NOTES_ROADMAP.md` 中已经完成的基础工作。
 
+> 状态归类（2026-09-05）：图片、普通附件、同步、按需下载、外部操作和完整备份代码已经完成。未勾选项统一视为云厂商、跨端、窄窗口和亮暗主题的人工验收证据；后续开发统一转入 [NEXT_STAGE_ROADMAP.md](NEXT_STAGE_ROADMAP.md)。
+
 ## DA0：跨端协议与风险冻结
 
 - [x] 固定 `note-attachments.json` v1 字段、空值和大小单位。

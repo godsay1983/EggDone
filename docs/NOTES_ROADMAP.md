@@ -2,6 +2,8 @@
 
 配套设计见 [NOTES_IMPLEMENTATION_PLAN.md](NOTES_IMPLEMENTATION_PLAN.md)。阶段按依赖顺序执行，未完成协议和持久化前不进入 UI 联调。
 
+> 状态归类（2026-09-05）：D0 至 D5 的代码路径已经完成。D6 中未勾选项是 Windows 视觉、托盘行为和真实对象存储的人工验收记录，不代表仍缺少便签实现；后续开发统一转入 [NEXT_STAGE_ROADMAP.md](NEXT_STAGE_ROADMAP.md)。
+
 ## D0：跨端协议冻结
 
 - [x] 与鸿蒙端确认 Note 字段、字符上限和颜色枚举。
