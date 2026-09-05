@@ -1839,11 +1839,28 @@ fn set_todo_completed_in_connection(
     id: i64,
     completed: bool,
 ) -> Result<TodoCompletion, String> {
+    let transaction = connection.transaction().map_err(database_error)?;
+    let result = apply_todo_completion(&transaction, id, completed)?;
+    transaction.commit().map_err(database_error)?;
+    Ok(result)
+}
+
+// Callers own the transaction so a notification receipt and repeat creation commit together.
+fn apply_todo_completion(
+    connection: &Connection,
+    id: i64,
+    completed: bool,
+) -> Result<TodoCompletion, String> {
     let before = find_todo(connection, id)?.ok_or_else(|| "任务不存在".to_string())?;
+    if before.completed == completed {
+        return Ok(TodoCompletion {
+            updated_todo: before,
+            created_todo: None,
+        });
+    }
     let now = now_millis();
     let updated_by = device_id(connection).map_err(database_error)?;
-    let transaction = connection.transaction().map_err(database_error)?;
-    let changed = transaction
+    let changed = connection
         .execute(
             "
             UPDATE todos
@@ -1864,12 +1881,10 @@ fn set_todo_completed_in_connection(
     }
 
     let created_id = if completed && !before.completed {
-        create_next_repeat_instance(&transaction, &before, now, &updated_by)?
+        create_next_repeat_instance(connection, &before, now, &updated_by)?
     } else {
         None
     };
-    transaction.commit().map_err(database_error)?;
-
     let updated_todo =
         find_todo(connection, id)?.ok_or_else(|| "更新后未能读取任务".to_string())?;
     let created_todo = created_id
@@ -1880,6 +1895,51 @@ fn set_todo_completed_in_connection(
         updated_todo,
         created_todo,
     })
+}
+
+pub(crate) fn complete_todo_from_reminder(
+    connection: &mut Connection,
+    uuid: &str,
+    reminder_at: i64,
+) -> Result<bool, String> {
+    if Uuid::parse_str(uuid).is_err() || reminder_at <= 0 {
+        return Ok(false);
+    }
+    let transaction = connection.transaction().map_err(database_error)?;
+    let key = format!("reminder.complete.v1:{uuid}:{reminder_at}");
+    let consumed: bool = transaction
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM app_metadata WHERE key = ?1)",
+            [&key],
+            |row| row.get(0),
+        )
+        .map_err(database_error)?;
+    if consumed {
+        return Ok(false);
+    }
+    let id: Option<i64> = transaction
+        .query_row(
+            "SELECT id FROM todos WHERE uuid = ?1 AND reminder_at = ?2
+         AND deleted_at IS NULL AND archived_at IS NULL",
+            params![uuid, reminder_at],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(database_error)?;
+    let Some(id) = id else {
+        return Ok(false);
+    };
+    let before = find_todo(&transaction, id)?.ok_or_else(|| "任务不存在".to_string())?;
+    let changed = !before.completed;
+    apply_todo_completion(&transaction, id, true)?;
+    transaction
+        .execute(
+            "INSERT INTO app_metadata (key, value) VALUES (?1, ?2)",
+            params![key, now_millis().to_string()],
+        )
+        .map_err(database_error)?;
+    transaction.commit().map_err(database_error)?;
+    Ok(changed)
 }
 
 fn update_todo_title_in_connection(
@@ -3054,6 +3114,119 @@ mod tests {
             Some(repeating.uuid.as_str())
         );
         assert_eq!(list_todos_from_connection(&connection).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn reminder_completion_is_idempotent_even_after_manual_undo() {
+        let mut connection = connection();
+        let todo = create_todo_in_connection(&connection, "notification", None).unwrap();
+        connection
+            .execute(
+                "UPDATE todos SET reminder_at=1000, repeat_rule='daily',
+            due_date='2026-09-05', repeat_next_due_date='2026-09-06' WHERE id=?1",
+                [todo.id],
+            )
+            .unwrap();
+        assert!(complete_todo_from_reminder(&mut connection, &todo.uuid, 1000).unwrap());
+        let completed = find_todo(&connection, todo.id).unwrap().unwrap();
+        assert!(!complete_todo_from_reminder(&mut connection, &todo.uuid, 1000).unwrap());
+        assert_eq!(find_todo(&connection, todo.id).unwrap().unwrap(), completed);
+        assert_eq!(list_todos_from_connection(&connection).unwrap().len(), 2);
+        set_todo_completed_in_connection(&mut connection, todo.id, false).unwrap();
+        assert!(!complete_todo_from_reminder(&mut connection, &todo.uuid, 1000).unwrap());
+        assert!(!find_todo(&connection, todo.id).unwrap().unwrap().completed);
+    }
+
+    #[test]
+    fn reminder_completion_ignores_stale_deleted_archived_or_missing_tasks() {
+        let mut connection = connection();
+        let todo = create_todo_in_connection(&connection, "notification", None).unwrap();
+        connection
+            .execute("UPDATE todos SET reminder_at=2000 WHERE id=?1", [todo.id])
+            .unwrap();
+        assert!(!complete_todo_from_reminder(&mut connection, &todo.uuid, 1000).unwrap());
+        for column in ["deleted_at", "archived_at"] {
+            connection
+                .execute(
+                    &format!("UPDATE todos SET {column}=1 WHERE id=?1"),
+                    [todo.id],
+                )
+                .unwrap();
+            assert!(!complete_todo_from_reminder(&mut connection, &todo.uuid, 2000).unwrap());
+            connection
+                .execute(
+                    &format!("UPDATE todos SET {column}=NULL WHERE id=?1"),
+                    [todo.id],
+                )
+                .unwrap();
+        }
+        assert!(!complete_todo_from_reminder(&mut connection, "invalid", 2000).unwrap());
+        assert!(
+            !complete_todo_from_reminder(&mut connection, &Uuid::new_v4().to_string(), 2000)
+                .unwrap()
+        );
+        assert!(!find_todo(&connection, todo.id).unwrap().unwrap().completed);
+    }
+
+    #[test]
+    fn reminder_completion_rolls_back_receipt_and_source_when_repeat_insert_fails() {
+        let mut connection = connection();
+        let todo = create_todo_in_connection(&connection, "notification", None).unwrap();
+        connection
+            .execute(
+                "UPDATE todos SET reminder_at=1000, repeat_rule='daily',
+            due_date='2026-09-05', repeat_next_due_date='2026-09-06' WHERE id=?1",
+                [todo.id],
+            )
+            .unwrap();
+        connection
+            .execute_batch(
+                "CREATE TRIGGER fail_repeat BEFORE INSERT ON todos
+            BEGIN SELECT RAISE(ABORT, 'test repeat failure'); END;",
+            )
+            .unwrap();
+        assert!(complete_todo_from_reminder(&mut connection, &todo.uuid, 1000).is_err());
+        assert!(!find_todo(&connection, todo.id).unwrap().unwrap().completed);
+        let receipts: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM app_metadata
+            WHERE key LIKE 'reminder.complete.v1:%'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(receipts, 0);
+        connection
+            .execute_batch("DROP TRIGGER fail_repeat")
+            .unwrap();
+        assert!(complete_todo_from_reminder(&mut connection, &todo.uuid, 1000).unwrap());
+    }
+
+    #[test]
+    fn reminder_completion_marks_sync_dirty_and_stops_future_reminder_delivery() {
+        let mut connection = connection();
+        let todo = create_todo_in_connection(&connection, "notification", None).unwrap();
+        connection
+            .execute("UPDATE todos SET reminder_at=1000 WHERE id=?1", [todo.id])
+            .unwrap();
+        connection
+            .execute("UPDATE sync_runtime_state SET dirty_domains='[]'", [])
+            .unwrap();
+        assert!(complete_todo_from_reminder(&mut connection, &todo.uuid, 1000).unwrap());
+        let domains: String = connection
+            .query_row("SELECT dirty_domains FROM sync_runtime_state", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert!(domains.contains("todos"));
+        let pending: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM todos WHERE completed=0 AND reminder_at=1000",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(pending, 0);
     }
 
     #[test]

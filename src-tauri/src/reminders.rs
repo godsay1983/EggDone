@@ -135,15 +135,24 @@ fn deliver_system_notification(app: &AppHandle, reminder: &DueReminder) -> Resul
     let app_for_click = app.clone();
     let app_for_snooze = app.clone();
     let app_for_later = app.clone();
+    let complete_uuid = reminder.uuid.clone();
+    let complete_at = reminder.reminder_at;
+    let complete_action = format!("complete:{complete_uuid}:{complete_at}");
+    let app_for_complete = app.clone();
     let locale = app.state::<I18nState>().locale();
 
     Toast::new(app_id)
         .title(locale.app_title())
         .text1(&locale.reminder_body(&reminder.title))
         .duration(ToastDuration::Short)
+        .add_button(locale.reminder_complete(), &complete_action)
         .add_button(locale.reminder_snooze(), "snooze-10")
         .add_button(locale.reminder_later_today(), "later-today")
         .on_activated(move |action| {
+            if action.as_deref() == Some(complete_action.as_str()) {
+                complete_reminder(&app_for_complete, &complete_uuid, complete_at);
+                return Ok(());
+            }
             match action.as_deref() {
                 Some("snooze-10") => {
                     snooze_reminder(&app_for_snooze, &snooze_uuid, snooze_reminder_at());
@@ -258,6 +267,24 @@ fn snooze_reminder(app: &AppHandle, uuid: &str, reminder_at: i64) {
         drop(connection);
         tray::update_task_badge(app);
         let _ = app.emit_to("main", "todos-changed", ());
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn complete_reminder(app: &AppHandle, uuid: &str, reminder_at: i64) {
+    let database = app.state::<Database>();
+    let Ok(mut connection) = database.connection.lock() else {
+        return;
+    };
+    let result = crate::commands::complete_todo_from_reminder(&mut connection, uuid, reminder_at);
+    drop(connection);
+    match result {
+        Ok(true) => {
+            tray::update_task_badge(app);
+            let _ = app.emit_to("main", "todos-changed", ());
+        }
+        Ok(false) => {}
+        Err(error) => eprintln!("complete reminder failed: {error}"),
     }
 }
 

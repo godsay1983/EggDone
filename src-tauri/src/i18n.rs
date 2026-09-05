@@ -120,6 +120,13 @@ impl AppLocale {
         }
     }
 
+    pub(crate) fn reminder_complete(self) -> &'static str {
+        match self {
+            Self::ZhCn => "完成",
+            Self::EnUs => "Complete",
+        }
+    }
+
     pub(crate) fn reminder_later_today(self) -> &'static str {
         match self {
             Self::ZhCn => "今天晚些时候",
