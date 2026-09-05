@@ -137,6 +137,8 @@ updated_at              INTEGER
 
 ## 6. NS2：智能列表
 
+2026-09-05 已进入实现，冻结规则、测试入口和人工验收边界见 [SMART_VIEWS_CONTRACT.md](SMART_VIEWS_CONTRACT.md)，当前结果见配套 Roadmap 的 DNS2 实施记录。
+
 ### 6.1 共享视图语义
 
 智能列表只计算现有 Todo，不新增同步字段：

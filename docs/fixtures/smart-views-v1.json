@@ -1,0 +1,318 @@
+{
+  "version": 1,
+  "zones": [
+    "Asia/Shanghai",
+    "UTC",
+    "America/New_York"
+  ],
+  "cases": [
+    {
+      "id": "undated",
+      "now": "2026-09-05T12:00:00",
+      "task": {},
+      "expected": [
+        "no_date"
+      ]
+    },
+    {
+      "id": "important-undated",
+      "now": "2026-09-05T12:00:00",
+      "task": {
+        "priority": 1
+      },
+      "expected": [
+        "no_date",
+        "important"
+      ]
+    },
+    {
+      "id": "yesterday-date",
+      "now": "2026-09-05T12:00:00",
+      "task": {
+        "dueDate": "2026-09-04"
+      },
+      "expected": [
+        "overdue"
+      ]
+    },
+    {
+      "id": "today-date",
+      "now": "2026-09-05T12:00:00",
+      "task": {
+        "dueDate": "2026-09-05"
+      },
+      "expected": [
+        "next7"
+      ]
+    },
+    {
+      "id": "today-earlier-time",
+      "now": "2026-09-05T12:00:00",
+      "task": {
+        "dueAt": "2026-09-05T08:00:00"
+      },
+      "expected": [
+        "next7"
+      ]
+    },
+    {
+      "id": "just-before-today",
+      "now": "2026-09-05T12:00:00",
+      "task": {
+        "dueAt": "2026-09-04T23:59:59.999"
+      },
+      "expected": [
+        "overdue"
+      ]
+    },
+    {
+      "id": "today-midnight",
+      "now": "2026-09-05T12:00:00",
+      "task": {
+        "dueAt": "2026-09-05T00:00:00"
+      },
+      "expected": [
+        "next7"
+      ]
+    },
+    {
+      "id": "six-days-later",
+      "now": "2026-09-05T12:00:00",
+      "task": {
+        "dueAt": "2026-09-11T23:59:59.999"
+      },
+      "expected": [
+        "next7"
+      ]
+    },
+    {
+      "id": "seven-days-later",
+      "now": "2026-09-05T12:00:00",
+      "task": {
+        "dueAt": "2026-09-12T00:00:00"
+      },
+      "expected": []
+    },
+    {
+      "id": "important-overdue",
+      "now": "2026-09-05T12:00:00",
+      "task": {
+        "dueDate": "2026-09-04",
+        "priority": 1
+      },
+      "expected": [
+        "overdue",
+        "important"
+      ]
+    },
+    {
+      "id": "priority-other",
+      "now": "2026-09-05T12:00:00",
+      "task": {
+        "priority": 2
+      },
+      "expected": [
+        "no_date"
+      ]
+    },
+    {
+      "id": "completed-undated",
+      "now": "2026-09-05T12:00:00",
+      "task": {
+        "completed": true,
+        "completedAt": "2026-09-05T11:00:00"
+      },
+      "expected": [
+        "recently_completed"
+      ]
+    },
+    {
+      "id": "completed-important",
+      "now": "2026-09-05T12:00:00",
+      "task": {
+        "completed": true,
+        "completedAt": "2026-09-05T12:00:00",
+        "priority": 1,
+        "dueDate": "2026-09-04"
+      },
+      "expected": [
+        "recently_completed"
+      ]
+    },
+    {
+      "id": "completed-missing-time",
+      "now": "2026-09-05T12:00:00",
+      "task": {
+        "completed": true
+      },
+      "expected": []
+    },
+    {
+      "id": "completed-window-start",
+      "now": "2026-09-05T12:00:00",
+      "task": {
+        "completed": true,
+        "completedAt": "2026-08-30T00:00:00"
+      },
+      "expected": [
+        "recently_completed"
+      ]
+    },
+    {
+      "id": "completed-too-old",
+      "now": "2026-09-05T12:00:00",
+      "task": {
+        "completed": true,
+        "completedAt": "2026-08-29T23:59:59.999"
+      },
+      "expected": []
+    },
+    {
+      "id": "completed-future",
+      "now": "2026-09-05T12:00:00",
+      "task": {
+        "completed": true,
+        "completedAt": "2026-09-05T12:00:00.001"
+      },
+      "expected": []
+    },
+    {
+      "id": "incomplete-with-completion-date",
+      "now": "2026-09-05T12:00:00",
+      "task": {
+        "completedAt": "2026-09-05T11:00:00"
+      },
+      "expected": [
+        "no_date"
+      ]
+    },
+    {
+      "id": "deleted",
+      "now": "2026-09-05T12:00:00",
+      "task": {
+        "deletedAt": "2026-09-05T11:00:00",
+        "priority": 1
+      },
+      "expected": []
+    },
+    {
+      "id": "archived",
+      "now": "2026-09-05T12:00:00",
+      "task": {
+        "archivedAt": "2026-09-05T11:00:00",
+        "completed": true,
+        "completedAt": "2026-09-05T11:00:00"
+      },
+      "expected": []
+    },
+    {
+      "id": "invalid-date",
+      "now": "2026-09-05T12:00:00",
+      "task": {
+        "dueDate": "2026-02-30"
+      },
+      "expected": []
+    },
+    {
+      "id": "before-midnight",
+      "now": "2026-09-05T23:59:59.999",
+      "task": {
+        "dueDate": "2026-09-05"
+      },
+      "expected": [
+        "next7"
+      ]
+    },
+    {
+      "id": "after-midnight",
+      "now": "2026-09-06T00:00:00",
+      "task": {
+        "dueDate": "2026-09-05"
+      },
+      "expected": [
+        "overdue"
+      ]
+    },
+    {
+      "id": "leap-day",
+      "now": "2028-02-28T12:00:00",
+      "task": {
+        "dueDate": "2028-02-29"
+      },
+      "expected": [
+        "next7"
+      ]
+    },
+    {
+      "id": "year-end",
+      "now": "2026-12-31T12:00:00",
+      "task": {
+        "dueDate": "2027-01-01"
+      },
+      "expected": [
+        "next7"
+      ]
+    },
+    {
+      "id": "dst-spring-window-end",
+      "now": "2026-03-08T12:00:00",
+      "task": {
+        "dueAt": "2026-03-14T23:59:59.999"
+      },
+      "expected": [
+        "next7"
+      ]
+    },
+    {
+      "id": "dst-spring-excluded",
+      "now": "2026-03-08T12:00:00",
+      "task": {
+        "dueAt": "2026-03-15T00:00:00"
+      },
+      "expected": []
+    },
+    {
+      "id": "dst-fall-window-end",
+      "now": "2026-11-01T12:00:00",
+      "task": {
+        "dueAt": "2026-11-07T23:59:59.999"
+      },
+      "expected": [
+        "next7"
+      ]
+    },
+    {
+      "id": "dst-fall-completed",
+      "now": "2026-11-01T12:00:00",
+      "task": {
+        "completed": true,
+        "completedAt": "2026-10-26T00:00:00"
+      },
+      "expected": [
+        "recently_completed"
+      ]
+    },
+    {
+      "id": "utc-instant-shanghai",
+      "now": "2026-09-05T04:00:00Z",
+      "task": {
+        "dueAt": "2026-09-04T18:00:00Z"
+      },
+      "expected": [
+        "next7"
+      ],
+      "zone": "Asia/Shanghai"
+    },
+    {
+      "id": "utc-instant-newyork",
+      "now": "2026-09-05T04:00:00Z",
+      "task": {
+        "dueAt": "2026-09-04T18:00:00Z"
+      },
+      "expected": [
+        "overdue"
+      ],
+      "zone": "America/New_York"
+    }
+  ]
+}

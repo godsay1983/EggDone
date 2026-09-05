@@ -35,6 +35,23 @@ function makeTodo(
 }
 
 describe("filterTodos", () => {
+  it("intersects smart lists with group and title or note search, overriding hide-completed", () => {
+    const now = new Date(2026, 8, 5, 12);
+    const tasks = [
+      makeTodo(1, "Done", true, { completed_at: now.getTime(), group_uuid: "work", note: "Review" }),
+      makeTodo(2, "Review", true, { completed_at: now.getTime(), group_uuid: "home" }),
+      makeTodo(3, "Review", false, { group_uuid: "work", priority: 1 }),
+    ];
+    expect(filterTodos(tasks, " review ", false, {
+      smartView: "recently_completed", groupUuid: "work", now,
+    }).map((todo) => todo.id)).toEqual([1]);
+    for (const view of ["all", "quadrants", "calendar"] as const) {
+      expect(filterTodos(tasks, "Review", true, {
+        smartView: "important", groupUuid: "work", now, view,
+      }).map((todo) => todo.id)).toEqual([3]);
+    }
+    expect(filterTodos(tasks, "", true, { smartView: "important", groupUuid: null, now })).toEqual([]);
+  });
   const items = [
     makeTodo(1, "Write release notes"),
     makeTodo(2, "购买鸡蛋"),

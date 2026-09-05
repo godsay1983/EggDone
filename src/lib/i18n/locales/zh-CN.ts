@@ -1,4 +1,13 @@
 export const zhCN = {
+  "smart.title": "智能列表",
+  "smart.overdue": "逾期",
+  "smart.next7": "未来 7 天",
+  "smart.no_date": "无日期",
+  "smart.important": "重要",
+  "smart.recently_completed": "最近完成",
+  "smart.clear": "清除智能列表筛选",
+  "smart.empty": "没有符合条件的任务",
+  "smart.emptyHint": "试试其他列表，或调整搜索和分组。",
   "app.name": "蛋定 Todo",
   "app.shortName": "蛋定",
   "app.tagline": "轻量 Todo 与专注工具",

@@ -669,6 +669,10 @@ footer {
   z-index: 35;
   display: grid;
   min-width: 112px;
+  width: min(280px, calc(100vw - 32px));
+  max-width: min(280px, calc(100vw - 32px));
+  max-height: min(440px, 55vh);
+  overflow-y: auto;
   padding: 5px;
   border: 1px solid #eadfcf;
   border-radius: 12px;
@@ -809,6 +813,54 @@ footer {
   scrollbar-color: #ddd1bd transparent;
   scrollbar-width: thin;
 }
+
+.smart-menu-title {
+  padding: 6px 9px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.summary-menu .smart-menu-choice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  min-height: 32px;
+  color: #51432f;
+}
+
+.smart-menu-choice span:first-child { white-space: normal; text-align: left; }
+.smart-menu-choice span:last-child { flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.summary-menu hr { width: 100%; border: 0; border-top: 1px solid #dfd2bc; }
+.smart-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 3px 4px 3px 10px;
+  margin-bottom: 8px;
+  border-radius: 16px;
+  background: #fff0bf;
+  color: #51432f;
+  font-size: 12px;
+}
+.smart-filter span { min-width: 0; overflow-wrap: anywhere; }
+.smart-filter button {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.smart-filter button:hover { background: #ead599; }
+html[data-theme="dark"] .smart-filter { color: #f4dfaa; background: #493e29; }
+html[data-theme="dark"] .smart-filter button:hover { background: #645233; }
+html[data-theme="dark"] .summary-menu .smart-menu-choice { color: #f4dfaa; }
+html[data-theme="dark"] .summary-menu hr { border-color: #665742; }
 
 .note-list {
   min-height: 0;

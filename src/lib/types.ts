@@ -1,3 +1,5 @@
+export type { SmartViewId } from "./utils/smartViews";
+
 export interface Todo {
   id: number;
   uuid: string;

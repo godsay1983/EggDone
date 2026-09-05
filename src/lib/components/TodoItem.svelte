@@ -28,6 +28,7 @@
   } from "$lib/utils/reminderTimes";
 
   export let todo: Todo;
+  export let animationEnabled = true;
   export let onToggle: (todo: Todo) => Promise<void>;
   export let onEdit: (
     id: number,
@@ -407,8 +408,8 @@
     event.preventDefault();
     void beginEdit();
   }}
-  in:fly={{ y: -6, duration: animationDuration }}
-  out:fly={{ x: 12, duration: animationDuration }}
+  in:fly={{ y: -6, duration: animationEnabled ? animationDuration : 0 }}
+  out:fly={{ x: 12, duration: animationEnabled ? animationDuration : 0 }}
 >
   {#if batchMode}
     <button

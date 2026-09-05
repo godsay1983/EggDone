@@ -2,6 +2,15 @@ import type { TranslationMessage } from "../types";
 import type { zhCN } from "./zh-CN";
 
 export const enUS = {
+  "smart.title": "Smart lists",
+  "smart.overdue": "Overdue",
+  "smart.next7": "Next 7 days",
+  "smart.no_date": "No date",
+  "smart.important": "Important",
+  "smart.recently_completed": "Recently completed",
+  "smart.clear": "Clear smart list",
+  "smart.empty": "No matching tasks",
+  "smart.emptyHint": "Try another list, search, or group.",
   "app.name": "EggDone",
   "app.shortName": "EggDone",
   "app.tagline": "Lightweight tasks and focus",

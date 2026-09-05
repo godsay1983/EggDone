@@ -44,6 +44,7 @@
     type TodoListView,
   } from "$lib/utils/todoFilters";
   import { parseQuickAdd } from "$lib/utils/quickAdd";
+  import { SMART_VIEW_IDS, normalizeSmartView, type SmartViewId } from "$lib/utils/smartViews";
   import {
     clearFocusTarget,
     FOCUS_SETTINGS_CHANGED_EVENT,
@@ -180,6 +181,9 @@
   let searchQuery = "";
   let showCompleted = true;
   let listView: MainView = "all";
+  let smartView: SmartViewId | null = null;
+  let filterNow = new Date();
+  const SMART_VIEW_KEY = "eggdone-smart-view";
   let selectedNoteUuid: string | null = null;
   let noteDraft: Note | null = null;
   let noteDraftSaveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -220,6 +224,7 @@
   let suppressGroupClick = false;
   let searchInput: HTMLInputElement;
   let summaryActionsElement: HTMLElement;
+  let summaryMenuMaxHeight = 440;
   let selectedTodoId: number | null = null;
   let editRequestTodoId: number | null = null;
   let editRequestSeq = 0;
@@ -228,8 +233,10 @@
   let batchBusy = false;
   let batchMoveTarget = "";
   $: searchActive = searchQuery.trim().length > 0;
-  $: reorderDisabled = searchActive || listView !== "all";
-  $: todayCount = $todos.items.filter((todo) => isDueTodayOrOverdue(todo)).length;
+  $: reorderDisabled = searchActive || listView !== "all" || smartView !== null;
+  $: listAnimationDuration = $todos.items.length > 100 ? 0 : reorderAnimationDuration;
+  $: refreshSmartDates($todos.items);
+  $: todayCount = $todos.items.filter((todo) => isDueTodayOrOverdue(todo, filterNow)).length;
   $: activeGroupUuid = groupFilterValue(selectedGroup);
   $: selectedGroupObject = $todos.groups.find(
     (group) => group.uuid === selectedGroup,
@@ -259,7 +266,16 @@
   $: filteredTodos = filterTodos($todos.items, searchQuery, showCompleted, {
     view: listView === "notes" ? "all" : listView,
     groupUuid: activeGroupUuid,
+    smartView,
+    now: filterNow,
   });
+  $: smartChoices = SMART_VIEW_IDS.map((id) => ({
+    id,
+    label: $translator(`smart.${id}`),
+    count: filterTodos($todos.items, searchQuery, true, {
+      groupUuid: activeGroupUuid, smartView: id, now: filterNow,
+    }).length,
+  }));
   $: renderedTodos = applyPreviewOrder(filteredTodos, previewOrderIds);
   $: batchSelectedTodos = renderedTodos.filter((todo) =>
     batchSelectedIds.has(todo.id),
@@ -317,6 +333,18 @@
       : "/focus-illustration.png";
 
   onMount(() => {
+    let filterTimezoneOffset = new Date().getTimezoneOffset();
+    const refreshFilterTime = () => {
+      filterNow = new Date();
+      filterTimezoneOffset = filterNow.getTimezoneOffset();
+    };
+    const filterTimer = window.setInterval(() => {
+      if (Math.floor(Date.now() / 60000) !== Math.floor(filterNow.getTime() / 60000) ||
+        new Date().getTimezoneOffset() !== filterTimezoneOffset) refreshFilterTime();
+    }, 1000);
+    window.addEventListener("focus", refreshFilterTime);
+    document.addEventListener("visibilitychange", refreshFilterTime);
+    window.addEventListener("resize", updateSummaryMenuHeight);
     const unlisteners: UnlistenFn[] = [];
     let mounted = true;
     const groupResizeObserver = new ResizeObserver(updateGroupScrollState);
@@ -341,6 +369,8 @@
       localStorage.getItem(LAST_LIST_VIEW_KEY),
     );
     selectedGroup = localStorage.getItem("eggdone-selected-group") ?? "all";
+    smartView = normalizeSmartView(localStorage.getItem(SMART_VIEW_KEY));
+    if (smartView) listView = "all";
     theme =
       savedTheme === "light" || savedTheme === "dark"
         ? savedTheme
@@ -444,6 +474,10 @@
       void flushAllNoteChanges().catch(() => undefined);
       clearFocusCompletionTimer();
       window.clearInterval(focusInterval);
+      window.clearInterval(filterTimer);
+      window.removeEventListener("focus", refreshFilterTime);
+      document.removeEventListener("visibilitychange", refreshFilterTime);
+      window.removeEventListener("resize", updateSummaryMenuHeight);
       window.removeEventListener(
         FOCUS_SETTINGS_CHANGED_EVENT,
         refreshFocusDurations,
@@ -494,6 +528,9 @@
   }
 
   function setListView(view: MainView) {
+    if (view === "all" || view === "today" || view === "notes") {
+      clearSmartView();
+    }
     if (listView === "notes" && view !== "notes") {
       void closeNoteEditor();
       searchQuery = "";
@@ -514,6 +551,35 @@
     selectedTodoId = null;
     clearBatchSelection();
     cancelDrag();
+  }
+
+  function selectSmartView(id: SmartViewId) {
+    setListView("all");
+    smartView = id;
+    filterNow = new Date();
+    localStorage.setItem(SMART_VIEW_KEY, id);
+  }
+
+  function clearSmartView() {
+    smartView = null;
+    localStorage.removeItem(SMART_VIEW_KEY);
+    clearBatchSelection();
+    cancelDrag();
+  }
+
+  function refreshSmartDates(_items: Todo[]) {
+    filterNow = new Date();
+  }
+
+  function updateSummaryMenuHeight() {
+    if (!summaryActionsElement) return;
+    summaryMenuMaxHeight = Math.max(64, Math.min(440,
+      window.innerHeight - summaryActionsElement.getBoundingClientRect().bottom - 16));
+  }
+
+  function toggleSummaryMenu() {
+    updateSummaryMenuHeight();
+    summaryMenuOpen = !summaryMenuOpen;
   }
 
   async function createNote() {
@@ -2460,12 +2526,25 @@
         aria-label={$translator("search.openMore")}
         aria-haspopup="menu"
         aria-expanded={summaryMenuOpen}
-        onclick={() => (summaryMenuOpen = !summaryMenuOpen)}
+        onclick={toggleSummaryMenu}
       >
         {$translator("common.more")}
       </button>
       {#if summaryMenuOpen}
-        <div class="summary-menu" role="menu">
+        <div class="summary-menu" role="menu" style:max-height={`${summaryMenuMaxHeight}px`}>
+          {#if listView !== "notes"}
+            <span class="smart-menu-title">{$translator("smart.title")}</span>
+            {#each smartChoices as choice (choice.id)}
+              <button type="button" role="menuitemradio"
+                aria-checked={smartView === choice.id}
+                class:active={smartView === choice.id}
+                class="smart-menu-choice"
+                onclick={() => selectSmartView(choice.id)}>
+                <span>{choice.label}</span><span>{choice.count}</span>
+              </button>
+            {/each}
+            <hr />
+          {/if}
           <button
             class:active={showSearch}
             type="button"
@@ -2570,6 +2649,14 @@
     </section>
   {/if}
 
+  {#if smartView && listView !== "notes"}
+    <div class="smart-filter" role="status">
+      <span>{$translator(`smart.${smartView}`)} · {renderedTodos.length}</span>
+      <button type="button" aria-label={$translator("smart.clear")}
+        title={$translator("smart.clear")} onclick={clearSmartView}>×</button>
+    </div>
+  {/if}
+
   {#if selectedNote}
     <NoteEditor
       note={selectedNote}
@@ -2623,7 +2710,9 @@
     {:else if renderedTodos.length === 0}
       <div class="empty-state filtered-empty">
         <strong>
-          {searchActive
+          {smartView
+            ? $translator("smart.empty")
+            : searchActive
             ? $translator("search.noMatch")
             : listView === "today"
               ? $translator("empty.todayTitle")
@@ -2634,7 +2723,9 @@
               : $translator("empty.completedHidden")}
         </strong>
         <span>
-          {searchActive
+          {smartView
+            ? $translator("smart.emptyHint")
+            : searchActive
             ? $translator("search.tryAnother")
             : listView === "today"
               ? $translator("empty.todayHint")
@@ -2697,9 +2788,10 @@
                   <div
                     class:selected={selectedTodoId === todo.id}
                     class="todo-row"
-                    animate:flip={{ duration: reorderAnimationDuration }}
+                    animate:flip={{ duration: listAnimationDuration }}
                   >
                     <TodoItem
+                      animationEnabled={$todos.items.length <= 100}
                       {todo}
                       onToggle={toggleTodo}
                       onEdit={editTodo}
@@ -2810,9 +2902,10 @@
                     <div
                       class:selected={selectedTodoId === todo.id}
                       class="todo-row"
-                      animate:flip={{ duration: reorderAnimationDuration }}
+                      animate:flip={{ duration: listAnimationDuration }}
                     >
                       <TodoItem
+                        animationEnabled={$todos.items.length <= 100}
                         {todo}
                         onToggle={toggleTodo}
                         onEdit={editTodo}
@@ -2863,9 +2956,10 @@
                   <div
                     class:selected={selectedTodoId === todo.id}
                     class="todo-row"
-                    animate:flip={{ duration: reorderAnimationDuration }}
+                    animate:flip={{ duration: listAnimationDuration }}
                   >
                     <TodoItem
+                      animationEnabled={$todos.items.length <= 100}
                       {todo}
                       onToggle={toggleTodo}
                       onEdit={editTodo}
@@ -2907,9 +3001,10 @@
         <div
           class:selected={selectedTodoId === todo.id}
           class="todo-row"
-          animate:flip={{ duration: reorderAnimationDuration }}
+          animate:flip={{ duration: listAnimationDuration }}
         >
           <TodoItem
+            animationEnabled={$todos.items.length <= 100}
             {todo}
             onToggle={toggleTodo}
             onEdit={editTodo}
