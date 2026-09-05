@@ -1,0 +1,74 @@
+[
+  {
+    "id": "old-missing",
+    "local": false,
+    "status": 404,
+    "remote": false,
+    "candidate": false,
+    "expected": "legacy"
+  },
+  {
+    "id": "old-empty",
+    "local": false,
+    "status": 200,
+    "remote": false,
+    "candidate": false,
+    "expected": "legacy"
+  },
+  {
+    "id": "old-scoped-policy",
+    "local": false,
+    "status": 403,
+    "remote": false,
+    "candidate": false,
+    "expected": "legacy"
+  },
+  {
+    "id": "fresh-client-discovers-rules",
+    "local": false,
+    "status": 200,
+    "remote": true,
+    "candidate": false,
+    "expected": "pair"
+  },
+  {
+    "id": "local-first-publish",
+    "local": true,
+    "status": 404,
+    "remote": false,
+    "candidate": false,
+    "expected": "pair"
+  },
+  {
+    "id": "local-permission-denied",
+    "local": true,
+    "status": 403,
+    "remote": false,
+    "candidate": false,
+    "expected": "RECURRENCE_DOWNLOAD_HTTP:403"
+  },
+  {
+    "id": "remote-candidate-denied",
+    "local": false,
+    "status": 403,
+    "remote": false,
+    "candidate": true,
+    "expected": "RECURRENCE_DOWNLOAD_HTTP:403"
+  },
+  {
+    "id": "temporary-error-not-absence",
+    "local": false,
+    "status": 503,
+    "remote": false,
+    "candidate": false,
+    "expected": "RECURRENCE_DOWNLOAD_HTTP:503"
+  },
+  {
+    "id": "unauthorized-not-absence",
+    "local": false,
+    "status": 401,
+    "remote": false,
+    "candidate": false,
+    "expected": "RECURRENCE_DOWNLOAD_HTTP:401"
+  }
+]

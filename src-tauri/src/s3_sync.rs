@@ -67,6 +67,7 @@ pub struct PreparedConnectionTest {
     object_key: String,
 }
 
+#[derive(Clone)]
 pub struct PreparedManualSync {
     target_epoch: String,
     bucket: Box<Bucket>,
@@ -77,6 +78,13 @@ pub struct PreparedManualSync {
 }
 
 impl PreparedManualSync {
+    pub(crate) fn require_current(&self, connection: &Connection) -> Result<(), String> {
+        if self.target_is_current(connection)? {
+            Ok(())
+        } else {
+            Err("RECURRENCE_CONFIG_CHANGED".into())
+        }
+    }
     #[cfg(test)]
     pub(crate) fn from_test_bucket(connection: &Connection, bucket: Box<Bucket>) -> Self {
         Self {

@@ -19,6 +19,7 @@ pub struct SyncAttemptRevisions {
     attachments: i64,
 }
 
+#[cfg(test)]
 impl SyncAttemptRevisions {
     pub fn for_domain(self, domain: SyncDomain) -> i64 {
         match domain {
@@ -114,6 +115,12 @@ pub fn mark_domain_synced(
     domain: SyncDomain,
     expected_revision: i64,
 ) -> Result<bool, String> {
+    if domain == SyncDomain::Attachments {
+        let pending:i64=connection.query_row("SELECT COUNT(*) FROM note_attachments WHERE deleted_at IS NULL AND remote_uploaded=0",[],|r|r.get(0)).map_err(database_error)?;
+        if pending > 0 {
+            return Ok(false);
+        }
+    }
     let version_column = match domain {
         SyncDomain::Todos => "todos_dirty_version",
         SyncDomain::Notes => "notes_dirty_version",
@@ -155,16 +162,45 @@ pub fn mark_domain_synced(
         .execute(
             "UPDATE sync_runtime_state
              SET dirty_domains = ?1, dirty_since = ?2, updated_at = ?3
-             WHERE id = ?4",
+             WHERE id = ?4 AND dirty_domains = ?5
+             AND CASE ?6 WHEN 'todos' THEN todos_dirty_version WHEN 'notes' THEN notes_dirty_version
+                 ELSE attachments_dirty_version END = ?7",
             params![
                 serde_json::to_string(&domains).map_err(|error| error.to_string())?,
                 dirty_since,
                 now_millis(),
-                STATE_ID
+                STATE_ID,
+                dirty_json,
+                domain.as_str(),
+                expected_revision
             ],
         )
+        .map(|changed| changed == 1)
+        .map_err(database_error)
+}
+
+pub(crate) fn domain_revision(connection: &Connection, domain: SyncDomain) -> Result<i64, String> {
+    connection.query_row("SELECT CASE ?1 WHEN 'todos' THEN todos_dirty_version WHEN 'notes' THEN notes_dirty_version ELSE attachments_dirty_version END FROM sync_runtime_state WHERE id=1",
+        [domain.as_str()],|row|row.get(0)).map_err(database_error)
+}
+
+// Rule-only concurrent edits still need to be visible to the existing aggregate Todo status.
+pub(crate) fn retain_todos_pending(connection: &Connection) -> Result<(), String> {
+    let tx = connection.unchecked_transaction().map_err(database_error)?;
+    let raw: String = tx
+        .query_row(
+            "SELECT dirty_domains FROM sync_runtime_state WHERE id=1",
+            [],
+            |r| r.get(0),
+        )
         .map_err(database_error)?;
-    Ok(true)
+    let mut domains: Vec<String> = serde_json::from_str(&raw).map_err(|_| "SYNC_STATE_INVALID")?;
+    if !domains.iter().any(|d| d == "todos") {
+        domains.push("todos".into());
+    }
+    tx.execute("UPDATE sync_runtime_state SET dirty_domains=?1,dirty_since=COALESCE(dirty_since,?2) WHERE id=1",
+        params![serde_json::to_string(&domains).map_err(|_|"SYNC_STATE_INVALID")?,now_millis()]).map_err(database_error)?;
+    tx.commit().map_err(database_error)
 }
 
 pub fn record_success(connection: &Connection) -> Result<(), String> {
@@ -220,13 +256,30 @@ fn classify_error(error: &str) -> (&'static str, &'static str, &'static str) {
     if lower.contains("远端文件持续发生变化") || lower.contains("conflict") {
         return ("conflict", "SYNC_CONFLICT", "远端数据在同步期间持续变化");
     }
-    if ["凭据", "密钥", "access key", "secret key", "配置"]
-        .iter()
-        .any(|keyword| lower.contains(keyword))
+    if [
+        "凭据",
+        "密钥",
+        "access key",
+        "secret key",
+        "配置",
+        "recurrence_config_changed",
+        "sync_target_save_incomplete",
+        "_http:403",
+        "_http:401",
+    ]
+    .iter()
+    .any(|keyword| lower.contains(keyword))
     {
         return ("failed", "SYNC_CREDENTIALS", "同步凭据或配置无效");
     }
     if [
+        "network",
+        "_http:408",
+        "_http:429",
+        "_http:500",
+        "_http:502",
+        "_http:503",
+        "_http:504",
         "连接",
         "网络",
         "超时",
@@ -263,6 +316,30 @@ fn database_error(error: rusqlite::Error) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pending_binary_cannot_be_confirmed_by_a_metadata_snapshot() {
+        let db = Connection::open_in_memory().unwrap();
+        // Minimal real SQLite tables isolate the ACK contract from attachment import validation.
+        db.execute_batch("CREATE TABLE sync_runtime_state(id INTEGER PRIMARY KEY,dirty_domains TEXT,dirty_since INTEGER,
+            updated_at INTEGER,todos_dirty_version INTEGER,notes_dirty_version INTEGER,attachments_dirty_version INTEGER);
+            INSERT INTO sync_runtime_state VALUES(1,'[\"attachments\"]',1,1,0,0,2);
+            CREATE TABLE note_attachments(deleted_at INTEGER,remote_uploaded INTEGER);
+            INSERT INTO note_attachments VALUES(NULL,0);").unwrap();
+        assert!(!mark_domain_synced(&db, SyncDomain::Attachments, 2).unwrap());
+        db.execute("UPDATE note_attachments SET remote_uploaded=1", [])
+            .unwrap();
+        assert!(mark_domain_synced(&db, SyncDomain::Attachments, 2).unwrap());
+        retain_todos_pending(&db).unwrap();
+        retain_todos_pending(&db).unwrap();
+        assert_eq!(
+            db.query_row("SELECT dirty_domains FROM sync_runtime_state", [], |r| {
+                r.get::<_, String>(0)
+            })
+            .unwrap(),
+            "[\"todos\"]"
+        );
+    }
 
     #[test]
     fn diagnostics_do_not_persist_raw_secrets() {

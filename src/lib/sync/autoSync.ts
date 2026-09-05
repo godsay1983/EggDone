@@ -329,11 +329,13 @@ function isRetryable(reason: unknown) {
     message.includes("凭据") ||
     message.includes("权限") ||
     message.includes("配置") ||
+    message.includes("recurrence_config_changed") ||
+    message.includes("sync_target_save_incomplete") ||
     isConflict(message)
   ) {
     return false;
   }
-  const statusCode = message.match(/状态码\s*(\d{3})/);
+  const statusCode = message.match(/(?:状态码\s*|_http:)(\d{3})/);
   if (statusCode) {
     const code = Number(statusCode[1]);
     return code === 408 || code === 425 || code === 429 || (code >= 500 && code <= 599);
@@ -344,6 +346,7 @@ function isRetryable(reason: unknown) {
     "超时",
     "timeout",
     "offline",
+    "network",
     "connection",
     "dns",
     "request",
@@ -364,7 +367,7 @@ function isRetryable(reason: unknown) {
 }
 
 function isConflict(message: string) {
-  return message.includes("远端文件持续发生变化");
+  return message.includes("远端文件持续发生变化") || message.toLowerCase().includes("recurrence_sync_conflict");
 }
 
 function clearDebounce() {

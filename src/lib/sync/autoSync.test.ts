@@ -113,6 +113,33 @@ describe("auto sync", () => {
     expect(syncApi.syncNow).toHaveBeenCalledTimes(2);
   });
 
+  it.each(["RECURRENCE_TRANSPORT_NETWORK", "RECURRENCE_DOWNLOAD_HTTP:503"])(
+    "retries transient rule errors: %s", async (message) => {
+      vi.useFakeTimers();
+      configureAutoSync(enabledSettings);
+      vi.mocked(syncApi.syncNow).mockRejectedValue(new Error(message));
+      const result = expect(runManualSync()).rejects.toThrow(message);
+      await vi.runAllTimersAsync();
+      await result;
+      expect(syncApi.syncNow).toHaveBeenCalledTimes(3);
+      expect(get(syncStatus).kind).toBe("offline");
+    },
+  );
+
+  it.each([
+    "RECURRENCE_CONFIG_CHANGED", "SYNC_TARGET_SAVE_INCOMPLETE",
+    "RECURRENCE_DOWNLOAD_HTTP:403", "RECURRENCE_DOWNLOAD_HTTP:401",
+    "RECURRENCE_SYNC_CONFLICT",
+  ])("does not retry permanent rule errors: %s", async (message) => {
+    configureAutoSync(enabledSettings);
+    vi.mocked(syncApi.syncNow).mockRejectedValue(new Error(message));
+    await expect(runManualSync()).rejects.toThrow(message);
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(1);
+    if (message === "RECURRENCE_SYNC_CONFLICT") {
+      expect(get(syncStatus).kind).toBe("conflict");
+    }
+  });
+
   it("reports conflicts without network retries", async () => {
     configureAutoSync(enabledSettings);
     vi.mocked(syncApi.syncNow).mockRejectedValue(

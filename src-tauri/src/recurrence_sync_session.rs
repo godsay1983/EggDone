@@ -1,5 +1,4 @@
-//! Production I/O adapter. Not yet routed from the public sync command: discovery and UI refresh
-//! must be integrated together before enabling custom rules.
+//! Todo entry adapter: discover independent rules, preserving narrowly scoped legacy targets.
 use crate::{
     db::Database,
     recurrence_protocol,
@@ -22,6 +21,73 @@ struct Session<'a> {
     database: &'a Database,
     prepared: PreparedManualSync,
     rules: RecurrenceTransport,
+    initial: Option<RemotePair>,
+}
+
+pub(crate) struct TodoRunResult {
+    pub count: usize,
+    pub conflict_retried: bool,
+}
+
+// The main caller owns SyncRuntime for the entire Todo + notes + attachments operation.
+pub(crate) async fn sync_todos(
+    database: &Database,
+    prepared: PreparedManualSync,
+) -> Result<TodoRunResult, String> {
+    let rules = prepared.recurrence_transport()?;
+    let mut port = Session {
+        database,
+        prepared,
+        rules,
+        initial: None,
+    };
+    port.check()?;
+    let todos = s3_sync::download_remote(&port.prepared).await?;
+    port.check()?;
+    let local = {
+        let db = database
+            .connection
+            .lock()
+            .map_err(|_| "RECURRENCE_DATABASE_LOCK")?;
+        port.require_current(&db)?;
+        recurrence_store::snapshot(&db)?.document.rules.len()
+    };
+    let candidate = todos.document.as_ref().is_some_and(|doc| {
+        doc.todos
+            .iter()
+            .any(|t| t.repeat_series_uuid.is_some() && t.repeat_rule.is_none())
+    });
+    let downloaded = port.rules.download().await;
+    port.check()?;
+    let remote_rules = match downloaded {
+        Ok(remote) => Some(remote),
+        Err(error) if error == "RECURRENCE_DOWNLOAD_HTTP:403" && local == 0 && !candidate => None,
+        Err(error) => return Err(error),
+    };
+    let use_rules = local > 0
+        || remote_rules
+            .as_ref()
+            .is_some_and(|r| r.document.as_ref().is_some_and(|d| !d.rules.is_empty()));
+    if use_rules {
+        let rules = remote_rules.ok_or("RECURRENCE_DOWNLOAD_HTTP:403")?;
+        port.initial = Some(RemotePair { todos, rules });
+        let result = recurrence_sync_flow::run(&mut port).await?;
+        let db = database
+            .connection
+            .lock()
+            .map_err(|_| "RECURRENCE_DATABASE_LOCK")?;
+        port.require_current(&db)?;
+        if result.local_changes_pending {
+            sync_runtime_state::retain_todos_pending(&db)?;
+        }
+        return Ok(TodoRunResult {
+            count: sync::build_document(&db, crate::db::now_millis())?
+                .todos
+                .len(),
+            conflict_retried: result.attempts > 1,
+        });
+    }
+    port.sync_legacy(todos).await
 }
 
 // The caller must perform attempt/error reporting and reminder/UI refresh even on partial failure.
@@ -42,11 +108,55 @@ pub async fn sync_pair(
         database,
         prepared,
         rules,
+        initial: None,
     })
     .await
 }
 
 impl Session<'_> {
+    async fn sync_legacy(&self, mut remote: RemoteSyncObject) -> Result<TodoRunResult, String> {
+        for attempt in 0..2 {
+            let (document, revision) = {
+                let mut db = self
+                    .database
+                    .connection
+                    .lock()
+                    .map_err(|_| "RECURRENCE_DATABASE_LOCK")?;
+                self.require_current(&db)?;
+                let document = match &remote.document {
+                    Some(doc) => {
+                        sync::merge_remote_document(&mut db, doc, crate::db::now_millis())?
+                    }
+                    None => sync::build_document(&db, crate::db::now_millis())?,
+                };
+                (
+                    document,
+                    sync_runtime_state::domain_revision(&db, SyncDomain::Todos)?,
+                )
+            };
+            self.check()?;
+            let outcome = s3_sync::upload_document(&self.prepared, &document, &remote).await?;
+            self.check()?;
+            if matches!(outcome, s3_sync::UploadOutcome::Success) {
+                let db = self
+                    .database
+                    .connection
+                    .lock()
+                    .map_err(|_| "RECURRENCE_DATABASE_LOCK")?;
+                self.require_current(&db)?;
+                sync_runtime_state::mark_domain_synced(&db, SyncDomain::Todos, revision)?;
+                return Ok(TodoRunResult {
+                    count: document.todos.len(),
+                    conflict_retried: attempt > 0,
+                });
+            }
+            if attempt == 0 {
+                remote = s3_sync::download_remote(&self.prepared).await?;
+                self.check()?;
+            }
+        }
+        Err("RECURRENCE_SYNC_CONFLICT".into())
+    }
     fn require_current(&self, db: &Connection) -> Result<(), String> {
         if self.prepared.target_is_current(db)? {
             Ok(())
@@ -76,6 +186,9 @@ impl RecurrenceSyncPort for Session<'_> {
     }
     async fn download(&mut self) -> Result<RemotePair, String> {
         self.check()?;
+        if let Some(remote) = self.initial.take() {
+            return Ok(remote);
+        }
         let todos = s3_sync::download_remote(&self.prepared).await?;
         self.check()?;
         let rules = self.rules.download().await?;
@@ -181,6 +294,83 @@ mod tests {
     use crate::recurrence_transport::tests::{Reply, Server};
     use std::sync::Mutex;
 
+    #[test]
+    fn main_todo_entry_shared_discovery_matrix() {
+        tauri::async_runtime::block_on(async {
+            let cases: serde_json::Value = serde_json::from_str(include_str!(
+                "../../docs/fixtures/recurrence-discovery-v1.json"
+            ))
+            .unwrap();
+            for case in cases.as_array().unwrap() {
+                let db = recurrence_snapshot::tests::setup(true, false, false);
+                let remote_rules = recurrence_store::snapshot(&db).unwrap().document;
+                let mut remote_todo = sync::build_document(&db, crate::db::now_millis()).unwrap();
+                if case["candidate"] == true {
+                    remote_todo.todos[0].repeat_series_uuid =
+                        Some(remote_todo.todos[0].uuid.clone());
+                }
+                if case["local"] == false {
+                    db.execute("DELETE FROM recurrence_rules", []).unwrap();
+                    if case["remote"] == true {
+                        db.execute("DELETE FROM todos", []).unwrap();
+                    }
+                }
+                let rules_body = if case["remote"] == true {
+                    recurrence_protocol::encode_document(&remote_rules).unwrap()
+                } else {
+                    "{\"format_version\":1,\"rules\":[]}".into()
+                };
+                let expected = case["expected"].as_str().unwrap();
+                let mut replies = vec![
+                    Reply::new(
+                        200,
+                        Some("\"todos-old\""),
+                        serde_json::to_string(&remote_todo).unwrap().as_bytes(),
+                    ),
+                    Reply::new(
+                        case["status"].as_u64().unwrap() as u16,
+                        Some("\"rules-old\""),
+                        rules_body.as_bytes(),
+                    ),
+                ];
+                if expected == "legacy" || expected == "pair" {
+                    replies.push(Reply::new(200, None, b""));
+                }
+                if expected == "pair" {
+                    replies.push(Reply::new(200, Some("\"rules-new\""), b""));
+                }
+                let server = Server::new(replies);
+                let database = Database {
+                    connection: Mutex::new(db),
+                };
+                let prepared = PreparedManualSync::from_test_bucket(
+                    &database.connection.lock().unwrap(),
+                    server.bucket(),
+                );
+                let result = sync_todos(&database, prepared).await;
+                if expected == "legacy" || expected == "pair" {
+                    let result = result.unwrap();
+                    assert!(result.count > 0);
+                    assert!(!result.conflict_retried);
+                    server.request();
+                    server.request();
+                    assert!(server
+                        .request()
+                        .head
+                        .starts_with("PUT /rules-test/account/todos.json "));
+                    if expected == "pair" {
+                        assert!(server
+                            .request()
+                            .head
+                            .starts_with("PUT /rules-test/account/recurrence-rules.json "));
+                    }
+                } else {
+                    assert_eq!(result.err().unwrap(), expected, "{}", case["id"]);
+                }
+            }
+        });
+    }
+
     fn session<'a>(database: &'a Database, server: &Server) -> Session<'a> {
         let prepared = PreparedManualSync::from_test_bucket(
             &database.connection.lock().unwrap(),
@@ -191,6 +381,7 @@ mod tests {
             database,
             prepared,
             rules,
+            initial: None,
         }
     }
 

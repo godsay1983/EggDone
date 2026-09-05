@@ -21,6 +21,10 @@ pub fn coded(code: &str, detail: impl AsRef<str>) -> String {
 pub fn sync(detail: String) -> String {
     let normalized = detail.to_ascii_lowercase();
     let code = if normalized.contains("credential")
+        || normalized.contains("recurrence_config_changed")
+        || normalized.contains("sync_target_save_incomplete")
+        || normalized.contains("_http:403")
+        || normalized.contains("_http:401")
         || normalized.contains("access key")
         || normalized.contains("secret key")
         || detail.contains("凭据")

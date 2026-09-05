@@ -1292,18 +1292,40 @@ pub async fn sync_now(
     runtime: State<'_, SyncRuntime>,
     asset_store: State<'_, NoteAssetStore>,
 ) -> Result<ManualSyncResult, String> {
-    let attempt = {
+    let _guard = runtime.acquire().map_err(crate::error_codes::sync)?;
+    let prepared = {
         let connection = lock_database(&database)?;
-        sync_runtime_state::begin_attempt(&connection)?
+        let prepared =
+            s3_sync::prepare_manual_sync(&connection).map_err(crate::error_codes::sync)?;
+        sync_runtime_state::begin_attempt(&connection)?;
+        prepared
     };
-    match sync_now_inner(app, database.clone(), runtime, asset_store, attempt).await {
+    let outcome = sync_now_inner(
+        app.clone(),
+        database.clone(),
+        runtime.clone(),
+        asset_store,
+        &prepared,
+    )
+    .await;
+    // A partial merge is still visible locally and may have changed reminder scheduling.
+    tray::update_task_badge(&app);
+    let _ = app.emit_to("main", "todos-changed", ());
+    let _ = app.emit_to("main", "notes-changed", ());
+    match outcome {
         Ok(result) => {
             let connection = lock_database(&database)?;
+            prepared
+                .require_current(&connection)
+                .map_err(crate::error_codes::sync)?;
             sync_runtime_state::record_success(&connection)?;
             Ok(result)
         }
         Err(error) => {
             if let Ok(connection) = lock_database(&database) {
+                prepared
+                    .require_current(&connection)
+                    .map_err(crate::error_codes::sync)?;
                 let _ = sync_runtime_state::record_failure(&connection, &error);
             }
             Err(crate::error_codes::sync(error))
@@ -1316,71 +1338,46 @@ async fn sync_now_inner(
     database: State<'_, Database>,
     runtime: State<'_, SyncRuntime>,
     asset_store: State<'_, NoteAssetStore>,
-    attempt: sync_runtime_state::SyncAttemptRevisions,
+    prepared: &s3_sync::PreparedManualSync,
 ) -> Result<ManualSyncResult, String> {
-    let _guard = runtime.acquire()?;
-    let prepared = {
-        let connection = lock_database(&database)?;
-        s3_sync::prepare_manual_sync(&connection)?
-    };
-    let mut todo_remote = s3_sync::download_remote(&prepared).await?;
-    let mut todo_conflict_retried = false;
-    let todo_count = loop {
-        let merged = {
-            let mut connection = lock_database(&database)?;
-            match &todo_remote.document {
-                Some(document) => {
-                    sync::merge_remote_document(&mut connection, document, now_millis())?
-                }
-                None => sync::build_document(&connection, now_millis())?,
-            }
-        };
-        tray::update_task_badge(&app);
-        let _ = app.emit_to("main", "todos-changed", ());
-
-        match s3_sync::upload_document(&prepared, &merged, &todo_remote).await? {
-            UploadOutcome::Success => break merged.todos.len(),
-            UploadOutcome::Conflict if !todo_conflict_retried => {
-                todo_conflict_retried = true;
-                todo_remote = s3_sync::download_remote(&prepared).await?;
-            }
-            UploadOutcome::Conflict => {
-                return Err("远端文件持续发生变化，已停止上传并保留本地数据".to_string());
-            }
-        }
-    };
-    {
-        let connection = lock_database(&database)?;
-        sync_runtime_state::mark_domain_synced(
-            &connection,
-            SyncDomain::Todos,
-            attempt.for_domain(SyncDomain::Todos),
-        )?;
-    }
+    let todo = crate::recurrence_sync_session::sync_todos(&database, prepared.clone()).await?;
+    let todo_count = todo.count;
+    let todo_conflict_retried = todo.conflict_retried;
+    ensure_sync_target(&database, prepared)?;
 
     let mut note_remote = s3_sync::download_note_remote(&prepared)
         .await
         .map_err(|error| format!("便签同步失败：{error}"))?;
     let mut note_conflict_retried = false;
     let note_count = loop {
-        let merged = {
+        let (merged, revision) = {
             let mut connection = lock_database(&database)?;
-            match &note_remote.document {
+            prepared.require_current(&connection)?;
+            let document = match &note_remote.document {
                 Some(document) => {
                     note_sync::merge_remote_document(&mut connection, document, now_millis())?
                 }
                 None => note_sync::build_document(&connection, now_millis())?,
-            }
+            };
+            (
+                document,
+                sync_runtime_state::domain_revision(&connection, SyncDomain::Notes)?,
+            )
         };
+        ensure_sync_target(&database, prepared)?;
         match s3_sync::upload_note_document(&prepared, &merged, &note_remote)
             .await
             .map_err(|error| format!("便签同步失败：{error}"))?
         {
             UploadOutcome::Success => {
+                let connection = lock_database(&database)?;
+                prepared.require_current(&connection)?;
+                sync_runtime_state::mark_domain_synced(&connection, SyncDomain::Notes, revision)?;
                 let _ = app.emit_to("main", "notes-changed", ());
                 break merged.notes.len();
             }
             UploadOutcome::Conflict if !note_conflict_retried => {
+                ensure_sync_target(&database, prepared)?;
                 note_conflict_retried = true;
                 note_remote = s3_sync::download_note_remote(&prepared)
                     .await
@@ -1391,23 +1388,16 @@ async fn sync_now_inner(
             }
         }
     };
-    {
-        let connection = lock_database(&database)?;
-        sync_runtime_state::mark_domain_synced(
-            &connection,
-            SyncDomain::Notes,
-            attempt.for_domain(SyncDomain::Notes),
-        )?;
-    }
-
     let pending_attachments = {
         let connection = lock_database(&database)?;
+        prepared.require_current(&connection)?;
         note_attachments::list_pending_transfers(&connection)?
     };
     let pending_attachment_count_before = pending_attachments.len();
     for attachment in pending_attachments {
         {
             let connection = lock_database(&database)?;
+            prepared.require_current(&connection)?;
             note_attachments::set_transfer_state(
                 &connection,
                 &attachment.uuid,
@@ -1423,6 +1413,7 @@ async fn sync_now_inner(
                 attachment.byte_size,
                 &attachment.sha256,
             )?;
+            ensure_sync_target(&database, prepared)?;
             s3_sync::upload_immutable_asset(
                 &runtime,
                 &prepared,
@@ -1433,6 +1424,7 @@ async fn sync_now_inner(
                 &attachment.sha256,
             )
             .await?;
+            ensure_sync_target(&database, prepared)?;
             if attachment.kind == "image" {
                 let preview_size = attachment
                     .preview_byte_size
@@ -1462,6 +1454,7 @@ async fn sync_now_inner(
         }
         .await;
         let connection = lock_database(&database)?;
+        prepared.require_current(&connection)?;
         match upload_result {
             Ok(()) => {
                 note_attachments::set_transfer_state(
@@ -1487,28 +1480,36 @@ async fn sync_now_inner(
         }
     }
 
+    ensure_sync_target(&database, prepared)?;
     let mut attachment_remote = s3_sync::download_note_attachment_remote(&prepared)
         .await
         .map_err(|error| format!("附件元数据同步失败：{error}"))?;
     let mut attachment_conflict_retried = false;
-    let (note_attachment_count, synced_attachment_document) = loop {
-        let merged = {
+    let (note_attachment_count, synced_attachment_document, attachment_revision) = loop {
+        let (merged, revision) = {
             let mut connection = lock_database(&database)?;
-            match &attachment_remote.document {
+            prepared.require_current(&connection)?;
+            let document = match &attachment_remote.document {
                 Some(document) => note_attachment_sync::merge_remote_document(
                     &mut connection,
                     document,
                     now_millis(),
                 )?,
                 None => note_attachment_sync::build_document(&connection, now_millis())?,
-            }
+            };
+            (
+                document,
+                sync_runtime_state::domain_revision(&connection, SyncDomain::Attachments)?,
+            )
         };
+        ensure_sync_target(&database, prepared)?;
         match s3_sync::upload_note_attachment_document(&prepared, &merged, &attachment_remote)
             .await
             .map_err(|error| format!("附件元数据同步失败：{error}"))?
         {
-            UploadOutcome::Success => break (merged.attachments.len(), merged),
+            UploadOutcome::Success => break (merged.attachments.len(), merged, revision),
             UploadOutcome::Conflict if !attachment_conflict_retried => {
+                ensure_sync_target(&database, prepared)?;
                 attachment_conflict_retried = true;
                 attachment_remote = s3_sync::download_note_attachment_remote(&prepared)
                     .await
@@ -1521,15 +1522,17 @@ async fn sync_now_inner(
     };
     let pending_attachment_count = {
         let connection = lock_database(&database)?;
+        prepared.require_current(&connection)?;
         note_attachment_sync::mark_document_synced(&connection, &synced_attachment_document)?;
         sync_runtime_state::mark_domain_synced(
             &connection,
             SyncDomain::Attachments,
-            attempt.for_domain(SyncDomain::Attachments),
+            attachment_revision,
         )?;
         note_attachments::list_pending_transfers(&connection)?.len()
     };
     let cleanup_summary = cleanup_remote_note_assets(
+        &database,
         &runtime,
         &prepared,
         &synced_attachment_document,
@@ -1538,7 +1541,9 @@ async fn sync_now_inner(
     .await;
     let _ = app.emit_to("main", "notes-changed", ());
 
+    ensure_sync_target(&database, prepared)?;
     let state = s3_sync::get_remote_state(&prepared).await.ok();
+    ensure_sync_target(&database, prepared)?;
     let conflict_retried =
         todo_conflict_retried || note_conflict_retried || attachment_conflict_retried;
     let sync_message = if conflict_retried {
@@ -1581,6 +1586,7 @@ impl RemoteAssetCleanupSummary {
 }
 
 async fn cleanup_remote_note_assets(
+    database: &State<'_, Database>,
     runtime: &SyncRuntime,
     prepared: &s3_sync::PreparedManualSync,
     document: &note_attachment_sync::NoteAttachmentSyncDocument,
@@ -1588,6 +1594,10 @@ async fn cleanup_remote_note_assets(
 ) -> RemoteAssetCleanupSummary {
     let mut summary = RemoteAssetCleanupSummary::default();
     for attachment in note_attachment_sync::remote_cleanup_candidates(document, now) {
+        if let Err(error) = ensure_sync_target(database, prepared) {
+            summary.error = Some(error);
+            return summary;
+        }
         let original = s3_sync::delete_asset_if_matches(
             runtime,
             prepared,
@@ -1616,6 +1626,10 @@ async fn cleanup_remote_note_assets(
             summary.error = Some("图片附件墓碑缺少预览校验信息".to_string());
             return summary;
         };
+        if let Err(error) = ensure_sync_target(database, prepared) {
+            summary.error = Some(error);
+            return summary;
+        }
         let preview = s3_sync::delete_asset_if_matches(
             runtime,
             prepared,
@@ -1635,6 +1649,14 @@ async fn cleanup_remote_note_assets(
         }
     }
     summary
+}
+
+fn ensure_sync_target(
+    database: &State<'_, Database>,
+    prepared: &s3_sync::PreparedManualSync,
+) -> Result<(), String> {
+    let connection = lock_database(database)?;
+    prepared.require_current(&connection)
 }
 
 fn refresh_badge_after_success<T>(app: &AppHandle, result: &Result<T, String>) {
