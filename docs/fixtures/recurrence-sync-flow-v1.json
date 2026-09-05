@@ -1,0 +1,209 @@
+[
+  {
+    "id": "success",
+    "todo": [
+      "success"
+    ],
+    "rules": [
+      "uploaded"
+    ],
+    "expected": "success",
+    "attempts": 1
+  },
+  {
+    "id": "todo-conflict",
+    "todo": [
+      "conflict",
+      "success"
+    ],
+    "rules": [
+      "uploaded"
+    ],
+    "expected": "success",
+    "attempts": 2
+  },
+  {
+    "id": "rule-conflict",
+    "todo": [
+      "success",
+      "success"
+    ],
+    "rules": [
+      "conflict",
+      "uploaded"
+    ],
+    "expected": "success",
+    "attempts": 2
+  },
+  {
+    "id": "todo-conflict-exhausted",
+    "todo": [
+      "conflict",
+      "conflict"
+    ],
+    "rules": [],
+    "expected": "RECURRENCE_SYNC_CONFLICT",
+    "attempts": 2
+  },
+  {
+    "id": "rule-conflict-exhausted",
+    "todo": [
+      "success",
+      "success"
+    ],
+    "rules": [
+      "conflict",
+      "conflict"
+    ],
+    "expected": "RECURRENCE_SYNC_CONFLICT",
+    "attempts": 2
+  },
+  {
+    "id": "mixed-conflicts",
+    "todo": [
+      "conflict",
+      "success"
+    ],
+    "rules": [
+      "conflict"
+    ],
+    "expected": "RECURRENCE_SYNC_CONFLICT",
+    "attempts": 2
+  },
+  {
+    "id": "dependency-arrives",
+    "todo": [
+      "success"
+    ],
+    "rules": [
+      "uploaded"
+    ],
+    "blocked": 1,
+    "expected": "success",
+    "attempts": 2
+  },
+  {
+    "id": "dependency-stays-missing",
+    "todo": [],
+    "rules": [],
+    "blocked": 2,
+    "expected": "RECURRENCE_LINKS_BLOCKED",
+    "attempts": 2
+  },
+  {
+    "id": "download-fails",
+    "todo": [],
+    "rules": [],
+    "failure": "download",
+    "expected": "INJECTED_FAILURE",
+    "attempts": 1
+  },
+  {
+    "id": "prepare-fails",
+    "todo": [],
+    "rules": [],
+    "failure": "prepare",
+    "expected": "INJECTED_FAILURE",
+    "attempts": 1
+  },
+  {
+    "id": "todo-upload-fails",
+    "todo": [],
+    "rules": [],
+    "failure": "put-todos",
+    "expected": "INJECTED_FAILURE",
+    "attempts": 1
+  },
+  {
+    "id": "rule-upload-fails",
+    "todo": [
+      "success"
+    ],
+    "rules": [],
+    "failure": "put-rules",
+    "expected": "INJECTED_FAILURE",
+    "attempts": 1
+  },
+  {
+    "id": "todo-ack-fails",
+    "todo": [
+      "success"
+    ],
+    "rules": [],
+    "failure": "ack-todos",
+    "expected": "INJECTED_FAILURE",
+    "attempts": 1
+  },
+  {
+    "id": "rule-ack-fails",
+    "todo": [
+      "success"
+    ],
+    "rules": [
+      "uploaded"
+    ],
+    "failure": "ack-rules",
+    "expected": "INJECTED_FAILURE",
+    "attempts": 1
+  },
+  {
+    "id": "switch-during-download",
+    "todo": [],
+    "rules": [],
+    "switch_after": "download",
+    "expected": "RECURRENCE_CONFIG_CHANGED",
+    "attempts": 1
+  },
+  {
+    "id": "switch-during-prepare",
+    "todo": [],
+    "rules": [],
+    "switch_after": "prepare",
+    "expected": "RECURRENCE_CONFIG_CHANGED",
+    "attempts": 1
+  },
+  {
+    "id": "switch-during-todo-upload",
+    "todo": [
+      "success"
+    ],
+    "rules": [],
+    "switch_after": "put-todos",
+    "expected": "RECURRENCE_CONFIG_CHANGED",
+    "attempts": 1
+  },
+  {
+    "id": "switch-after-todo-ack",
+    "todo": [
+      "success"
+    ],
+    "rules": [],
+    "switch_after": "ack-todos",
+    "expected": "RECURRENCE_CONFIG_CHANGED",
+    "attempts": 1
+  },
+  {
+    "id": "switch-during-rule-upload",
+    "todo": [
+      "success"
+    ],
+    "rules": [
+      "uploaded"
+    ],
+    "switch_after": "put-rules",
+    "expected": "RECURRENCE_CONFIG_CHANGED",
+    "attempts": 1
+  },
+  {
+    "id": "switch-after-rule-ack",
+    "todo": [
+      "success"
+    ],
+    "rules": [
+      "uploaded"
+    ],
+    "switch_after": "ack-rules",
+    "expected": "RECURRENCE_CONFIG_CHANGED",
+    "attempts": 1
+  }
+]

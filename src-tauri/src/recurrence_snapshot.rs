@@ -102,4 +102,4 @@ pub fn prepare_snapshot(
 
 #[cfg(test)]
 #[path = "recurrence_snapshot_tests.rs"]
-mod tests;
+pub(crate) mod tests;

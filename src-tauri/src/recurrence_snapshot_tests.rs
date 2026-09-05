@@ -6,7 +6,7 @@ const DEVICE: &str = "00000000-0000-4000-8000-00000000000b";
 const FIRST: &str = "123e4567-e89b-42d3-a456-426614174001";
 const NEXT: &str = "e9cb6d09-664e-5c54-bdf7-69f395808585";
 
-fn setup(completed: bool, timed: bool, terminal: bool) -> Connection {
+pub(crate) fn setup(completed: bool, timed: bool, terminal: bool) -> Connection {
     let mut db = Connection::open_in_memory().unwrap();
     crate::db::migrate(&mut db).unwrap();
     db.execute(
