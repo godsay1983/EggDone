@@ -68,11 +68,42 @@ pub struct PreparedConnectionTest {
 }
 
 pub struct PreparedManualSync {
+    target_epoch: String,
     bucket: Box<Bucket>,
     object_key: String,
     note_object_key: String,
     note_attachment_object_key: String,
     note_asset_prefix: String,
+}
+
+impl PreparedManualSync {
+    #[cfg(test)]
+    pub(crate) fn from_test_bucket(connection: &Connection, bucket: Box<Bucket>) -> Self {
+        Self {
+            target_epoch: crate::sync_target::capture(connection).unwrap(),
+            bucket,
+            object_key: "account/todos.json".into(),
+            note_object_key: "account/notes.json".into(),
+            note_attachment_object_key: "account/note-attachments.json".into(),
+            note_asset_prefix: "account/assets/".into(),
+        }
+    }
+    pub(crate) fn target_is_current(&self, connection: &Connection) -> Result<bool, String> {
+        crate::sync_target::is_current(connection, &self.target_epoch)
+    }
+
+    pub(crate) fn recurrence_transport(
+        &self,
+    ) -> Result<crate::recurrence_transport::RecurrenceTransport, String> {
+        crate::recurrence_transport::RecurrenceTransport::new(
+            &self.bucket,
+            &self.object_key,
+            &[
+                self.note_object_key.clone(),
+                self.note_attachment_object_key.clone(),
+            ],
+        )
+    }
 }
 
 pub struct RemoteSyncObject {
@@ -180,6 +211,8 @@ pub fn save_settings(
     let settings = StoredSyncSettings::from_input(&input)?;
     validate_credential_input(&input)?;
 
+    crate::sync_target::invalidate(connection)?;
+
     if let (Some(access_key), Some(secret_key)) = (&input.access_key, &input.secret_key) {
         store_credentials(connection, access_key, secret_key)?;
     }
@@ -205,10 +238,12 @@ pub fn save_settings(
         )
         .map_err(|error| format!("保存同步配置失败：{error}"))?;
 
+    crate::sync_target::activate(connection)?;
     get_settings(connection)
 }
 
 pub fn delete_credentials(connection: &Connection) -> Result<(), String> {
+    crate::sync_target::invalidate(connection)?;
     let entry = credential_entry(connection)?;
     match entry.delete_credential() {
         Ok(()) | Err(KeyringError::NoEntry) => {
@@ -218,6 +253,7 @@ pub fn delete_credentials(connection: &Connection) -> Result<(), String> {
                     params![now_millis()],
                 )
                 .map_err(|error| format!("禁用同步失败：{error}"))?;
+            crate::sync_target::activate(connection)?;
             Ok(())
         }
         Err(error) => Err(format!("删除系统凭据失败：{error}")),
@@ -307,6 +343,7 @@ pub fn prepare_manual_sync(connection: &Connection) -> Result<PreparedManualSync
     let credentials = load_credentials(connection)?
         .ok_or_else(|| "请先填写并保存 Access Key 和 Secret Key".to_string())?;
     Ok(PreparedManualSync {
+        target_epoch: crate::sync_target::capture(connection)?,
         bucket: build_bucket(&settings, credentials)?,
         note_object_key: derive_note_object_key(&settings.object_key),
         note_attachment_object_key: derive_note_attachment_object_key(&settings.object_key),

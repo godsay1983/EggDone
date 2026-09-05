@@ -17,6 +17,7 @@ pub mod recurrence_protocol;
 pub mod recurrence_snapshot;
 pub mod recurrence_store;
 pub mod recurrence_sync_flow;
+pub mod recurrence_sync_session;
 pub mod recurrence_time;
 pub mod recurrence_transaction;
 pub mod recurrence_transport;
@@ -25,6 +26,7 @@ mod s3_sync;
 mod schedule;
 mod sync;
 mod sync_runtime_state;
+mod sync_target;
 mod tray;
 #[cfg(target_os = "linux")]
 mod tray_ksni;

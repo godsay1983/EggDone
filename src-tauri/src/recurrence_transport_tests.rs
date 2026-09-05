@@ -13,7 +13,7 @@ use std::{
 
 const EMPTY: &str = r#"{"format_version":1,"rules":[]}"#;
 
-struct Reply {
+pub(crate) struct Reply {
     status: u16,
     headers: String,
     body: Vec<u8>,
@@ -22,7 +22,7 @@ struct Reply {
 }
 
 impl Reply {
-    fn new(status: u16, etag: Option<&str>, body: &[u8]) -> Self {
+    pub(crate) fn new(status: u16, etag: Option<&str>, body: &[u8]) -> Self {
         Self {
             status,
             headers: etag.map(|v| format!("ETag: {v}\r\n")).unwrap_or_default(),
@@ -33,12 +33,12 @@ impl Reply {
     }
 }
 
-struct WireRequest {
-    head: String,
-    body: Vec<u8>,
+pub(crate) struct WireRequest {
+    pub(crate) head: String,
+    pub(crate) body: Vec<u8>,
 }
 
-struct Server {
+pub(crate) struct Server {
     endpoint: String,
     requests: mpsc::Receiver<WireRequest>,
     stop: Arc<AtomicBool>,
@@ -46,7 +46,7 @@ struct Server {
 }
 
 impl Server {
-    fn new(replies: Vec<Reply>) -> Self {
+    pub(crate) fn new(replies: Vec<Reply>) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         listener.set_nonblocking(true).unwrap();
         let endpoint = format!("http://{}", listener.local_addr().unwrap());
@@ -143,7 +143,7 @@ impl Server {
         }
     }
 
-    fn bucket(&self) -> Box<Bucket> {
+    pub(crate) fn bucket(&self) -> Box<Bucket> {
         Bucket::new(
             "rules-test",
             Region::Custom {
@@ -168,7 +168,7 @@ impl Server {
         .unwrap()
     }
 
-    fn request(&self) -> WireRequest {
+    pub(crate) fn request(&self) -> WireRequest {
         self.requests.recv_timeout(Duration::from_secs(3)).unwrap()
     }
 }

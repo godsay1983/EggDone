@@ -158,4 +158,4 @@ impl RecurrenceTransport {
 
 #[cfg(test)]
 #[path = "recurrence_transport_tests.rs"]
-mod tests;
+pub(crate) mod tests;
