@@ -2,11 +2,11 @@ use super::*;
 use crate::recurrence_protocol::{RecurrenceDocument, RecurrenceRule};
 use crate::recurrence_store;
 
-fn fixture() -> (Connection, Todo, RecurrenceRule) {
+pub(super) fn fixture() -> (Connection, Todo, RecurrenceRule) {
     fixture_with_limit(false)
 }
 
-fn fixture_with_limit(last: bool) -> (Connection, Todo, RecurrenceRule) {
+pub(super) fn fixture_with_limit(last: bool) -> (Connection, Todo, RecurrenceRule) {
     let mut db = Connection::open_in_memory().unwrap();
     crate::db::configure_connection(&db).unwrap();
     crate::db::migrate(&mut db).unwrap();
@@ -33,7 +33,7 @@ fn fixture_with_limit(last: bool) -> (Connection, Todo, RecurrenceRule) {
     (db, todo, rule)
 }
 
-fn dump(db: &Connection) -> Vec<String> {
+pub(super) fn dump(db: &Connection) -> Vec<String> {
     [
         "todos",
         "recurrence_rules",

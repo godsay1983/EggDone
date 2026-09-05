@@ -30,6 +30,7 @@ export interface TodoCompletionResult {
 
 export interface TodoDeletionResult {
   deleted_todos: Todo[];
+  created_todo?: Todo | null;
 }
 
 export interface TodoEditResult {

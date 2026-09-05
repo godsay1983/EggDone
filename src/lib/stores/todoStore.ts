@@ -337,10 +337,10 @@ export function createTodoStore(api = todoApi, onChanged = scheduleAutoSync) {
 
     async remove(id: number, repeatScope: RepeatDeleteScope = "single") {
       const result = await api.delete(id, repeatScope);
-      const deletedIds = new Set(result.deleted_todos.map((todo) => todo.id));
       update((state) => ({
         ...state,
-        items: state.items.filter((item) => !deletedIds.has(item.id)),
+        items: mergeCompletedTodos(state.items, [...result.deleted_todos,
+          ...(result.created_todo ? [result.created_todo] : [])]),
         error: null,
       }));
       onChanged();
@@ -352,17 +352,20 @@ export function createTodoStore(api = todoApi, onChanged = scheduleAutoSync) {
       if (targets.length === 0) return [];
 
       const deletedTodos: Todo[] = [];
-      for (const todo of targets) {
-        const result = await api.delete(todo.id, "single");
-        deletedTodos.push(...result.deleted_todos);
+      const changedTodos: Todo[] = [];
+      try {
+        for (const todo of targets) {
+          const result = await api.delete(todo.id, "single");
+          deletedTodos.push(...result.deleted_todos);
+          changedTodos.push(...result.deleted_todos);
+          if (result.created_todo) changedTodos.push(result.created_todo);
+        }
+      } finally {
+        if (changedTodos.length > 0) {
+          update((state) => ({ ...state, items: mergeCompletedTodos(state.items, changedTodos), error: null }));
+          onChanged();
+        }
       }
-      const deletedIds = new Set(deletedTodos.map((todo) => todo.id));
-      update((state) => ({
-        ...state,
-        items: state.items.filter((item) => !deletedIds.has(item.id)),
-        error: null,
-      }));
-      onChanged();
       return deletedTodos;
     },
 
@@ -370,7 +373,7 @@ export function createTodoStore(api = todoApi, onChanged = scheduleAutoSync) {
       const restoredTodo = await api.restore(id);
       update((state) => ({
         ...state,
-        items: [...state.items, restoredTodo].sort(sortTodos),
+        items: mergeCompletedTodos(state.items, [restoredTodo]),
         error: null,
       }));
       onChanged();

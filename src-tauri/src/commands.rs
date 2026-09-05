@@ -66,6 +66,7 @@ pub struct TodoCompletion {
 #[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct TodoDeletion {
     deleted_todos: Vec<Todo>,
+    created_todo: Option<Todo>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -956,8 +957,8 @@ pub fn delete_todo(
     database: State<'_, Database>,
 ) -> Result<TodoDeletion, String> {
     let result = {
-        let connection = lock_database(&database)?;
-        soft_delete_todo_in_connection(&connection, id, repeat_scope.as_deref())
+        let mut connection = lock_database(&database)?;
+        soft_delete_todo_in_connection(&mut connection, id, repeat_scope.as_deref())
     };
     refresh_badge_after_success(&app, &result);
     result
@@ -970,8 +971,8 @@ pub fn restore_todo(
     database: State<'_, Database>,
 ) -> Result<Todo, String> {
     let result = {
-        let connection = lock_database(&database)?;
-        restore_todo_in_connection(&connection, id)
+        let mut connection = lock_database(&database)?;
+        restore_todo_in_connection(&mut connection, id)
     };
     refresh_badge_after_success(&app, &result);
     result
@@ -2378,25 +2379,53 @@ fn reorder_todos_in_connection(
 }
 
 fn soft_delete_todo_in_connection(
-    connection: &Connection,
+    connection: &mut Connection,
     id: i64,
     repeat_scope: Option<&str>,
 ) -> Result<TodoDeletion, String> {
-    let target = find_todo(connection, id)?
-        .filter(|todo| todo.deleted_at.is_none() && todo.archived_at.is_none())
-        .ok_or_else(|| "任务不存在".to_string())?;
+    let tx = connection
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+        .map_err(database_error)?;
+    let connection = &tx;
+    let target = find_todo(connection, id)?.ok_or_else(|| "任务不存在".to_string())?;
     let scope = match repeat_scope.unwrap_or("single") {
         "single" => "single",
         "series" => "series",
         _ => return Err("删除范围无效".to_string()),
     };
+    if target.deleted_at.is_some() || target.archived_at.is_some() {
+        return Ok(TodoDeletion {
+            deleted_todos: vec![],
+            created_todo: None,
+        });
+    }
     let now = now_millis();
     let updated_by = device_id(connection).map_err(database_error)?;
+    let custom_series = if scope == "series" {
+        crate::recurrence_transaction::stop_series_for_todo(
+            connection,
+            &target.uuid,
+            now,
+            &updated_by,
+        )?
+    } else {
+        None
+    };
+    let plan = if scope == "single" {
+        crate::recurrence_transaction::skip_current_for_todo(
+            connection,
+            &target.uuid,
+            now,
+            &updated_by,
+        )?
+    } else {
+        None
+    };
 
     let ids = if scope == "series" {
-        let series_uuid = target
-            .repeat_series_uuid
+        let series_uuid = custom_series
             .as_deref()
+            .or(target.repeat_series_uuid.as_deref())
             .unwrap_or(target.uuid.as_str());
         let mut statement = connection
             .prepare(
@@ -2424,8 +2453,19 @@ fn soft_delete_todo_in_connection(
         return Err("任务不存在".to_string());
     }
 
-    let mut changed = 0;
+    let mut changed = usize::from(plan.is_some());
     for todo_id in &ids {
+        let todo = find_todo(connection, *todo_id)?.ok_or_else(|| "任务不存在".to_string())?;
+        if todo.deleted_at.is_some() || todo.archived_at.is_some() {
+            continue;
+        }
+        if custom_series.is_some() && todo.repeat_rule.is_some() {
+            return Err("RECURRENCE_LINK_CONFLICT".into());
+        }
+        let stamp = now.max(todo.updated_at.saturating_add(1));
+        if !(0..=9_007_199_254_740_991).contains(&stamp) {
+            return Err("INVALID_RECURRENCE_PROGRESS".into());
+        }
         changed += connection
             .execute(
                 "
@@ -2434,7 +2474,7 @@ fn soft_delete_todo_in_connection(
                 WHERE id = ?3 AND deleted_at IS NULL
                   AND archived_at IS NULL
                 ",
-                params![now, updated_by, todo_id],
+                params![stamp, updated_by, todo_id],
             )
             .map_err(database_error)?;
     }
@@ -2449,10 +2489,33 @@ fn soft_delete_todo_in_connection(
             find_todo(connection, todo_id)?.ok_or_else(|| "删除后未能读取任务".to_string())
         })
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(TodoDeletion { deleted_todos })
+    let created_todo = match plan.and_then(|plan| plan.next) {
+        Some(next) => find_todo_id_by_uuid(connection, &next.uuid)?
+            .map(|id| find_todo(connection, id))
+            .transpose()?
+            .flatten(),
+        None => None,
+    };
+    tx.commit().map_err(database_error)?;
+    Ok(TodoDeletion {
+        deleted_todos,
+        created_todo,
+    })
 }
 
-fn restore_todo_in_connection(connection: &Connection, id: i64) -> Result<Todo, String> {
+fn restore_todo_in_connection(connection: &mut Connection, id: i64) -> Result<Todo, String> {
+    let tx = connection
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+        .map_err(database_error)?;
+    let connection = &tx;
+    let target = find_todo(connection, id)?.ok_or_else(|| "任务未删除或不存在".to_string())?;
+    if target.deleted_at.is_none() {
+        return Ok(target);
+    }
+    let stamp = now_millis().max(target.updated_at.saturating_add(1));
+    if !(0..=9_007_199_254_740_991).contains(&stamp) {
+        return Err("INVALID_RECURRENCE_PROGRESS".into());
+    }
     let changed = connection
         .execute(
             "
@@ -2460,11 +2523,7 @@ fn restore_todo_in_connection(connection: &Connection, id: i64) -> Result<Todo, 
             SET deleted_at = NULL, updated_at = ?1, updated_by = ?2
             WHERE id = ?3 AND deleted_at IS NOT NULL
             ",
-            params![
-                now_millis(),
-                device_id(connection).map_err(database_error)?,
-                id
-            ],
+            params![stamp, device_id(connection).map_err(database_error)?, id],
         )
         .map_err(database_error)?;
 
@@ -2472,7 +2531,9 @@ fn restore_todo_in_connection(connection: &Connection, id: i64) -> Result<Todo, 
         return Err("任务未删除或不存在".to_string());
     }
 
-    find_todo(connection, id)?.ok_or_else(|| "恢复后未能读取任务".to_string())
+    let restored = find_todo(connection, id)?.ok_or_else(|| "恢复后未能读取任务".to_string())?;
+    tx.commit().map_err(database_error)?;
+    Ok(restored)
 }
 
 fn clear_completed_todos_in_connection(connection: &Connection) -> Result<usize, String> {
@@ -2998,6 +3059,10 @@ fn database_error(error: rusqlite::Error) -> String {
 }
 
 #[cfg(test)]
+#[path = "todo_deletion_recurrence_tests.rs"]
+mod recurrence_deletion_tests;
+
+#[cfg(test)]
 #[path = "todo_completion_recurrence_tests.rs"]
 mod recurrence_completion_tests;
 
@@ -3051,14 +3116,14 @@ mod tests {
         assert!(!reopened.completed);
         assert_eq!(reopened.completed_at, None);
 
-        let deleted = soft_delete_todo_in_connection(&connection, created.id, None)
+        let deleted = soft_delete_todo_in_connection(&mut connection, created.id, None)
             .unwrap()
             .deleted_todos
             .remove(0);
         assert!(deleted.deleted_at.is_some());
         assert!(list_todos_from_connection(&connection).unwrap().is_empty());
 
-        let restored = restore_todo_in_connection(&connection, created.id).unwrap();
+        let restored = restore_todo_in_connection(&mut connection, created.id).unwrap();
         assert_eq!(restored.deleted_at, None);
         assert_eq!(list_todos_from_connection(&connection).unwrap().len(), 1);
     }
@@ -3472,7 +3537,7 @@ mod tests {
             .created_todo
             .expect("next repeat instance");
 
-        let deleted = soft_delete_todo_in_connection(&connection, next.id, Some("series"))
+        let deleted = soft_delete_todo_in_connection(&mut connection, next.id, Some("series"))
             .unwrap()
             .deleted_todos;
 

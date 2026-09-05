@@ -88,6 +88,25 @@ pub(crate) fn complete_current_for_todo(
     now: i64,
     device_id: &str,
 ) -> Result<Option<RecurrenceAdvancePlan>, String> {
+    advance_current_for_todo(tx, uuid, now, device_id, RecurrenceAction::Complete)
+}
+
+pub(crate) fn skip_current_for_todo(
+    tx: &Transaction<'_>,
+    uuid: &str,
+    now: i64,
+    device_id: &str,
+) -> Result<Option<RecurrenceAdvancePlan>, String> {
+    advance_current_for_todo(tx, uuid, now, device_id, RecurrenceAction::Skip)
+}
+
+fn advance_current_for_todo(
+    tx: &Transaction<'_>,
+    uuid: &str,
+    now: i64,
+    device_id: &str,
+    action: RecurrenceAction,
+) -> Result<Option<RecurrenceAdvancePlan>, String> {
     let snapshot = recurrence_store::snapshot(tx)?;
     let Some(rule) = snapshot.document.rules.iter().find(|rule| {
         rule.deleted_at.is_none() && !rule.exhausted && rule.current_todo_uuid == uuid
@@ -99,13 +118,65 @@ pub(crate) fn complete_current_for_todo(
         &AdvanceRequest {
             rule_uuid: &rule.uuid,
             current_todo_uuid: uuid,
-            action: RecurrenceAction::Complete,
+            action,
             now,
             device_id,
             // The completion caller owns reminder validation and consumption.
             reminder_at: None,
         },
     )
+}
+
+// Stopping a rule preserves tasks. A series deletion explicitly deletes them in its outer transaction.
+pub(crate) fn stop_series_for_todo(
+    tx: &Transaction<'_>,
+    uuid: &str,
+    now: i64,
+    device_id: &str,
+) -> Result<Option<String>, String> {
+    let Some(target) = source(tx, uuid)? else {
+        return Ok(None);
+    };
+    let series = target.series.as_deref().unwrap_or(uuid);
+    let snapshot = recurrence_store::snapshot(tx)?;
+    let mut matched = None;
+    for mut rule in snapshot.document.rules {
+        if rule.first_todo_uuid != series && rule.current_todo_uuid != uuid {
+            continue;
+        }
+        if target.repeat_rule.is_some()
+            || (target.series.is_some()
+                && target.series.as_deref() != Some(rule.first_todo_uuid.as_str()))
+            || (target.series.is_none() && uuid != rule.first_todo_uuid)
+        {
+            return Err("RECURRENCE_LINK_CONFLICT".into());
+        }
+        matched = Some(rule.first_todo_uuid.clone());
+        if rule.deleted_at.is_some() {
+            continue;
+        }
+        let stamp = now.max(rule.updated_at.saturating_add(1));
+        if !(0..=MAX_SAFE).contains(&stamp) {
+            return Err("INVALID_RECURRENCE_PROGRESS".into());
+        }
+        rule.updated_at = stamp;
+        rule.deleted_at = Some(stamp);
+        rule.updated_by = device_id.into();
+        validate_rule(&rule)?;
+        let raw = serde_json::to_string(&rule).map_err(|e| e.to_string())?;
+        tx.execute(
+            "UPDATE recurrence_rules SET active=0,record_json=?1 WHERE uuid=?2",
+            params![raw, rule.uuid],
+        )
+        .map_err(db_error)?;
+    }
+    // An unrecognized custom-looking series may be awaiting its rule document.
+    // Deleting it as a legacy series could allow a later sync to regenerate tasks.
+    if matched.is_none() && target.repeat_rule.is_none() && target.series.is_some() {
+        return Err("RECURRENCE_LINK_CONFLICT".into());
+    }
+    recurrence_store::snapshot(tx)?;
+    Ok(matched)
 }
 
 pub fn advance_current(

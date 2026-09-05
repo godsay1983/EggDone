@@ -350,6 +350,56 @@ describe("todo store", () => {
     expect(onChanged).toHaveBeenCalledOnce();
   });
 
+  it("shows the next instance immediately after skipping without duplicating a downloaded task", async () => {
+    const current = makeTodo(1);
+    const next = makeTodo(2);
+    const api = createApi([current, next]);
+    vi.mocked(api.delete).mockResolvedValueOnce({
+      deleted_todos: [{ ...current, deleted_at: 100 }], created_todo: next,
+    });
+    const store = createTodoStore(api, vi.fn());
+    await store.load();
+    expect((await store.remove(1)).map((todo) => todo.id)).toEqual([1]);
+    expect(get(store).items.map((todo) => todo.id)).toEqual([2]);
+  });
+
+  it("keeps committed deletions and next items on partial batch failure", async () => {
+    const current = makeTodo(1);
+    const api = createApi([current, makeTodo(2)]);
+    vi.mocked(api.delete)
+      .mockResolvedValueOnce({ deleted_todos: [{ ...current, deleted_at: 100 }], created_todo: makeTodo(3) })
+      .mockRejectedValueOnce(new Error("RECURRENCE_LINK_CONFLICT"));
+    const onChanged = vi.fn();
+    const store = createTodoStore(api, onChanged);
+    await store.load();
+    await expect(store.removeMany([1, 2])).rejects.toThrow("RECURRENCE_LINK_CONFLICT");
+    expect(get(store).items.map((todo) => todo.id)).toEqual([2, 3]);
+    expect(onChanged).toHaveBeenCalledOnce();
+  });
+
+  it("does not retain an earlier next instance when a later batch deletion deletes it", async () => {
+    const current = makeTodo(1);
+    const next = makeTodo(2);
+    const api = createApi([current, next]);
+    vi.mocked(api.delete)
+      .mockResolvedValueOnce({ deleted_todos: [{ ...current, deleted_at: 100 }], created_todo: next })
+      .mockResolvedValueOnce({ deleted_todos: [{ ...next, deleted_at: 101 }], created_todo: makeTodo(3) });
+    const store = createTodoStore(api, vi.fn());
+    await store.load();
+    await store.removeMany([1, 2]);
+    expect(get(store).items.map((todo) => todo.id)).toEqual([3]);
+  });
+
+  it("undo upserts the restored task without removing the next instance", async () => {
+    const api = createApi([makeTodo(1), makeTodo(2)]);
+    vi.mocked(api.restore).mockResolvedValue(makeTodo(1));
+    const store = createTodoStore(api, vi.fn());
+    await store.load();
+    await store.restore(1);
+    await store.restore(1);
+    expect(get(store).items.map((todo) => todo.id)).toEqual([1, 2]);
+  });
+
   it("removes all todos returned by a repeat series deletion", async () => {
     const current = makeTodo(1, {
       repeat_rule: "daily",
