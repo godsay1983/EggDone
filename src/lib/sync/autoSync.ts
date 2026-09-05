@@ -2,15 +2,18 @@ import { writable } from "svelte/store";
 
 import {
   getRemoteSyncState,
+  getSyncRuntimeState,
   getSyncSettings,
   syncNow,
   type ManualSyncResult,
   type RemoteSyncState,
   type SyncSettings,
+  type SyncRuntimeSnapshot,
 } from "$lib/api/syncApi";
 
 export type SyncStatusKind =
   | "idle"
+  | "pending"
   | "syncing"
   | "synced"
   | "offline"
@@ -34,6 +37,8 @@ export const syncStatus = writable<SyncStatus>({
   updatedAt: null,
 });
 
+export const syncRuntimeSnapshot = writable<SyncRuntimeSnapshot | null>(null);
+
 let enabled = false;
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let running: Promise<ManualSyncResult> | null = null;
@@ -51,8 +56,12 @@ export async function initializeAutoSync() {
   if (initialized) return;
   initialized = true;
   try {
-    const settings = await getSyncSettings();
+    const [settings, snapshot] = await Promise.all([
+      getSyncSettings(),
+      getSyncRuntimeState(),
+    ]);
     configureAutoSync(settings);
+    applyRuntimeSnapshot(snapshot, settings.enabled);
   } catch (reason) {
     setFailureStatus(reason);
   }
@@ -92,6 +101,15 @@ export function setAutoSyncForeground(value: boolean) {
 }
 
 export function scheduleAutoSync() {
+  syncStatus.update((current) =>
+    current.kind === "syncing"
+      ? current
+      : {
+          kind: "pending",
+          message: "有修改未同步",
+          updatedAt: Date.now(),
+        },
+  );
   if (!enabled) return;
   if (running) {
     pendingAfterRun = true;
@@ -102,6 +120,46 @@ export function scheduleAutoSync() {
     debounceTimer = null;
     void runAutomaticSync();
   }, AUTO_SYNC_DELAY_MS);
+}
+
+export async function refreshSyncRuntimeState(): Promise<SyncRuntimeSnapshot> {
+  const snapshot = await getSyncRuntimeState();
+  syncRuntimeSnapshot.set(snapshot);
+  return snapshot;
+}
+
+function applyRuntimeSnapshot(snapshot: SyncRuntimeSnapshot, syncEnabled: boolean) {
+  syncRuntimeSnapshot.set(snapshot);
+  if (!syncEnabled) return;
+  if (snapshot.dirtyDomains.length > 0 && !["offline", "conflict", "failed"].includes(snapshot.lastResult)) {
+    syncStatus.set({
+      kind: "pending",
+      message: "有修改未同步",
+      updatedAt: snapshot.dirtySince,
+    });
+    return;
+  }
+  if (snapshot.lastResult === "success") {
+    syncStatus.set({
+      kind: "synced",
+      message: "同步完成",
+      updatedAt: snapshot.lastSuccessAt,
+    });
+  } else if (["offline", "conflict", "failed"].includes(snapshot.lastResult)) {
+    const kind = snapshot.lastResult as "offline" | "conflict" | "failed";
+    syncStatus.set({
+      kind,
+      message: failureMessage(kind),
+      detail: snapshot.lastErrorMessage ?? undefined,
+      updatedAt: snapshot.updatedAt,
+    });
+  } else if (snapshot.lastResult === "interrupted") {
+    syncStatus.set({
+      kind: "pending",
+      message: "上次同步被中断，等待重试",
+      updatedAt: snapshot.lastAttemptAt,
+    });
+  }
 }
 
 export async function runManualSync(): Promise<ManualSyncResult> {
@@ -159,11 +217,21 @@ async function performSyncWithRetry(): Promise<ManualSyncResult> {
       knownNoteRemoteEtag = result.noteRemoteEtag;
       knownNoteAttachmentRemoteEtag = result.noteAttachmentRemoteEtag;
       remoteStateInitialized = true;
+      try {
+        await refreshSyncRuntimeState();
+      } catch {
+        // The completed sync remains valid if the diagnostics refresh fails.
+      }
       return result;
     } catch (reason) {
       lastError = reason;
       if (!isRetryable(reason) || attempt === RETRY_DELAYS_MS.length) {
         setFailureStatus(reason);
+        try {
+          await refreshSyncRuntimeState();
+        } catch {
+          // Keep the in-memory failure status when diagnostics are unavailable.
+        }
         throw reason;
       }
       await delay(RETRY_DELAYS_MS[attempt]);

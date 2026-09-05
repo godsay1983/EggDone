@@ -9,7 +9,7 @@ use rusqlite::{params, Connection, Transaction};
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
-const CURRENT_SCHEMA_VERSION: i64 = 15;
+const CURRENT_SCHEMA_VERSION: i64 = 16;
 const DEVICE_ID_KEY: &str = "device_id";
 
 pub struct Database {
@@ -78,6 +78,7 @@ pub(crate) fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {
     apply_migration(connection, 13, add_todo_priority)?;
     apply_migration(connection, 14, add_notes)?;
     apply_migration(connection, 15, add_note_attachments)?;
+    apply_migration(connection, 16, add_sync_runtime_state)?;
 
     debug_assert_eq!(schema_version(connection)?, CURRENT_SCHEMA_VERSION);
     Ok(())
@@ -513,6 +514,111 @@ fn add_note_attachments(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
     )
 }
 
+fn add_sync_runtime_state(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
+    transaction.execute_batch(
+        "
+        CREATE TABLE sync_runtime_state (
+            id INTEGER PRIMARY KEY CHECK(id = 1),
+            schema_version INTEGER NOT NULL DEFAULT 1,
+            last_attempt_at INTEGER,
+            last_success_at INTEGER,
+            dirty_since INTEGER,
+            dirty_domains TEXT NOT NULL DEFAULT '[]',
+            last_result TEXT NOT NULL DEFAULT 'never'
+                CHECK(last_result IN ('never', 'success', 'offline', 'conflict', 'failed', 'interrupted')),
+            last_error_code TEXT,
+            last_error_message TEXT,
+            pending_attachment_count INTEGER NOT NULL DEFAULT 0 CHECK(pending_attachment_count >= 0),
+            todos_dirty_version INTEGER NOT NULL DEFAULT 0,
+            notes_dirty_version INTEGER NOT NULL DEFAULT 0,
+            attachments_dirty_version INTEGER NOT NULL DEFAULT 0,
+            updated_at INTEGER NOT NULL
+        );
+
+        INSERT INTO sync_runtime_state (id, updated_at) VALUES (1, 0);
+        ",
+    )?;
+
+    for (table, event, domain, update_columns) in [
+        ("todos", "insert", "todos", ""),
+        ("todos", "update", "todos", ""),
+        ("todos", "delete", "todos", ""),
+        ("groups", "insert", "todos", ""),
+        ("groups", "update", "todos", ""),
+        ("groups", "delete", "todos", ""),
+        ("notes", "insert", "notes", ""),
+        ("notes", "update", "notes", ""),
+        ("notes", "delete", "notes", ""),
+        ("note_attachments", "insert", "attachments", ""),
+        (
+            "note_attachments",
+            "update",
+            "attachments",
+            " OF note_uuid, kind, display_name, mime_type, byte_size, sha256, preview_mime_type, preview_byte_size, preview_sha256, width, height, sort_order, created_at, updated_at, deleted_at, updated_by",
+        ),
+        ("note_attachments", "delete", "attachments", ""),
+    ] {
+        create_sync_dirty_trigger(transaction, table, event, domain, update_columns)?;
+    }
+    Ok(())
+}
+
+fn create_sync_dirty_trigger(
+    transaction: &Transaction<'_>,
+    table: &str,
+    event: &str,
+    domain: &str,
+    update_columns: &str,
+) -> rusqlite::Result<()> {
+    let domain_expression = match domain {
+        "todos" => "CASE
+            WHEN instr(dirty_domains, '\"todos\"') > 0 THEN dirty_domains
+            WHEN dirty_domains = '[]' THEN '[\"todos\"]'
+            ELSE '[\"todos\",' || substr(dirty_domains, 2)
+        END",
+        "notes" => "CASE
+            WHEN instr(dirty_domains, '\"notes\"') > 0 THEN dirty_domains
+            WHEN dirty_domains = '[]' THEN '[\"notes\"]'
+            WHEN instr(dirty_domains, '\"todos\"') > 0 AND instr(dirty_domains, '\"attachments\"') > 0
+                THEN '[\"todos\",\"notes\",\"attachments\"]'
+            WHEN instr(dirty_domains, '\"todos\"') > 0 THEN '[\"todos\",\"notes\"]'
+            ELSE '[\"notes\",\"attachments\"]'
+        END",
+        "attachments" => "CASE
+            WHEN instr(dirty_domains, '\"attachments\"') > 0 THEN dirty_domains
+            WHEN dirty_domains = '[]' THEN '[\"attachments\"]'
+            ELSE substr(dirty_domains, 1, length(dirty_domains) - 1) || ',\"attachments\"]'
+        END",
+        _ => unreachable!(),
+    };
+    let timestamp = "CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)";
+    let version_column = match domain {
+        "todos" => "todos_dirty_version",
+        "notes" => "notes_dirty_version",
+        "attachments" => "attachments_dirty_version",
+        _ => unreachable!(),
+    };
+    let sql = format!(
+        "CREATE TRIGGER sync_dirty_{table}_{event}
+         AFTER {event}{update_columns} ON {table}
+         BEGIN
+           UPDATE sync_runtime_state
+           SET dirty_since = COALESCE(dirty_since, {timestamp}),
+               dirty_domains = {domain_expression},
+               pending_attachment_count = (
+                 SELECT COUNT(*) FROM note_attachments
+                 WHERE deleted_at IS NULL
+                   AND transfer_state IN ('pending_upload', 'uploading', 'uploaded', 'failed')
+                   AND NOT (transfer_state = 'failed' AND remote_uploaded = 1)
+               ),
+               {version_column} = {version_column} + 1,
+               updated_at = {timestamp}
+           WHERE id = 1;
+         END;"
+    );
+    transaction.execute_batch(&sql)
+}
+
 pub(crate) fn device_id(connection: &Connection) -> rusqlite::Result<String> {
     connection.query_row(
         "SELECT value FROM app_metadata WHERE key = ?1",
@@ -531,6 +637,24 @@ fn database_path(app: &AppHandle) -> Result<PathBuf, Box<dyn std::error::Error>>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn remove_sync_runtime_migration(connection: &Connection) {
+        for table in ["todos", "groups", "notes", "note_attachments"] {
+            for event in ["insert", "update", "delete"] {
+                connection
+                    .execute_batch(&format!(
+                        "DROP TRIGGER IF EXISTS sync_dirty_{table}_{event};"
+                    ))
+                    .unwrap();
+            }
+        }
+        connection
+            .execute_batch(
+                "DROP TABLE IF EXISTS sync_runtime_state;
+                 DELETE FROM schema_migrations WHERE version = 16;",
+            )
+            .unwrap();
+    }
 
     fn open_memory_database() -> Database {
         let mut connection = Connection::open_in_memory().unwrap();
@@ -602,6 +726,88 @@ mod tests {
             })
             .unwrap();
         assert_eq!(attachment_count, 0);
+        let runtime_count: i64 = connection
+            .query_row("SELECT COUNT(*) FROM sync_runtime_state", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(runtime_count, 1);
+    }
+
+    #[test]
+    fn sync_runtime_triggers_mark_domains_and_versions_dirty() {
+        let database = open_memory_database();
+        let connection = database.connection.lock().unwrap();
+        let identity = device_id(&connection).unwrap();
+        connection
+            .execute(
+                "INSERT INTO todos (
+                    uuid, title, completed, sort_order, created_at, updated_at, updated_by
+                 ) VALUES (?1, 'dirty todo', 0, 0, 1, 1, ?2)",
+                params!["00000000-0000-4000-8000-000000000016", identity],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO notes (
+                    uuid, title, content, color, pinned, created_at, updated_at, updated_by
+                 ) VALUES (?1, 'dirty note', '', 'default', 0, 1, 1, ?2)",
+                params!["00000000-0000-4000-8000-000000000017", identity],
+            )
+            .unwrap();
+        let domains: String = connection
+            .query_row("SELECT dirty_domains FROM sync_runtime_state", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(domains, "[\"todos\",\"notes\"]");
+        let versions: (i64, i64, i64) = connection
+            .query_row(
+                "SELECT todos_dirty_version, notes_dirty_version, attachments_dirty_version
+                 FROM sync_runtime_state",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(versions, (1, 1, 0));
+        assert!(connection
+            .query_row("SELECT dirty_since FROM sync_runtime_state", [], |row| {
+                row.get::<_, Option<i64>>(0)
+            })
+            .unwrap()
+            .is_some());
+    }
+
+    #[test]
+    fn sync_runtime_dirty_state_survives_database_reopen() {
+        let path =
+            std::env::temp_dir().join(format!("eggdone-sync-runtime-{}.sqlite3", Uuid::new_v4()));
+        {
+            let database = Database::open_path(&path).unwrap();
+            let connection = database.connection.lock().unwrap();
+            let identity = device_id(&connection).unwrap();
+            connection
+                .execute(
+                    "INSERT INTO todos (
+                        uuid, title, completed, sort_order, created_at, updated_at, updated_by
+                     ) VALUES (?1, 'persist dirty state', 0, 0, 1, 1, ?2)",
+                    params![Uuid::new_v4().to_string(), identity],
+                )
+                .unwrap();
+        }
+        {
+            let database = Database::open_path(&path).unwrap();
+            let connection = database.connection.lock().unwrap();
+            let domains: String = connection
+                .query_row("SELECT dirty_domains FROM sync_runtime_state", [], |row| {
+                    row.get(0)
+                })
+                .unwrap();
+            assert_eq!(domains, "[\"todos\"]");
+        }
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_file(format!("{}-wal", path.display()));
+        let _ = fs::remove_file(format!("{}-shm", path.display()));
     }
 
     #[test]
@@ -681,6 +887,7 @@ mod tests {
         let mut connection = Connection::open_in_memory().unwrap();
         configure_connection(&connection).unwrap();
         migrate(&mut connection).unwrap();
+        remove_sync_runtime_migration(&connection);
         connection
             .execute_batch(
                 "
@@ -705,7 +912,7 @@ mod tests {
 
         migrate(&mut connection).unwrap();
 
-        assert_eq!(schema_version(&connection).unwrap(), 15);
+        assert_eq!(schema_version(&connection).unwrap(), CURRENT_SCHEMA_VERSION);
         let title: String = connection
             .query_row("SELECT title FROM todos", [], |row| row.get(0))
             .unwrap();
@@ -725,6 +932,7 @@ mod tests {
         let mut connection = Connection::open_in_memory().unwrap();
         configure_connection(&connection).unwrap();
         migrate(&mut connection).unwrap();
+        remove_sync_runtime_migration(&connection);
         connection
             .execute_batch(
                 "
@@ -748,7 +956,7 @@ mod tests {
 
         migrate(&mut connection).unwrap();
 
-        assert_eq!(schema_version(&connection).unwrap(), 15);
+        assert_eq!(schema_version(&connection).unwrap(), CURRENT_SCHEMA_VERSION);
         let title: String = connection
             .query_row("SELECT title FROM notes", [], |row| row.get(0))
             .unwrap();

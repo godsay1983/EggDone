@@ -19,6 +19,7 @@ use crate::{
     },
     schedule::{local_date_from_timestamp, timestamp_for_local_date},
     sync::{self, SyncDocument},
+    sync_runtime_state::{self, SyncDomain, SyncRuntimeSnapshot},
     tray::{self, PanelState},
 };
 
@@ -1072,6 +1073,14 @@ pub fn get_sync_settings(database: State<'_, Database>) -> Result<SyncSettings, 
 }
 
 #[tauri::command]
+pub fn get_sync_runtime_state(
+    database: State<'_, Database>,
+) -> Result<SyncRuntimeSnapshot, String> {
+    let connection = lock_database(&database)?;
+    sync_runtime_state::get_snapshot(&connection)
+}
+
+#[tauri::command]
 pub fn save_sync_settings(
     settings: SaveSyncSettings,
     database: State<'_, Database>,
@@ -1208,9 +1217,23 @@ pub async fn sync_now(
     runtime: State<'_, SyncRuntime>,
     asset_store: State<'_, NoteAssetStore>,
 ) -> Result<ManualSyncResult, String> {
-    sync_now_inner(app, database, runtime, asset_store)
-        .await
-        .map_err(crate::error_codes::sync)
+    let attempt = {
+        let connection = lock_database(&database)?;
+        sync_runtime_state::begin_attempt(&connection)?
+    };
+    match sync_now_inner(app, database.clone(), runtime, asset_store, attempt).await {
+        Ok(result) => {
+            let connection = lock_database(&database)?;
+            sync_runtime_state::record_success(&connection)?;
+            Ok(result)
+        }
+        Err(error) => {
+            if let Ok(connection) = lock_database(&database) {
+                let _ = sync_runtime_state::record_failure(&connection, &error);
+            }
+            Err(crate::error_codes::sync(error))
+        }
+    }
 }
 
 async fn sync_now_inner(
@@ -1218,6 +1241,7 @@ async fn sync_now_inner(
     database: State<'_, Database>,
     runtime: State<'_, SyncRuntime>,
     asset_store: State<'_, NoteAssetStore>,
+    attempt: sync_runtime_state::SyncAttemptRevisions,
 ) -> Result<ManualSyncResult, String> {
     let _guard = runtime.acquire()?;
     let prepared = {
@@ -1250,6 +1274,14 @@ async fn sync_now_inner(
             }
         }
     };
+    {
+        let connection = lock_database(&database)?;
+        sync_runtime_state::mark_domain_synced(
+            &connection,
+            SyncDomain::Todos,
+            attempt.for_domain(SyncDomain::Todos),
+        )?;
+    }
 
     let mut note_remote = s3_sync::download_note_remote(&prepared)
         .await
@@ -1284,6 +1316,14 @@ async fn sync_now_inner(
             }
         }
     };
+    {
+        let connection = lock_database(&database)?;
+        sync_runtime_state::mark_domain_synced(
+            &connection,
+            SyncDomain::Notes,
+            attempt.for_domain(SyncDomain::Notes),
+        )?;
+    }
 
     let pending_attachments = {
         let connection = lock_database(&database)?;
@@ -1407,6 +1447,11 @@ async fn sync_now_inner(
     let pending_attachment_count = {
         let connection = lock_database(&database)?;
         note_attachment_sync::mark_document_synced(&connection, &synced_attachment_document)?;
+        sync_runtime_state::mark_domain_synced(
+            &connection,
+            SyncDomain::Attachments,
+            attempt.for_domain(SyncDomain::Attachments),
+        )?;
         note_attachments::list_pending_transfers(&connection)?.len()
     };
     let cleanup_summary = cleanup_remote_note_assets(

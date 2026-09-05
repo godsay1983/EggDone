@@ -52,8 +52,35 @@ export interface RemoteSyncState {
   noteAttachmentEtag: string | null;
 }
 
+export type SyncRuntimeResult =
+  | "never"
+  | "success"
+  | "offline"
+  | "conflict"
+  | "failed"
+  | "interrupted";
+
+export type SyncDirtyDomain = "todos" | "notes" | "attachments";
+
+export interface SyncRuntimeSnapshot {
+  schemaVersion: number;
+  lastAttemptAt: number | null;
+  lastSuccessAt: number | null;
+  dirtySince: number | null;
+  dirtyDomains: SyncDirtyDomain[];
+  lastResult: SyncRuntimeResult;
+  lastErrorCode: string | null;
+  lastErrorMessage: string | null;
+  pendingAttachmentCount: number;
+  updatedAt: number;
+}
+
 export function getSyncSettings(): Promise<SyncSettings> {
   return invoke("get_sync_settings");
+}
+
+export function getSyncRuntimeState(): Promise<SyncRuntimeSnapshot> {
+  return codedInvoke(invoke("get_sync_runtime_state"), "SYNC_FAILED");
 }
 
 export function saveSyncSettings(

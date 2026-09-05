@@ -13,6 +13,7 @@ mod reminders;
 mod s3_sync;
 mod schedule;
 mod sync;
+mod sync_runtime_state;
 mod tray;
 #[cfg(target_os = "linux")]
 mod tray_ksni;
@@ -142,6 +143,7 @@ pub fn run() {
             commands::prepare_sync_document,
             commands::apply_remote_sync_document,
             commands::get_sync_settings,
+            commands::get_sync_runtime_state,
             commands::save_sync_settings,
             commands::delete_sync_credentials,
             commands::test_sync_connection,

@@ -4069,6 +4069,86 @@ footer button {
   background: #bd7767;
 }
 
+.sync-diagnostics {
+  margin: 0 0 10px;
+  padding: 9px;
+  border: 1px solid #e2d8c8;
+  border-radius: 9px;
+  background: #faf7f0;
+}
+
+.sync-diagnostics-heading,
+.sync-diagnostics dl,
+.sync-domain-list {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sync-diagnostics-heading {
+  justify-content: space-between;
+}
+
+.sync-diagnostics-heading strong {
+  color: #554b3d;
+  font-size: 10px;
+}
+
+.sync-diagnostics-heading button {
+  padding: 4px 7px;
+  border: 1px solid #e0d5c4;
+  border-radius: 7px;
+  color: #675b48;
+  background: #fff;
+  font-size: 8px;
+  cursor: pointer;
+}
+
+.sync-diagnostics dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 8px 0;
+}
+
+.sync-diagnostics dl > div {
+  min-width: 0;
+}
+
+.sync-diagnostics dt {
+  color: #9c8e79;
+  font-size: 8px;
+}
+
+.sync-diagnostics dd {
+  margin: 2px 0 0;
+  overflow: hidden;
+  color: #675b48;
+  font-size: 9px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sync-domain-list span {
+  padding: 3px 6px;
+  border-radius: 999px;
+  color: #66856b;
+  background: #eaf2e9;
+  font-size: 8px;
+}
+
+.sync-domain-list span.dirty {
+  color: #7a5810;
+  background: #fff0be;
+}
+
+.sync-diagnostics p {
+  margin: 7px 0 0;
+  color: #985d50;
+  font-size: 8px;
+  line-height: 1.4;
+}
+
 .data-message {
   color: #55705a;
   background: #eaf2e9;
@@ -5313,6 +5393,40 @@ html[data-theme="dark"] .about-card p {
 
 html[data-theme="dark"] .about-card small {
   color: #c6bcac;
+}
+
+html[data-theme="dark"] .sync-diagnostics {
+  border-color: #534b3f;
+  background: #312e28;
+}
+
+html[data-theme="dark"] .sync-diagnostics-heading strong,
+html[data-theme="dark"] .sync-diagnostics dd {
+  color: #ded4c4;
+}
+
+html[data-theme="dark"] .sync-diagnostics-heading button {
+  border-color: #665c4e;
+  color: #ded4c4;
+  background: #3b3730;
+}
+
+html[data-theme="dark"] .sync-diagnostics dt {
+  color: #a99d8c;
+}
+
+html[data-theme="dark"] .sync-domain-list span {
+  color: #b9d6bd;
+  background: #29392c;
+}
+
+html[data-theme="dark"] .sync-domain-list span.dirty {
+  color: #f0d27c;
+  background: #493d21;
+}
+
+html[data-theme="dark"] .sync-diagnostics p {
+  color: #e2a090;
 }
 
 html[data-theme="dark"] [data-note-color="default"] { --note-bg: #302d28; --note-border: #4a443a; }

@@ -1048,11 +1048,21 @@
     kind: import("$lib/sync/autoSync").SyncStatusKind,
   ) {
     if (kind === "syncing") return $translator("sync.syncing");
-    if (kind === "synced") return $translator("sync.synced");
+    if (kind === "pending") return $translator("sync.localChangesPending");
+    if (kind === "synced") {
+      const time = shortSyncTime($syncStatus.updatedAt);
+      return time ? `${$translator("sync.synced")} ${time}` : $translator("sync.synced");
+    }
     if (kind === "offline") return $translator("sync.offline");
     if (kind === "conflict") return $translator("sync.conflict");
     if (kind === "failed") return $translator("sync.failed");
     return $translator("sync.notSynced");
+  }
+
+  function shortSyncTime(value: number | null) {
+    if (!value) return "";
+    const date = new Date(value);
+    return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
   }
 
   function footerSyncTitle(

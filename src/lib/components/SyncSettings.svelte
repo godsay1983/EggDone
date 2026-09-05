@@ -2,14 +2,18 @@
   import { onMount } from "svelte";
   import {
     deleteSyncCredentials,
+    getSyncRuntimeState,
     getSyncSettings,
     saveSyncSettings,
     testSyncConnection,
     type SyncSettings,
+    type SyncDirtyDomain,
+    type SyncRuntimeResult,
   } from "$lib/api/syncApi";
   import {
     configureAutoSync,
     runManualSync,
+    syncRuntimeSnapshot,
     syncStatus,
   } from "$lib/sync/autoSync";
   import {
@@ -70,7 +74,12 @@
     busy = true;
     error = "";
     try {
-      settings = await getSyncSettings();
+      const [loadedSettings, runtime] = await Promise.all([
+        getSyncSettings(),
+        getSyncRuntimeState(),
+      ]);
+      settings = loadedSettings;
+      syncRuntimeSnapshot.set(runtime);
     } catch (reason) {
       error = errorMessage(reason);
     } finally {
@@ -137,11 +146,62 @@
         notes: result.noteCount,
       });
       await loadAttachmentCacheStats();
+      syncRuntimeSnapshot.set(await getSyncRuntimeState());
     } catch (reason) {
       message = "";
       error = errorMessage(reason);
     } finally {
       busy = false;
+    }
+  }
+
+  function runtimeResultLabel(result: SyncRuntimeResult) {
+    if (result === "success") return $translator("sync.runtimeSuccess");
+    if (result === "offline") return $translator("sync.runtimeOffline");
+    if (result === "conflict") return $translator("sync.runtimeConflict");
+    if (result === "failed") return $translator("sync.runtimeFailed");
+    if (result === "interrupted") return $translator("sync.runtimeInterrupted");
+    return $translator("sync.runtimeNever");
+  }
+
+  function domainLabel(domain: SyncDirtyDomain) {
+    if (domain === "todos") return $translator("sync.domainTodos");
+    if (domain === "notes") return $translator("sync.domainNotes");
+    return $translator("sync.domainAttachments");
+  }
+
+  function runtimeErrorLabel(code: string, fallback: string | null) {
+    if (code === "SYNC_OFFLINE") return $translator("sync.errorOffline");
+    if (code === "SYNC_CONFLICT") return $translator("sync.errorConflict");
+    if (code === "SYNC_CREDENTIALS") return $translator("sync.errorCredentials");
+    if (code === "SYNC_ATTACHMENT") return $translator("sync.errorAttachment");
+    if (code === "SYNC_FAILED") return $translator("sync.errorGeneric");
+    return fallback ?? $translator("sync.errorGeneric");
+  }
+
+  async function copyDiagnostics() {
+    if (!settings || !$syncRuntimeSnapshot) return;
+    const runtime = $syncRuntimeSnapshot;
+    const summary = [
+      `EggDone sync schema: ${runtime.schemaVersion}`,
+      `Result: ${runtime.lastResult}`,
+      `Last attempt: ${runtime.lastAttemptAt ?? "never"}`,
+      `Last success: ${runtime.lastSuccessAt ?? "never"}`,
+      `Dirty domains: ${runtime.dirtyDomains.join(",") || "none"}`,
+      `Pending attachments: ${runtime.pendingAttachmentCount}`,
+      `Error code: ${runtime.lastErrorCode ?? "none"}`,
+      `Error: ${runtime.lastErrorMessage ?? "none"}`,
+      `Endpoint: ${settings.endpoint}`,
+      `Bucket: ${settings.bucket}`,
+      `Todo object: ${settings.objectKey}`,
+      `Note object: ${settings.noteObjectKey}`,
+      `Attachment object: ${settings.noteAttachmentObjectKey}`,
+    ].join("\n");
+    try {
+      await navigator.clipboard.writeText(summary);
+      message = $translator("sync.diagnosticsCopied");
+    } catch (reason) {
+      error = errorMessage(reason);
     }
   }
 
@@ -239,6 +299,48 @@
         <small>{formatTime($syncStatus.updatedAt)}</small>
       {/if}
     </p>
+  {/if}
+
+  {#if $syncRuntimeSnapshot}
+    <section class="sync-diagnostics" aria-labelledby="sync-diagnostics-title">
+      <div class="sync-diagnostics-heading">
+        <strong id="sync-diagnostics-title">{$translator("sync.diagnosticsTitle")}</strong>
+        <button type="button" onclick={() => void copyDiagnostics()}>
+          {$translator("sync.copyDiagnostics")}
+        </button>
+      </div>
+      <dl>
+        <div>
+          <dt>{$translator("sync.lastAttempt")}</dt>
+          <dd>{$syncRuntimeSnapshot.lastAttemptAt ? formatTime($syncRuntimeSnapshot.lastAttemptAt) : $translator("sync.never")}</dd>
+        </div>
+        <div>
+          <dt>{$translator("sync.lastSuccess")}</dt>
+          <dd>{$syncRuntimeSnapshot.lastSuccessAt ? formatTime($syncRuntimeSnapshot.lastSuccessAt) : $translator("sync.never")}</dd>
+        </div>
+        <div>
+          <dt>{$translator("sync.lastResult")}</dt>
+          <dd>{runtimeResultLabel($syncRuntimeSnapshot.lastResult)}</dd>
+        </div>
+        <div>
+          <dt>{$translator("sync.pendingAttachments")}</dt>
+          <dd>{$syncRuntimeSnapshot.pendingAttachmentCount}</dd>
+        </div>
+      </dl>
+      <div class="sync-domain-list">
+        {#each (["todos", "notes", "attachments"] as SyncDirtyDomain[]) as domain}
+          <span class:dirty={$syncRuntimeSnapshot.dirtyDomains.includes(domain)}>
+            {domainLabel(domain)}
+          </span>
+        {/each}
+      </div>
+      {#if $syncRuntimeSnapshot.lastErrorCode}
+        <p>
+          {$syncRuntimeSnapshot.lastErrorCode}:
+          {runtimeErrorLabel($syncRuntimeSnapshot.lastErrorCode, $syncRuntimeSnapshot.lastErrorMessage)}
+        </p>
+      {/if}
+    </section>
   {/if}
 
   {#if !settings}
