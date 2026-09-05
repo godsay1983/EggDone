@@ -1,0 +1,87 @@
+[
+  {
+    "id": "blank",
+    "input": {},
+    "title": "",
+    "body": "",
+    "fallback": "",
+    "truncated": false
+  },
+  {
+    "id": "bilingual",
+    "input": {
+      "title": "  中文\nEnglish  ",
+      "body": "a\r\nb\u0000‮c"
+    },
+    "title": "中文 English",
+    "body": "a\nbc",
+    "fallback": "中文 English",
+    "truncated": false
+  },
+  {
+    "id": "source",
+    "input": {
+      "body": "Read",
+      "source_url": "https://example.com"
+    },
+    "title": "",
+    "body": "Read",
+    "fallback": "Read",
+    "content": "Read\n\nhttps://example.com",
+    "truncated": false
+  },
+  {
+    "id": "same-source",
+    "input": {
+      "body": "https://example.com",
+      "source_url": "https://example.com"
+    },
+    "title": "",
+    "body": "https://example.com",
+    "fallback": "https://example.com",
+    "content": "https://example.com",
+    "truncated": false
+  },
+  {
+    "id": "unsafe-0",
+    "input": {
+      "source_url": "file:///C:/private"
+    },
+    "error": true
+  },
+  {
+    "id": "unsafe-1",
+    "input": {
+      "source_url": "javascript:alert(1)"
+    },
+    "error": true
+  },
+  {
+    "id": "unsafe-2",
+    "input": {
+      "source_url": "https://u:p@example.com"
+    },
+    "error": true
+  },
+  {
+    "id": "unsafe-3",
+    "input": {
+      "source_url": "https://example.com/\u0000bad"
+    },
+    "error": true
+  },
+  {
+    "id": "unsafe-4",
+    "input": {
+      "source_url": "https://example.com/\\bad"
+    },
+    "error": true
+  },
+  {
+    "id": "bad-target",
+    "input": {
+      "target": "file"
+    },
+    "error": true
+  }
+]

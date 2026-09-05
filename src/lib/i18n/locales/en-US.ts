@@ -2,6 +2,21 @@ import type { TranslationMessage } from "../types";
 import type { zhCN } from "./zh-CN";
 
 export const enUS = {
+  "capture.title": "Quick capture",
+  "capture.pending": "Saved and synced only after confirmation",
+  "capture.target": "Save as",
+  "capture.todo": "Task",
+  "capture.note": "Note",
+  "capture.heading": "Title (optional)",
+  "capture.body": "Text",
+  "capture.recognize": "Recognize dates, groups and priority in title",
+  "capture.truncated": "Content was shortened. Review before saving.",
+  "capture.tooLong": "Task details allow 1,000 characters. Shorten the text or save a note (20,000 including links).",
+  "capture.saveFailed": "Could not save. Your draft is kept; please retry.",
+  "capture.saveTodo": "Create task",
+  "capture.saveNote": "Save note",
+  "capture.invalid": "Could not receive this content. Share one text item or an HTTP/HTTPS link.",
+  "capture.shortcut": "Quick note shortcut",
   "smart.title": "Smart lists",
   "smart.overdue": "Overdue",
   "smart.next7": "Next 7 days",

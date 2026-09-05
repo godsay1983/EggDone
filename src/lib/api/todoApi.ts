@@ -16,6 +16,13 @@ export interface TodoScheduleInput {
   repeat_rule: RepeatRule | null;
 }
 
+export interface CapturedTodoInput extends TodoScheduleInput {
+  title: string;
+  note: string;
+  group_uuid: string | null;
+  priority: number;
+}
+
 export interface TodoCompletionResult {
   updated_todo: Todo;
   created_todo: Todo | null;
@@ -30,6 +37,9 @@ export interface TodoEditResult {
 }
 
 export const todoApi = {
+  createCaptured(draft: CapturedTodoInput): Promise<Todo> {
+    return invoke<Todo>("create_captured_todo", { draft });
+  },
   list(): Promise<Todo[]> {
     return invoke<Todo[]>("list_todos");
   },

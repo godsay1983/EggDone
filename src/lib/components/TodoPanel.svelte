@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { isTauri } from "@tauri-apps/api/core";
+  import { invoke, isTauri } from "@tauri-apps/api/core";
+  import CaptureDialog from "./CaptureDialog.svelte";
+  import { normalizeCapture, captureContent, captureTitle, type CaptureDraft, type CaptureInput } from "$lib/utils/capture";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { flip } from "svelte/animate";
@@ -145,6 +147,64 @@
     { key: "unscheduled", title: $translator("agenda.unscheduled.title"), subtitle: $translator("agenda.unscheduled.subtitle") },
   ];
   let title = "";
+  let captureRequest: { id: number; draft: CaptureDraft } | null = null;
+  let captureLoading = false;
+  let captureReadAgain = false;
+
+  async function readCapture() {
+    if (captureRequest) return;
+    if (captureLoading) { captureReadAgain = true; return; }
+    captureLoading = true;
+    try {
+      if (await invoke<boolean>("take_capture_error")) todos.reportError($translator("capture.invalid"));
+      const request = await invoke<{ id: number; input: CaptureInput } | null>("peek_capture");
+      if (request) {
+        try {
+          captureRequest = { id: request.id, draft: normalizeCapture(request.input) };
+        } catch {
+          await invoke("dismiss_capture", { id: request.id });
+          todos.reportError($translator("capture.invalid"));
+          captureReadAgain = true;
+        }
+      }
+    } finally {
+      captureLoading = false;
+      if (captureReadAgain) {
+        captureReadAgain = false;
+        void readCapture();
+      }
+    }
+  }
+
+  async function dismissCapture() {
+    const id = captureRequest?.id;
+    if (id === undefined) return;
+    await invoke("dismiss_capture", { id });
+    captureRequest = null;
+    await readCapture();
+  }
+
+  async function saveCapture(draft: CaptureDraft, recognize: boolean) {
+    await flushAllNoteChanges();
+    if (draft.target === "note") {
+      const note = await notes.add(draft.title, captureContent(draft));
+      // Once saved, consume before navigation; a navigation error must not duplicate the record.
+      await dismissCapture();
+      setListView("notes");
+      openNote(note);
+    } else {
+      const text = captureTitle(draft);
+      const parsed = recognize ? parseQuickAdd(text, new Date(), $todos.groups.map((group) => group.name)) : null;
+      const created = await todos.addCaptured({
+        title: parsed?.title ?? text, note: captureContent(draft),
+        group_uuid: groupUuidByName(parsed?.groupName ?? null),
+        priority: parsed?.priority ?? 0,
+        ...(parsed?.schedule ?? { due_date: null, due_at: null, reminder_at: null, repeat_rule: null }),
+      });
+      await dismissCapture();
+      await focusTodoByUuid(created.uuid);
+    }
+  }
   let quickAddParsingDisabledFor = "";
   let adding = false;
   let showAbout = false;
@@ -397,6 +457,11 @@
     }
     window.addEventListener("pointerdown", handlePointerDown, true);
     if (isTauri()) {
+      void listen("capture-available", () => { void readCapture(); }).then((unlisten) => {
+        if (!mounted) { unlisten(); return; }
+        unlisteners.push(unlisten);
+        void readCapture();
+      });
       void initializeAutoSync().then(async () => {
         const appWindow = getCurrentWindow();
         setAutoSyncForeground(await appWindow.isFocused());
@@ -1545,6 +1610,7 @@
   }
 
   function handlePanelKeydown(event: KeyboardEvent) {
+    if (captureRequest) return;
     if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLocaleLowerCase() === "n") {
       event.preventDefault();
       setListView("notes");
@@ -2097,6 +2163,13 @@
     );
   }
 </script>
+
+{#if captureRequest}
+  {#key captureRequest.id}
+    <CaptureDialog draft={captureRequest.draft} groups={$todos.groups.map((group) => group.name)}
+      onSave={saveCapture} onCancel={() => void dismissCapture()} />
+  {/key}
+{/if}
 
 <svelte:window
   onpointerdown={markPanelInteraction}

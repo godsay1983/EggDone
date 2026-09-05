@@ -1,3 +1,4 @@
+mod capture;
 mod commands;
 mod data_exchange;
 mod db;
@@ -36,6 +37,17 @@ pub fn run() {
     // The single-instance plugin must be registered before every other plugin.
     #[cfg(desktop)]
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+        match capture::parse_args(&args) {
+            Ok(Some(input)) => {
+                let _ = capture::enqueue(app, input);
+                return;
+            }
+            Err(_) => {
+                capture::reject(app);
+                return;
+            }
+            Ok(None) => {}
+        }
         tray::show_panel(app, None);
         let _ = app.emit_to(
             "main",
@@ -54,6 +66,7 @@ pub fn run() {
         ))
         .plugin(tauri_plugin_notification::init())
         .manage(i18n::I18nState::default())
+        .manage(capture::CaptureInbox::default())
         .manage(tray::PanelState::default())
         .manage(s3_sync::SyncRuntime::default())
         .setup(|app| {
@@ -65,6 +78,13 @@ pub fn run() {
             // Store the handle in application state for the whole process lifetime.
             let tray_icon = tray::create_tray(app.handle())?;
             app.manage(tray_icon);
+            match capture::parse_args(&std::env::args().collect::<Vec<_>>()) {
+                Ok(Some(input)) => {
+                    capture::enqueue(app.handle(), input)?;
+                }
+                Err(_) => capture::reject(app.handle()),
+                Ok(None) => {}
+            }
             reminders::start_reminder_scheduler(app.handle().clone());
             Ok(())
         })
@@ -90,10 +110,15 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            capture::peek_capture,
+            capture::take_capture_error,
+            capture::dismiss_capture,
+            capture::quick_capture_note,
             commands::list_todos,
             commands::list_groups,
             commands::list_notes,
             commands::create_todo,
+            commands::create_captured_todo,
             commands::create_group,
             commands::create_note,
             commands::update_note,

@@ -1,5 +1,7 @@
 # EggDone（蛋定 Todo）
 
+快速收集：设置中可开启“快速便签快捷键”，也可通过 `--capture` 命令行接收文字/链接；确认后才保存任务或便签，不自动读取剪贴板。用法和待验收项见 [快速收集契约](docs/QUICK_CAPTURE_CONTRACT.md)。
+
 ![Screenshot](./docs/Screenshot.png)
 
 EggDone 是一个轻量级、跨平台、托盘常驻的 Todo 桌面应用。应用启动后不显示普通主窗口；点击系统托盘或菜单栏图标，会在图标附近打开 Todo 面板。面板失去焦点后自动隐藏。

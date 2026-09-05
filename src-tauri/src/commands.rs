@@ -2,7 +2,7 @@ use std::path::Path;
 use std::process::Command;
 
 use rusqlite::{params, Connection, OptionalExtension};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, LogicalSize, Manager, Size, State, WebviewWindow};
 use uuid::Uuid;
 
@@ -646,6 +646,81 @@ pub fn create_todo(
     };
     refresh_badge_after_success(&app, &result);
     result
+}
+
+#[derive(Deserialize)]
+pub struct CapturedTodo {
+    title: String,
+    note: String,
+    group_uuid: Option<String>,
+    due_date: Option<String>,
+    due_at: Option<i64>,
+    reminder_at: Option<i64>,
+    repeat_rule: Option<String>,
+    priority: i64,
+}
+
+#[tauri::command]
+pub fn create_captured_todo(
+    draft: CapturedTodo,
+    app: AppHandle,
+    database: State<'_, Database>,
+) -> Result<Todo, String> {
+    let result = {
+        let mut connection = lock_database(&database)?;
+        create_captured_todo_in_connection(&mut connection, draft)
+    };
+    refresh_badge_after_success(&app, &result);
+    result
+}
+
+fn create_captured_todo_in_connection(
+    connection: &mut Connection,
+    draft: CapturedTodo,
+) -> Result<Todo, String> {
+    let due_date = normalize_due_date(draft.due_date)?;
+    let repeat_rule = normalize_repeat_rule(draft.repeat_rule)?;
+    if draft.note.chars().count() > TODO_NOTE_MAX_CHARS
+        || !matches!(draft.priority, 0 | 1)
+        || draft.due_at.is_some_and(|value| value < 0)
+        || draft.reminder_at.is_some_and(|value| value < 0)
+        || (due_date.is_some() && draft.due_at.is_some())
+        || (repeat_rule.is_some() && due_date.is_none() && draft.due_at.is_none())
+    {
+        return Err("CAPTURE_INVALID".into());
+    }
+    let repeat_date = match (&repeat_rule, &due_date, draft.due_at) {
+        (Some(_), Some(date), _) => Some(date.clone()),
+        (Some(_), None, Some(at)) => Some(local_date_from_timestamp(at)?),
+        _ => None,
+    };
+    let next_date = match (&repeat_date, &repeat_rule) {
+        (Some(date), Some(rule)) => Some(next_repeat_due_date(date, rule)?),
+        _ => None,
+    };
+    // The capture must be a single commit: failed metadata must not leave a partial task.
+    let transaction = connection.transaction().map_err(database_error)?;
+    let todo = create_todo_in_connection(&transaction, &draft.title, draft.group_uuid)?;
+    transaction
+        .execute(
+            "UPDATE todos SET note=?1, priority=?2, due_date=?3, due_at=?4, reminder_at=?5,
+         repeat_rule=?6, repeat_next_due_date=?7, repeat_series_uuid=?8 WHERE id=?9",
+            params![
+                draft.note,
+                draft.priority,
+                due_date,
+                draft.due_at,
+                draft.reminder_at,
+                repeat_rule,
+                next_date,
+                repeat_rule.as_ref().map(|_| &todo.uuid),
+                todo.id
+            ],
+        )
+        .map_err(database_error)?;
+    let created = find_todo(&transaction, todo.id)?.ok_or("CAPTURE_INVALID")?;
+    transaction.commit().map_err(database_error)?;
+    Ok(created)
 }
 
 #[tauri::command]
@@ -2955,6 +3030,51 @@ mod tests {
             update_todo_note_in_connection(&mut connection, created.id, Some(long_note), None)
                 .unwrap_err();
         assert!(error.contains("备注不能超过"));
+    }
+
+    fn capture_draft() -> CapturedTodo {
+        CapturedTodo {
+            title: "captured".into(),
+            note: "text\nhttps://example.com".into(),
+            group_uuid: None,
+            due_date: Some("2026-09-05".into()),
+            due_at: None,
+            reminder_at: None,
+            repeat_rule: Some("daily".into()),
+            priority: 1,
+        }
+    }
+
+    #[test]
+    fn capture_saves_all_fields_and_marks_dirty() {
+        let mut connection = connection();
+        let todo = create_captured_todo_in_connection(&mut connection, capture_draft()).unwrap();
+        assert_eq!(todo.note.as_deref(), Some("text\nhttps://example.com"));
+        assert_eq!(todo.priority, 1);
+        assert_eq!(todo.repeat_next_due_date.as_deref(), Some("2026-09-06"));
+        assert_eq!(todo.repeat_series_uuid.as_deref(), Some(todo.uuid.as_str()));
+        let dirty: String = connection
+            .query_row("SELECT dirty_domains FROM sync_runtime_state", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert!(dirty.contains("todos"));
+    }
+
+    #[test]
+    fn capture_failure_rolls_back_task_and_rejects_long_details() {
+        let mut connection = connection();
+        let mut invalid = capture_draft();
+        invalid.note = "x".repeat(1001);
+        assert!(create_captured_todo_in_connection(&mut connection, invalid).is_err());
+        connection
+            .execute_batch(
+                "CREATE TRIGGER fail_capture BEFORE UPDATE OF note ON todos
+            BEGIN SELECT RAISE(ABORT, 'capture test'); END;",
+            )
+            .unwrap();
+        assert!(create_captured_todo_in_connection(&mut connection, capture_draft()).is_err());
+        assert!(list_todos_from_connection(&connection).unwrap().is_empty());
     }
 
     #[test]

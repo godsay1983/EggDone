@@ -1,6 +1,8 @@
 <script lang="ts">
   import {
     shortcutOptions,
+    noteShortcutOptions,
+    updateNoteShortcut,
     updateAutostart,
     updateShortcut,
     type DesktopSettings,
@@ -31,7 +33,7 @@
   export let onDefaultListViewChange: (mode: DefaultListViewMode) => void;
 
   let busy = false;
-  let error = settings.shortcutError ?? settings.autostartError ?? "";
+  let error = settings.shortcutError ?? settings.noteShortcutError ?? settings.autostartError ?? "";
   let focusDurationMinutes = 25;
   let breakDurationMinutes = 5;
   const languageOptions: Array<{ mode: LanguageMode; label: TranslationKey }> = [
@@ -90,6 +92,20 @@
         autostartEnabled: actual,
         autostartError: null,
       });
+    } catch (reason) {
+      error = reason instanceof Error ? reason.message : String(reason);
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function saveNoteShortcut(shortcut: string, enabled: boolean) {
+    if (busy) return;
+    busy = true;
+    error = "";
+    try {
+      await updateNoteShortcut(shortcut, enabled);
+      onChange({ ...settings, noteShortcut: shortcut, noteShortcutEnabled: enabled, noteShortcutError: null });
     } catch (reason) {
       error = reason instanceof Error ? reason.message : String(reason);
     } finally {
@@ -185,6 +201,26 @@
       </select>
     </label>
 
+    <div class="setting-row">
+      <div>
+        <strong>{$translator("capture.shortcut")}</strong>
+        <span>{$translator("capture.pending")}</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" checked={settings.noteShortcutEnabled} disabled={busy}
+          onchange={(event) => void saveNoteShortcut(settings.noteShortcut, event.currentTarget.checked)} />
+        <span></span>
+      </label>
+    </div>
+    <label class="shortcut-select">
+      <span>{$translator("settings.shortcutCombination")}</span>
+      <select value={settings.noteShortcut} disabled={busy || !settings.noteShortcutEnabled}
+        onchange={(event) => void saveNoteShortcut(event.currentTarget.value, settings.noteShortcutEnabled)}>
+        {#each noteShortcutOptions as option}
+          <option value={option.value}>{option.label}</option>
+        {/each}
+      </select>
+    </label>
     <div class="setting-row">
       <div>
         <strong>{$translator("settings.autostartTitle")}</strong>

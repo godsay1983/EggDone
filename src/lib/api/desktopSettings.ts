@@ -11,6 +11,14 @@ import {
 
 const SHORTCUT_KEY = "eggdone-global-shortcut";
 const SHORTCUT_ENABLED_KEY = "eggdone-global-shortcut-enabled";
+const NOTE_SHORTCUT_KEY = "eggdone-note-shortcut";
+const NOTE_SHORTCUT_ENABLED_KEY = "eggdone-note-shortcut-enabled";
+
+export const noteShortcutOptions = [
+  { value: "CommandOrControl+Shift+N", label: "Ctrl + Shift + N" },
+  { value: "CommandOrControl+Alt+N", label: "Ctrl + Alt + N" },
+  { value: "Alt+Shift+N", label: "Alt + Shift + N" },
+] as const;
 
 export const shortcutOptions = [
   { value: "CommandOrControl+Shift+Space", label: "Ctrl + Shift + Space" },
@@ -20,6 +28,9 @@ export const shortcutOptions = [
 ] as const;
 
 export interface DesktopSettings {
+  noteShortcut: string;
+  noteShortcutEnabled: boolean;
+  noteShortcutError: string | null;
   shortcut: string;
   shortcutEnabled: boolean;
   autostartEnabled: boolean;
@@ -28,6 +39,7 @@ export interface DesktopSettings {
 }
 
 let activeShortcut: string | null = null;
+let activeNoteShortcut: string | null = null;
 
 export async function initializeDesktopSettings(): Promise<DesktopSettings> {
   const shortcut =
@@ -37,6 +49,9 @@ export async function initializeDesktopSettings(): Promise<DesktopSettings> {
   let shortcutError: string | null = null;
   let autostartEnabled = false;
   let autostartError: string | null = null;
+  const noteShortcut = localStorage.getItem(NOTE_SHORTCUT_KEY) ?? noteShortcutOptions[0].value;
+  const noteShortcutEnabled = localStorage.getItem(NOTE_SHORTCUT_ENABLED_KEY) === "true";
+  let noteShortcutError: string | null = null;
 
   if (shortcutEnabled) {
     try {
@@ -52,7 +67,15 @@ export async function initializeDesktopSettings(): Promise<DesktopSettings> {
     autostartError = settingErrorMessage("无法读取开机启动状态", error);
   }
 
+  if (noteShortcutEnabled) {
+    try { await registerNoteShortcut(noteShortcut); }
+    catch (error) { noteShortcutError = shortcutErrorMessage(error); }
+  }
+
   return {
+    noteShortcut,
+    noteShortcutEnabled: noteShortcutEnabled && noteShortcutError === null,
+    noteShortcutError,
     shortcut,
     shortcutEnabled: shortcutEnabled && shortcutError === null,
     autostartEnabled,
@@ -98,6 +121,31 @@ export async function updateAutostart(enabled: boolean): Promise<boolean> {
     await disableAutostart();
   }
   return isAutostartEnabled();
+}
+
+export async function updateNoteShortcut(shortcut: string, enabled: boolean): Promise<void> {
+  const previous = activeNoteShortcut;
+  if (previous) {
+    await unregister(previous);
+    activeNoteShortcut = null;
+  }
+  try {
+    if (enabled) await registerNoteShortcut(shortcut);
+  } catch (error) {
+    if (previous) {
+      try { await registerNoteShortcut(previous); } catch { activeNoteShortcut = null; }
+    }
+    throw new Error(shortcutErrorMessage(error));
+  }
+  localStorage.setItem(NOTE_SHORTCUT_KEY, shortcut);
+  localStorage.setItem(NOTE_SHORTCUT_ENABLED_KEY, String(enabled));
+}
+
+async function registerNoteShortcut(shortcut: string) {
+  await register(shortcut, async (event) => {
+    if (event.state === "Pressed") await invoke("quick_capture_note");
+  });
+  activeNoteShortcut = shortcut;
 }
 
 async function registerShortcut(shortcut: string) {

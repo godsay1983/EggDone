@@ -1,7 +1,7 @@
 import { derived, get, writable } from "svelte/store";
 
 import { todoApi } from "$lib/api/todoApi";
-import type { TodoScheduleInput } from "$lib/api/todoApi";
+import type { TodoScheduleInput, CapturedTodoInput } from "$lib/api/todoApi";
 import { localizedErrorMessage } from "$lib/i18n/errors";
 import { scheduleAutoSync } from "$lib/sync/autoSync";
 import type {
@@ -65,6 +65,13 @@ export function createTodoStore(api = todoApi, onChanged = scheduleAutoSync) {
         items: [todo, ...state.items],
         error: null,
       }));
+      onChanged();
+      return todo;
+    },
+
+    async addCaptured(draft: CapturedTodoInput) {
+      const todo = await api.createCaptured(draft);
+      update((state) => ({ ...state, items: [todo, ...state.items], error: null }));
       onChanged();
       return todo;
     },

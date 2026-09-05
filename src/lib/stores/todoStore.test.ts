@@ -47,6 +47,7 @@ function makeGroup(id: number, name = `group-${id}`): TodoGroup {
 function createApi(initialItems: Todo[] = []) {
   const items = [...initialItems];
   const api: typeof todoApi = {
+    createCaptured: vi.fn(async (draft) => makeTodo(3, draft)),
     list: vi.fn(async () => [...items]),
     listGroups: vi.fn(async () => []),
     create: vi.fn(async (title, groupUuid = null) =>
