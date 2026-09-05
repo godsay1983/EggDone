@@ -5,7 +5,7 @@ use crate::recurrence_progress::{
 };
 use crate::recurrence_protocol::{validate_rule, RecurrenceRule};
 use crate::recurrence_store;
-use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
+use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 
 const MAX_SAFE: i64 = 9_007_199_254_740_991;
@@ -85,6 +85,19 @@ pub fn advance_current(
     connection: &mut Connection,
     request: &AdvanceRequest<'_>,
 ) -> Result<Option<RecurrenceAdvancePlan>, String> {
+    let tx = connection
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(db_error)?;
+    let result = advance_in_transaction(&tx, request)?;
+    tx.commit().map_err(db_error)?;
+    Ok(result)
+}
+
+// Reuses the transaction owned by the combined Todo/rule snapshot preparation.
+pub(crate) fn advance_in_transaction(
+    tx: &Transaction<'_>,
+    request: &AdvanceRequest<'_>,
+) -> Result<Option<RecurrenceAdvancePlan>, String> {
     if !(0..=MAX_SAFE).contains(&request.now)
         || request.reminder_at.is_some_and(|n| {
             !(1..=MAX_SAFE).contains(&n) || request.action != RecurrenceAction::Complete
@@ -92,9 +105,6 @@ pub fn advance_current(
     {
         return Err("INVALID_RECURRENCE_ACTION".to_string());
     }
-    let tx = connection
-        .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(db_error)?;
     let snapshot = recurrence_store::snapshot(&tx)?;
     let Some(rule) = snapshot
         .document
@@ -269,7 +279,6 @@ pub fn advance_current(
         )
         .map_err(db_error)?;
     }
-    tx.commit().map_err(db_error)?;
     Ok(Some(plan))
 }
 

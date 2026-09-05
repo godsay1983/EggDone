@@ -1,7 +1,7 @@
 //! Local dependency preparation, not evidence that a Todo has been uploaded.
 use crate::recurrence_protocol::{encode_document, RecurrenceDocument};
 use crate::recurrence_store;
-use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
+use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -144,6 +144,20 @@ pub fn prepare_links(
     now: i64,
     device_id: &str,
 ) -> Result<LinkPreparation, String> {
+    let tx = connection
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(db_error)?;
+    let result = prepare_links_in_transaction(&tx, now, device_id)?;
+    tx.commit().map_err(db_error)?;
+    Ok(result)
+}
+
+// The caller owns commit/rollback; never use this outside the enclosing preparation transaction.
+pub(crate) fn prepare_links_in_transaction(
+    tx: &Transaction<'_>,
+    now: i64,
+    device_id: &str,
+) -> Result<LinkPreparation, String> {
     if !(0..MAX_SAFE).contains(&now)
         || device_id.is_empty()
         || device_id.len() > 128
@@ -153,9 +167,6 @@ pub fn prepare_links(
     {
         return Err("INVALID_RECURRENCE_LINKS".into());
     }
-    let tx = connection
-        .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(db_error)?;
     let snapshot = recurrence_store::snapshot(&tx)?;
     let todos = read_todos(&tx, &snapshot.document)?;
     let plan = inspect_links(&snapshot.document, &todos)?;
@@ -189,7 +200,6 @@ pub fn prepare_links(
         bound_todos,
         rule_revision: snapshot.revision,
     };
-    tx.commit().map_err(db_error)?;
     Ok(result)
 }
 
