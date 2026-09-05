@@ -1,0 +1,1117 @@
+[
+  {
+    "id": "daily",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "daily",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-05",
+    "expected": {
+      "date": "2026-09-06",
+      "index": 2
+    },
+    "key": "eggdone/recurrence/v1/123e4567-e89b-42d3-a456-426614174000/2026-09-06Tdate/2",
+    "uuid": "e9cb6d09-664e-5c54-bdf7-69f395808585"
+  },
+  {
+    "id": "daily-interval",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "daily",
+      "interval": 3,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-08",
+    "expected": {
+      "date": "2026-09-11",
+      "index": 3
+    },
+    "key": "eggdone/recurrence/v1/123e4567-e89b-42d3-a456-426614174000/2026-09-11Tdate/3",
+    "uuid": "077c3dea-26d5-5624-8b00-5be9fa4fd27b"
+  },
+  {
+    "id": "year-rollover",
+    "schedule": {
+      "anchor_date": "2026-12-31",
+      "frequency": "daily",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-12-31",
+    "expected": {
+      "date": "2027-01-01",
+      "index": 2
+    },
+    "key": "eggdone/recurrence/v1/123e4567-e89b-42d3-a456-426614174000/2027-01-01Tdate/2",
+    "uuid": "21f81e1e-7785-5776-8eab-5d0be2b97606"
+  },
+  {
+    "id": "leap-day",
+    "schedule": {
+      "anchor_date": "2028-02-28",
+      "frequency": "daily",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2028-02-28",
+    "expected": {
+      "date": "2028-02-29",
+      "index": 2
+    },
+    "key": "eggdone/recurrence/v1/123e4567-e89b-42d3-a456-426614174000/2028-02-29Tdate/2",
+    "uuid": "f37e9230-d908-51ea-9d3c-884543bd1b2a"
+  },
+  {
+    "id": "non-leap-century",
+    "schedule": {
+      "anchor_date": "2100-02-28",
+      "frequency": "daily",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2100-02-28",
+    "expected": {
+      "date": "2100-03-01",
+      "index": 2
+    },
+    "key": "eggdone/recurrence/v1/123e4567-e89b-42d3-a456-426614174000/2100-03-01Tdate/2",
+    "uuid": "85d44111-6c94-53bf-b300-20500271615b"
+  },
+  {
+    "id": "leap-century",
+    "schedule": {
+      "anchor_date": "2000-02-28",
+      "frequency": "daily",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2000-02-28",
+    "expected": {
+      "date": "2000-02-29",
+      "index": 2
+    },
+    "key": "eggdone/recurrence/v1/123e4567-e89b-42d3-a456-426614174000/2000-02-29Tdate/2",
+    "uuid": "a572a6f5-83f6-525d-b295-a0d1775f204b"
+  },
+  {
+    "id": "timed-spring-gap-calendar",
+    "schedule": {
+      "anchor_date": "2026-03-07",
+      "frequency": "daily",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": 150
+    },
+    "current_date": "2026-03-07",
+    "expected": {
+      "date": "2026-03-08",
+      "index": 2
+    },
+    "key": "eggdone/recurrence/v1/123e4567-e89b-42d3-a456-426614174000/2026-03-08T02:30/2",
+    "uuid": "ea893e03-d19e-5c6b-bad0-d812ad20be73"
+  },
+  {
+    "id": "timed-autumn-fold-calendar",
+    "schedule": {
+      "anchor_date": "2026-10-31",
+      "frequency": "daily",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": 90
+    },
+    "current_date": "2026-10-31",
+    "expected": {
+      "date": "2026-11-01",
+      "index": 2
+    },
+    "key": "eggdone/recurrence/v1/123e4567-e89b-42d3-a456-426614174000/2026-11-01T01:30/2",
+    "uuid": "33d414fa-92d8-5206-ae7d-b06a8acb0ac6"
+  },
+  {
+    "id": "midnight",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "daily",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": 0
+    },
+    "current_date": "2026-09-05",
+    "expected": {
+      "date": "2026-09-06",
+      "index": 2
+    },
+    "key": "eggdone/recurrence/v1/123e4567-e89b-42d3-a456-426614174000/2026-09-06T00:00/2",
+    "uuid": "b5f3084e-4e08-5934-ad07-27598ae029b4"
+  },
+  {
+    "id": "last-minute",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "daily",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": 1439
+    },
+    "current_date": "2026-09-05",
+    "expected": {
+      "date": "2026-09-06",
+      "index": 2
+    },
+    "key": "eggdone/recurrence/v1/123e4567-e89b-42d3-a456-426614174000/2026-09-06T23:59/2",
+    "uuid": "0e6e21a5-2467-548a-858a-5b0835853794"
+  },
+  {
+    "id": "weekly-within-active-week",
+    "schedule": {
+      "anchor_date": "2026-09-07",
+      "frequency": "weekly",
+      "interval": 2,
+      "weekdays": [
+        1,
+        4
+      ],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-07",
+    "expected": {
+      "date": "2026-09-10",
+      "index": 2
+    },
+    "key": "eggdone/recurrence/v1/123e4567-e89b-42d3-a456-426614174000/2026-09-10Tdate/2",
+    "uuid": "3e404185-4748-5f95-ac20-14a18846505f"
+  },
+  {
+    "id": "weekly-skips-inactive-week",
+    "schedule": {
+      "anchor_date": "2026-09-07",
+      "frequency": "weekly",
+      "interval": 2,
+      "weekdays": [
+        1,
+        4
+      ],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-10",
+    "expected": {
+      "date": "2026-09-21",
+      "index": 3
+    },
+    "key": "eggdone/recurrence/v1/123e4567-e89b-42d3-a456-426614174000/2026-09-21Tdate/3",
+    "uuid": "3ae717ec-9177-5996-9af0-4dfd16ddce91"
+  },
+  {
+    "id": "weekly-later-cycle",
+    "schedule": {
+      "anchor_date": "2026-09-07",
+      "frequency": "weekly",
+      "interval": 2,
+      "weekdays": [
+        1,
+        4
+      ],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-21",
+    "expected": {
+      "date": "2026-09-24",
+      "index": 4
+    },
+    "key": "eggdone/recurrence/v1/123e4567-e89b-42d3-a456-426614174000/2026-09-24Tdate/4",
+    "uuid": "fb8a9631-8212-5433-ae16-c1e164a2304a"
+  },
+  {
+    "id": "weekly-partial-anchor",
+    "schedule": {
+      "anchor_date": "2026-09-10",
+      "frequency": "weekly",
+      "interval": 2,
+      "weekdays": [
+        1,
+        4
+      ],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-10",
+    "expected": {
+      "date": "2026-09-21",
+      "index": 2
+    },
+    "key": "eggdone/recurrence/v1/123e4567-e89b-42d3-a456-426614174000/2026-09-21Tdate/2",
+    "uuid": "c495b5ee-72c9-5e54-bd44-94700647c53b"
+  },
+  {
+    "id": "weekly-sunday-boundary",
+    "schedule": {
+      "anchor_date": "2026-09-06",
+      "frequency": "weekly",
+      "interval": 1,
+      "weekdays": [
+        1,
+        7
+      ],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-06",
+    "expected": {
+      "date": "2026-09-07",
+      "index": 2
+    },
+    "key": "eggdone/recurrence/v1/123e4567-e89b-42d3-a456-426614174000/2026-09-07Tdate/2",
+    "uuid": "321571b4-4308-5eb8-8051-7bd666164288"
+  },
+  {
+    "id": "weekly-99",
+    "schedule": {
+      "anchor_date": "2026-09-07",
+      "frequency": "weekly",
+      "interval": 99,
+      "weekdays": [
+        1
+      ],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-07",
+    "expected": {
+      "date": "2028-07-31",
+      "index": 2
+    },
+    "key": "eggdone/recurrence/v1/123e4567-e89b-42d3-a456-426614174000/2028-07-31Tdate/2",
+    "uuid": "9806415d-d69a-568d-9e0a-f44446395b99"
+  },
+  {
+    "id": "month-clamp",
+    "schedule": {
+      "anchor_date": "2026-01-31",
+      "frequency": "monthly",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": 31,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-01-31",
+    "expected": {
+      "date": "2026-02-28",
+      "index": 2
+    },
+    "key": "eggdone/recurrence/v1/123e4567-e89b-42d3-a456-426614174000/2026-02-28Tdate/2",
+    "uuid": "eac9d6c2-15ec-5c1b-945e-4a2dfb6ce4f0"
+  },
+  {
+    "id": "month-no-drift",
+    "schedule": {
+      "anchor_date": "2026-01-31",
+      "frequency": "monthly",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": 31,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-02-28",
+    "expected": {
+      "date": "2026-03-31",
+      "index": 3
+    },
+    "key": "eggdone/recurrence/v1/123e4567-e89b-42d3-a456-426614174000/2026-03-31Tdate/3",
+    "uuid": "953fa040-c302-528c-a656-d2cf70b2169c"
+  },
+  {
+    "id": "month-interval",
+    "schedule": {
+      "anchor_date": "2026-01-31",
+      "frequency": "monthly",
+      "interval": 2,
+      "weekdays": [],
+      "month_day": 31,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-01-31",
+    "expected": {
+      "date": "2026-03-31",
+      "index": 2
+    },
+    "key": "eggdone/recurrence/v1/123e4567-e89b-42d3-a456-426614174000/2026-03-31Tdate/2",
+    "uuid": "68332e31-2914-5ab9-9425-5e41a275953f"
+  },
+  {
+    "id": "month-leap",
+    "schedule": {
+      "anchor_date": "2028-01-31",
+      "frequency": "monthly",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": 31,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2028-01-31",
+    "expected": {
+      "date": "2028-02-29",
+      "index": 2
+    },
+    "key": "eggdone/recurrence/v1/123e4567-e89b-42d3-a456-426614174000/2028-02-29Tdate/2",
+    "uuid": "f37e9230-d908-51ea-9d3c-884543bd1b2a"
+  },
+  {
+    "id": "month-last",
+    "schedule": {
+      "anchor_date": "2026-04-30",
+      "frequency": "monthly",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": 0,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-04-30",
+    "expected": {
+      "date": "2026-05-31",
+      "index": 2
+    },
+    "key": "eggdone/recurrence/v1/123e4567-e89b-42d3-a456-426614174000/2026-05-31Tdate/2",
+    "uuid": "3f2a1e24-5c89-52d4-baab-bb621b72885e"
+  },
+  {
+    "id": "month-29",
+    "schedule": {
+      "anchor_date": "2026-01-29",
+      "frequency": "monthly",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": 29,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-02-28",
+    "expected": {
+      "date": "2026-03-29",
+      "index": 3
+    },
+    "key": "eggdone/recurrence/v1/123e4567-e89b-42d3-a456-426614174000/2026-03-29Tdate/3",
+    "uuid": "bec36aa6-b601-59a8-9c5d-93ee9645f112"
+  },
+  {
+    "id": "count-first-included",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "daily",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "count",
+      "end_date": null,
+      "max_occurrences": 1,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-05",
+    "expected": null
+  },
+  {
+    "id": "count-final",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "daily",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "count",
+      "end_date": null,
+      "max_occurrences": 2,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-05",
+    "expected": {
+      "date": "2026-09-06",
+      "index": 2
+    },
+    "key": "eggdone/recurrence/v1/123e4567-e89b-42d3-a456-426614174000/2026-09-06Tdate/2",
+    "uuid": "e9cb6d09-664e-5c54-bdf7-69f395808585"
+  },
+  {
+    "id": "count-exhausted",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "daily",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "count",
+      "end_date": null,
+      "max_occurrences": 2,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-06",
+    "expected": null
+  },
+  {
+    "id": "end-inclusive",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "daily",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "date",
+      "end_date": "2026-09-06",
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-05",
+    "expected": {
+      "date": "2026-09-06",
+      "index": 2
+    },
+    "key": "eggdone/recurrence/v1/123e4567-e89b-42d3-a456-426614174000/2026-09-06Tdate/2",
+    "uuid": "e9cb6d09-664e-5c54-bdf7-69f395808585"
+  },
+  {
+    "id": "end-exhausted",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "daily",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "date",
+      "end_date": "2026-09-06",
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-06",
+    "expected": null
+  },
+  {
+    "id": "end-before-next",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "daily",
+      "interval": 3,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "date",
+      "end_date": "2026-09-07",
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-05",
+    "expected": null
+  },
+  {
+    "id": "daily-range-end",
+    "schedule": {
+      "anchor_date": "9999-12-31",
+      "frequency": "daily",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "9999-12-31",
+    "expected": null
+  },
+  {
+    "id": "monthly-range-end",
+    "schedule": {
+      "anchor_date": "9999-12-31",
+      "frequency": "monthly",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": 31,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "9999-12-31",
+    "expected": null
+  },
+  {
+    "id": "weekly-range-end",
+    "schedule": {
+      "anchor_date": "9999-12-31",
+      "frequency": "weekly",
+      "interval": 1,
+      "weekdays": [
+        5
+      ],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "9999-12-31",
+    "expected": null
+  },
+  {
+    "id": "zero-interval",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "daily",
+      "interval": 0,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-05",
+    "error": true
+  },
+  {
+    "id": "over-interval",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "daily",
+      "interval": 100,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-05",
+    "error": true
+  },
+  {
+    "id": "invalid-date",
+    "schedule": {
+      "anchor_date": "2026-02-30",
+      "frequency": "daily",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-05",
+    "error": true
+  },
+  {
+    "id": "short-date",
+    "schedule": {
+      "anchor_date": "2026-9-5",
+      "frequency": "daily",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-05",
+    "error": true
+  },
+  {
+    "id": "before-range",
+    "schedule": {
+      "anchor_date": "1899-12-31",
+      "frequency": "daily",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-05",
+    "error": true
+  },
+  {
+    "id": "wrong-frequency",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "weekdays",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-05",
+    "error": true
+  },
+  {
+    "id": "weekly-empty",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "weekly",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-05",
+    "error": true
+  },
+  {
+    "id": "weekly-duplicates",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "weekly",
+      "interval": 1,
+      "weekdays": [
+        6,
+        6
+      ],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-05",
+    "error": true
+  },
+  {
+    "id": "weekly-unsorted",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "weekly",
+      "interval": 1,
+      "weekdays": [
+        6,
+        1
+      ],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-05",
+    "error": true
+  },
+  {
+    "id": "weekly-zero",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "weekly",
+      "interval": 1,
+      "weekdays": [
+        0,
+        6
+      ],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-05",
+    "error": true
+  },
+  {
+    "id": "weekly-anchor-excluded",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "weekly",
+      "interval": 1,
+      "weekdays": [
+        1
+      ],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-05",
+    "error": true
+  },
+  {
+    "id": "daily-stale-weekdays",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "daily",
+      "interval": 1,
+      "weekdays": [
+        6
+      ],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-05",
+    "error": true
+  },
+  {
+    "id": "daily-stale-month",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "daily",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": 31,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-05",
+    "error": true
+  },
+  {
+    "id": "monthly-missing-day",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "monthly",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-05",
+    "error": true
+  },
+  {
+    "id": "monthly-too-large",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "monthly",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": 32,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-05",
+    "error": true
+  },
+  {
+    "id": "monthly-anchor-mismatch",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "monthly",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": 31,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-05",
+    "error": true
+  },
+  {
+    "id": "never-stale-end",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "daily",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": "2026-10-01",
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-05",
+    "error": true
+  },
+  {
+    "id": "date-missing",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "daily",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "date",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-05",
+    "error": true
+  },
+  {
+    "id": "date-before-anchor",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "daily",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "date",
+      "end_date": "2026-09-04",
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-05",
+    "error": true
+  },
+  {
+    "id": "count-zero",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "daily",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "count",
+      "end_date": null,
+      "max_occurrences": 0,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-05",
+    "error": true
+  },
+  {
+    "id": "count-too-large",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "daily",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "count",
+      "end_date": null,
+      "max_occurrences": 100001,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-05",
+    "error": true
+  },
+  {
+    "id": "count-stale-end",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "daily",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "count",
+      "end_date": "2026-10-01",
+      "max_occurrences": 2,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-05",
+    "error": true
+  },
+  {
+    "id": "invalid-clock",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "daily",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": 1440
+    },
+    "current_date": "2026-09-05",
+    "error": true
+  },
+  {
+    "id": "current-before-anchor",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "daily",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-04",
+    "error": true
+  },
+  {
+    "id": "current-off-interval",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "daily",
+      "interval": 3,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-06",
+    "error": true
+  },
+  {
+    "id": "current-inactive-week",
+    "schedule": {
+      "anchor_date": "2026-09-07",
+      "frequency": "weekly",
+      "interval": 2,
+      "weekdays": [
+        1,
+        4
+      ],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-14",
+    "error": true
+  },
+  {
+    "id": "current-wrong-month-day",
+    "schedule": {
+      "anchor_date": "2026-01-31",
+      "frequency": "monthly",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": 31,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-02-27",
+    "error": true
+  },
+  {
+    "id": "current-after-count",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "daily",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "count",
+      "end_date": null,
+      "max_occurrences": 1,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-06",
+    "error": true
+  },
+  {
+    "id": "current-after-end",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "daily",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "date",
+      "end_date": "2026-09-05",
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "current_date": "2026-09-06",
+    "error": true
+  }
+]

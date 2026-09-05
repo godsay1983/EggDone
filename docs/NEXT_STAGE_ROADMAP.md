@@ -176,11 +176,23 @@
 
 ## DNS5：自定义重复
 
+### DNS5-A：日历与标识基础（2026-09-05）
+
+- [x] 独立 Rust 规则校验与日历引擎：间隔天、间隔周指定星期、间隔月指定日号、结束日期/次数。
+- [x] 固定首个计划日期 anchor_date，月末截断不漂移；根据规则推导实例序号，不依赖当前设备时间。
+- [x] UUID v5 稳定实例标识与 60 组跨端共用 fixtures，包含非法规则与日期边界。
+- [x] 同步 [日历与实例标识契约](RECURRENCE_CALENDAR_CONTRACT.md) 到两仓库。
+
+本轮仅完成基础算法，不改写旧 repeat_rule，不接入数据库、完成操作、S3、备份或 UI。
+验证：`pnpm release:check` 通过（94 项前端测试、126 项 Rust 单测、检查及构建）；鸿蒙同组 fixtures 在三个主机 TZ 下执行 180 次通过。
+原生时区转换、夏令时 epoch、真实双端并发去重、旧客户端集成验收尚未完成，不因 UUID 一致而提前勾选。
+下一步 DNS5-B/HNS5-B：冻结完整规则文档、时区策略、同步冲突和删除语义，再接入两端持久化及事务。
+
 ### 跨端协议门槛
 
 - [ ] 与鸿蒙端冻结 `recurrence-rules.json` v1 schema。
 - [ ] 固定 Object Key、ETag、墓碑和冲突决胜规则。
-- [ ] 固定 occurrence key 和跨语言 UUID v5 fixtures。
+- [x] 固定 occurrence key 和跨语言 UUID v5 fixtures。
 - [ ] 固定月末、时区、结束日期、结束次数和漏过实例策略。
 - [ ] 验证旧客户端同步 Todo 时不会触碰规则对象。
 

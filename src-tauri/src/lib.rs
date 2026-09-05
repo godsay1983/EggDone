@@ -10,6 +10,7 @@ mod note_attachments;
 mod note_sync;
 mod notes;
 mod panel_position;
+pub mod recurrence;
 mod reminders;
 mod s3_sync;
 mod schedule;
