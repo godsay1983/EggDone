@@ -1,0 +1,205 @@
+[
+  {
+    "id": "shanghai",
+    "date": "2026-09-06",
+    "minutes": 570,
+    "zone": "Asia/Shanghai",
+    "utc": "2026-09-06T01:30:00Z"
+  },
+  {
+    "id": "utc",
+    "date": "2026-09-06",
+    "minutes": 0,
+    "zone": "UTC",
+    "utc": "2026-09-06T00:00:00Z"
+  },
+  {
+    "id": "quarter-hour",
+    "date": "2026-09-06",
+    "minutes": 570,
+    "zone": "Asia/Kathmandu",
+    "utc": "2026-09-06T03:45:00Z"
+  },
+  {
+    "id": "new-york-winter",
+    "date": "2026-01-15",
+    "minutes": 570,
+    "zone": "America/New_York",
+    "utc": "2026-01-15T14:30:00Z"
+  },
+  {
+    "id": "new-york-summer",
+    "date": "2026-07-15",
+    "minutes": 570,
+    "zone": "America/New_York",
+    "utc": "2026-07-15T13:30:00Z"
+  },
+  {
+    "id": "spring-gap",
+    "date": "2026-03-08",
+    "minutes": 150,
+    "zone": "America/New_York",
+    "utc": "2026-03-08T07:30:00Z"
+  },
+  {
+    "id": "gap-start",
+    "date": "2026-03-08",
+    "minutes": 120,
+    "zone": "America/New_York",
+    "utc": "2026-03-08T07:00:00Z"
+  },
+  {
+    "id": "gap-end",
+    "date": "2026-03-08",
+    "minutes": 180,
+    "zone": "America/New_York",
+    "utc": "2026-03-08T07:00:00Z"
+  },
+  {
+    "id": "before-gap",
+    "date": "2026-03-08",
+    "minutes": 119,
+    "zone": "America/New_York",
+    "utc": "2026-03-08T06:59:00Z"
+  },
+  {
+    "id": "autumn-fold",
+    "date": "2026-11-01",
+    "minutes": 90,
+    "zone": "America/New_York",
+    "utc": "2026-11-01T05:30:00Z"
+  },
+  {
+    "id": "fold-start",
+    "date": "2026-11-01",
+    "minutes": 60,
+    "zone": "America/New_York",
+    "utc": "2026-11-01T05:00:00Z"
+  },
+  {
+    "id": "fold-end",
+    "date": "2026-11-01",
+    "minutes": 120,
+    "zone": "America/New_York",
+    "utc": "2026-11-01T07:00:00Z"
+  },
+  {
+    "id": "london-gap",
+    "date": "2026-03-29",
+    "minutes": 90,
+    "zone": "Europe/London",
+    "utc": "2026-03-29T01:30:00Z"
+  },
+  {
+    "id": "lord-howe-half-hour-gap",
+    "date": "2026-10-04",
+    "minutes": 135,
+    "zone": "Australia/Lord_Howe",
+    "utc": "2026-10-03T15:45:00Z"
+  },
+  {
+    "id": "lord-howe-half-hour-fold",
+    "date": "2026-04-05",
+    "minutes": 105,
+    "zone": "Australia/Lord_Howe",
+    "utc": "2026-04-04T14:45:00Z"
+  },
+  {
+    "id": "apia-date-line-skip",
+    "date": "2011-12-30",
+    "minutes": 720,
+    "zone": "Pacific/Apia",
+    "utc": "2011-12-30T22:00:00Z"
+  },
+  {
+    "id": "leap-day",
+    "date": "2028-02-29",
+    "minutes": 1439,
+    "zone": "Asia/Shanghai",
+    "utc": "2028-02-29T15:59:00Z"
+  },
+  {
+    "id": "date-only",
+    "date": "2026-09-06",
+    "minutes": null,
+    "zone": null,
+    "utc": null
+  },
+  {
+    "id": "date-only-lower-bound",
+    "date": "1900-01-01",
+    "minutes": null,
+    "zone": null,
+    "utc": null
+  },
+  {
+    "id": "date-only-upper-bound",
+    "date": "9999-12-31",
+    "minutes": null,
+    "zone": null,
+    "utc": null
+  },
+  {
+    "id": "unknown-zone",
+    "date": "2026-09-06",
+    "minutes": 570,
+    "zone": "Mars/Olympus",
+    "error": true
+  },
+  {
+    "id": "wrong-case-zone",
+    "date": "2026-09-06",
+    "minutes": 570,
+    "zone": "asia/shanghai",
+    "error": true
+  },
+  {
+    "id": "offset-is-not-zone",
+    "date": "2026-09-06",
+    "minutes": 570,
+    "zone": "+08:00",
+    "error": true
+  },
+  {
+    "id": "missing-zone",
+    "date": "2026-09-06",
+    "minutes": 570,
+    "zone": null,
+    "error": true
+  },
+  {
+    "id": "zone-on-date-only",
+    "date": "2026-09-06",
+    "minutes": null,
+    "zone": "UTC",
+    "error": true
+  },
+  {
+    "id": "invalid-minute",
+    "date": "2026-09-06",
+    "minutes": 1440,
+    "zone": "UTC",
+    "error": true
+  },
+  {
+    "id": "invalid-date",
+    "date": "2026-02-29",
+    "minutes": null,
+    "zone": null,
+    "error": true
+  },
+  {
+    "id": "date-too-early",
+    "date": "1899-12-31",
+    "minutes": null,
+    "zone": null,
+    "error": true
+  },
+  {
+    "id": "non-canonical-date",
+    "date": "2026-9-6",
+    "minutes": 0,
+    "zone": "UTC",
+    "error": true
+  }
+]

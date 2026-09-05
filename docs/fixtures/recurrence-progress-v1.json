@@ -1,0 +1,206 @@
+[
+  {
+    "id": "complete-once",
+    "expected": {
+      "date": "2026-09-06",
+      "index": 2,
+      "utc": null,
+      "exhausted": false
+    }
+  },
+  {
+    "id": "delete-skips-once",
+    "evidence_patch": {
+      "completed": false,
+      "deleted_at": 1500
+    },
+    "expected": {
+      "date": "2026-09-06",
+      "index": 2,
+      "utc": null,
+      "exhausted": false
+    }
+  },
+  {
+    "id": "completed-archived",
+    "evidence_patch": {
+      "archived_at": 1500
+    },
+    "expected": {
+      "date": "2026-09-06",
+      "index": 2,
+      "utc": null,
+      "exhausted": false
+    }
+  },
+  {
+    "id": "archive-only",
+    "evidence_patch": {
+      "completed": false,
+      "archived_at": 1500
+    },
+    "noop": true
+  },
+  {
+    "id": "not-completed",
+    "evidence_patch": {
+      "completed": false
+    },
+    "noop": true
+  },
+  {
+    "id": "orphan-rule",
+    "missing": true,
+    "noop": true
+  },
+  {
+    "id": "stale-task",
+    "evidence_patch": {
+      "uuid": "123e4567-e89b-42d3-a456-426614174099"
+    },
+    "noop": true
+  },
+  {
+    "id": "stopped-rule",
+    "rule_patch": {
+      "deleted_at": 1000
+    },
+    "noop": true
+  },
+  {
+    "id": "already-exhausted",
+    "rule_patch": {
+      "exhausted": true
+    },
+    "schedule_patch": {
+      "end_type": "count",
+      "max_occurrences": 1
+    },
+    "noop": true
+  },
+  {
+    "id": "count-exhaustion",
+    "schedule_patch": {
+      "end_type": "count",
+      "max_occurrences": 1
+    },
+    "expected": {
+      "date": null,
+      "index": 1,
+      "utc": null,
+      "exhausted": true
+    }
+  },
+  {
+    "id": "date-exhaustion",
+    "schedule_patch": {
+      "end_type": "date",
+      "end_date": "2026-09-05"
+    },
+    "expected": {
+      "date": null,
+      "index": 1,
+      "utc": null,
+      "exhausted": true
+    }
+  },
+  {
+    "id": "next-timed-shanghai",
+    "rule_patch": {
+      "timezone_id": "Asia/Shanghai"
+    },
+    "schedule_patch": {
+      "local_time_minutes": 570
+    },
+    "expected": {
+      "date": "2026-09-06",
+      "index": 2,
+      "utc": "2026-09-06T01:30:00Z",
+      "exhausted": false
+    }
+  },
+  {
+    "id": "spring-gap-identity-keeps-wall-time",
+    "rule_patch": {
+      "current_date": "2026-03-07",
+      "timezone_id": "America/New_York"
+    },
+    "schedule_patch": {
+      "anchor_date": "2026-03-07",
+      "local_time_minutes": 150
+    },
+    "expected": {
+      "date": "2026-03-08",
+      "index": 2,
+      "utc": "2026-03-08T07:30:00Z",
+      "exhausted": false
+    }
+  },
+  {
+    "id": "clock-rollback",
+    "now": 500,
+    "expected": {
+      "date": "2026-09-06",
+      "index": 2,
+      "utc": null,
+      "exhausted": false,
+      "updated_at": 1001
+    }
+  },
+  {
+    "id": "no-overdue-backfill",
+    "now": 1893456000000,
+    "expected": {
+      "date": "2026-09-06",
+      "index": 2,
+      "utc": null,
+      "exhausted": false
+    }
+  },
+  {
+    "id": "unknown-zone-refuses-plan",
+    "rule_patch": {
+      "timezone_id": "Mars/Olympus"
+    },
+    "schedule_patch": {
+      "local_time_minutes": 570
+    },
+    "error": true
+  },
+  {
+    "id": "invalid-clock",
+    "now": -1,
+    "error": true
+  },
+  {
+    "id": "clock-outside-safe-range",
+    "now": 9007199254740992,
+    "error": true
+  },
+  {
+    "id": "revision-timestamp-overflow",
+    "rule_patch": {
+      "updated_at": 9007199254740991
+    },
+    "error": true
+  },
+  {
+    "id": "invalid-device",
+    "device": "not a device",
+    "error": true
+  },
+  {
+    "id": "invalid-deletion-time",
+    "evidence_patch": {
+      "deleted_at": -1
+    },
+    "error": true
+  },
+  {
+    "id": "invalid-archive-time",
+    "evidence_patch": {
+      "archived_at": -1
+    },
+    "error": true
+  }
+]
