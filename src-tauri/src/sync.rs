@@ -729,6 +729,37 @@ mod tests {
     }
 
     #[test]
+    fn shared_todo_date_roundtrip_preserves_all_day_and_schedule_changes() {
+        let cases: Vec<serde_json::Value> = serde_json::from_str(include_str!(
+            "../../docs/fixtures/todo-date-roundtrip-v1.json"
+        ))
+        .unwrap();
+        let mut connection = Connection::open_in_memory().unwrap();
+        configure_connection(&connection).unwrap();
+        migrate(&mut connection).unwrap();
+        for (index, case) in cases.iter().enumerate() {
+            let mut value =
+                serde_json::to_value(todo("date", index as i64 + 10, DEVICE_B)).unwrap();
+            for (key, field) in case.as_object().unwrap() {
+                if key != "id" {
+                    value[key] = field.clone();
+                }
+            }
+            let incoming: SyncTodo = serde_json::from_value(value).unwrap();
+            for _ in 0..2 {
+                merge_remote_document(
+                    &mut connection,
+                    &document(DEVICE_B, vec![incoming.clone()]),
+                    30,
+                )
+                .unwrap();
+                let exported = build_document(&connection, 31).unwrap();
+                assert_eq!(exported.todos, vec![incoming.clone()], "{}", case["id"]);
+            }
+        }
+    }
+
+    #[test]
     fn deletion_wins_an_equal_timestamp_conflict() {
         let active = document(DEVICE_B, vec![todo("active", 10, DEVICE_B)]);
         let mut deleted_todo = todo("deleted", 10, DEVICE_A);

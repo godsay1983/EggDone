@@ -1,0 +1,45 @@
+[
+  {
+    "id": "all-day",
+    "due_date": "2026-09-05",
+    "due_at": null
+  },
+  {
+    "id": "leap-day",
+    "due_date": "2028-02-29",
+    "due_at": null
+  },
+  {
+    "id": "before-epoch",
+    "due_date": "1960-06-10",
+    "due_at": null
+  },
+  {
+    "id": "timed",
+    "due_date": null,
+    "due_at": 1788571800000
+  },
+  {
+    "id": "no-date",
+    "due_date": null,
+    "due_at": null
+  },
+  {
+    "id": "all-day-again",
+    "due_date": "2026-11-01",
+    "due_at": null
+  },
+  {
+    "id": "completed",
+    "due_date": "2026-11-01",
+    "due_at": null,
+    "completed": true,
+    "completed_at": 17
+  },
+  {
+    "id": "deleted",
+    "due_date": "2026-11-01",
+    "due_at": null,
+    "deleted_at": 18
+  }
+]
