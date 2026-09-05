@@ -16,6 +16,7 @@ pub mod recurrence_protocol;
 pub mod recurrence_store;
 pub mod recurrence_time;
 pub mod recurrence_transaction;
+pub mod recurrence_transport;
 mod reminders;
 mod s3_sync;
 mod schedule;

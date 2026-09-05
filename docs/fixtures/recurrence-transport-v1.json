@@ -1,0 +1,250 @@
+{
+  "format_version": 1,
+  "downloads": [
+    {
+      "id": "existing",
+      "status": 200,
+      "etag": "\"version-1\"",
+      "body": "{\"format_version\":1,\"rules\":[]}",
+      "expected": "present"
+    },
+    {
+      "id": "absent",
+      "status": 404,
+      "etag": null,
+      "body": "not json",
+      "expected": "absent"
+    },
+    {
+      "id": "get-401",
+      "status": 401,
+      "etag": "\"v\"",
+      "body": "{\"format_version\":1,\"rules\":[]}",
+      "expected": "error"
+    },
+    {
+      "id": "get-403",
+      "status": 403,
+      "etag": "\"v\"",
+      "body": "{\"format_version\":1,\"rules\":[]}",
+      "expected": "error"
+    },
+    {
+      "id": "get-429",
+      "status": 429,
+      "etag": "\"v\"",
+      "body": "{\"format_version\":1,\"rules\":[]}",
+      "expected": "error"
+    },
+    {
+      "id": "get-500",
+      "status": 500,
+      "etag": "\"v\"",
+      "body": "{\"format_version\":1,\"rules\":[]}",
+      "expected": "error"
+    },
+    {
+      "id": "get-204",
+      "status": 204,
+      "etag": "\"v\"",
+      "body": "{\"format_version\":1,\"rules\":[]}",
+      "expected": "error"
+    },
+    {
+      "id": "get-206",
+      "status": 206,
+      "etag": "\"v\"",
+      "body": "{\"format_version\":1,\"rules\":[]}",
+      "expected": "error"
+    },
+    {
+      "id": "get-304",
+      "status": 304,
+      "etag": "\"v\"",
+      "body": "{\"format_version\":1,\"rules\":[]}",
+      "expected": "error"
+    },
+    {
+      "id": "etag-missing",
+      "status": 200,
+      "etag": null,
+      "body": "{\"format_version\":1,\"rules\":[]}",
+      "expected": "error"
+    },
+    {
+      "id": "etag-empty",
+      "status": 200,
+      "etag": "",
+      "body": "{\"format_version\":1,\"rules\":[]}",
+      "expected": "error"
+    },
+    {
+      "id": "etag-weak",
+      "status": 200,
+      "etag": "W/\"v\"",
+      "body": "{\"format_version\":1,\"rules\":[]}",
+      "expected": "error"
+    },
+    {
+      "id": "etag-wildcard",
+      "status": 200,
+      "etag": "*",
+      "body": "{\"format_version\":1,\"rules\":[]}",
+      "expected": "error"
+    },
+    {
+      "id": "etag-unquoted",
+      "status": 200,
+      "etag": "v",
+      "body": "{\"format_version\":1,\"rules\":[]}",
+      "expected": "error"
+    },
+    {
+      "id": "etag-multiple",
+      "status": 200,
+      "etag": "\"a\", \"b\"",
+      "body": "{\"format_version\":1,\"rules\":[]}",
+      "expected": "error"
+    },
+    {
+      "id": "etag-empty-opaque",
+      "status": 200,
+      "etag": "\"\"",
+      "body": "{\"format_version\":1,\"rules\":[]}",
+      "expected": "error"
+    },
+    {
+      "id": "truncated",
+      "status": 200,
+      "etag": "\"v\"",
+      "body": "{",
+      "expected": "error"
+    },
+    {
+      "id": "future",
+      "status": 200,
+      "etag": "\"v\"",
+      "body": "{\"format_version\":2,\"rules\":[]}",
+      "expected": "error"
+    },
+    {
+      "id": "wrong-domain",
+      "status": 200,
+      "etag": "\"v\"",
+      "body": "{\"format_version\":1,\"notes\":[]}",
+      "expected": "error"
+    },
+    {
+      "id": "unknown-field",
+      "status": 200,
+      "etag": "\"v\"",
+      "body": "{\"format_version\":1,\"rules\":[],\"extra\":0}",
+      "expected": "error"
+    },
+    {
+      "id": "bom",
+      "status": 200,
+      "etag": "\"v\"",
+      "body": "﻿{\"format_version\":1,\"rules\":[]}",
+      "expected": "error"
+    }
+  ],
+  "uploads": [
+    {
+      "id": "put-200",
+      "status": 200,
+      "etag": "\"version-2\"",
+      "expected": "uploaded"
+    },
+    {
+      "id": "put-201",
+      "status": 201,
+      "etag": "\"version-2\"",
+      "expected": "uploaded"
+    },
+    {
+      "id": "put-204",
+      "status": 204,
+      "etag": "\"version-2\"",
+      "expected": "uploaded"
+    },
+    {
+      "id": "put-409",
+      "status": 409,
+      "etag": null,
+      "expected": "conflict"
+    },
+    {
+      "id": "put-412",
+      "status": 412,
+      "etag": null,
+      "expected": "conflict"
+    },
+    {
+      "id": "put-202",
+      "status": 202,
+      "etag": "\"v\"",
+      "expected": "error"
+    },
+    {
+      "id": "put-400",
+      "status": 400,
+      "etag": "\"v\"",
+      "expected": "error"
+    },
+    {
+      "id": "put-401",
+      "status": 401,
+      "etag": "\"v\"",
+      "expected": "error"
+    },
+    {
+      "id": "put-403",
+      "status": 403,
+      "etag": "\"v\"",
+      "expected": "error"
+    },
+    {
+      "id": "put-404",
+      "status": 404,
+      "etag": "\"v\"",
+      "expected": "error"
+    },
+    {
+      "id": "put-429",
+      "status": 429,
+      "etag": "\"v\"",
+      "expected": "error"
+    },
+    {
+      "id": "put-500",
+      "status": 500,
+      "etag": "\"v\"",
+      "expected": "error"
+    },
+    {
+      "id": "put-etag-missing",
+      "status": 200,
+      "etag": null,
+      "expected": "error"
+    },
+    {
+      "id": "put-etag-weak",
+      "status": 200,
+      "etag": "W/\"v\"",
+      "expected": "error"
+    },
+    {
+      "id": "put-etag-wildcard",
+      "status": 200,
+      "etag": "*",
+      "expected": "error"
+    },
+    {
+      "id": "put-etag-multiple",
+      "status": 200,
+      "etag": "\"a\", \"b\"",
+      "expected": "error"
+    }
+  ]
+}
