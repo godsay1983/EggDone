@@ -1,0 +1,194 @@
+# EggDone 桌面端下一阶段 Roadmap
+
+实现方案见 [NEXT_STAGE_IMPLEMENTATION_PLAN.md](NEXT_STAGE_IMPLEMENTATION_PLAN.md)。鸿蒙端配套 Roadmap 位于 `D:\Develop\EggDoneHarmony\docs\HARMONY_NEXT_STAGE_ROADMAP.md`。
+
+## 执行规则
+
+- NS1 至 NS5 必须与鸿蒙端同编号阶段共同评审。
+- 每阶段先冻结共享语义和 fixtures，再分别实现平台代码。
+- 自动检查通过不等于桌面 UI、系统通知或跨端同步人工验收通过。
+- 自定义重复不得在只有一端支持协议时发布。
+
+## DNS0：基线和状态收口
+
+- [ ] 核对 `main`、版本、最新 handoff 和工作区状态。
+- [ ] 区分已有 Roadmap 中的代码完成项与人工验收项。
+- [ ] 更新 README 中当前能力和限制。
+- [ ] 记录 Windows 签名、自动更新、高 DPI、macOS 和 Linux 剩余门槛。
+- [ ] 运行现有 `pnpm release:check` 建立基线。
+
+完成条件：文档、版本和实际功能一致，基线失败项有明确归属。
+
+## DNS1：同步状态持久化与诊断中心
+
+### 协议和模型
+
+- [ ] 与鸿蒙端冻结本地 `SyncRuntimeSnapshot` 字段和状态枚举。
+- [ ] 明确该状态不进入 S3、JSON 导出和完整备份。
+- [ ] 定义 todos、notes、attachments 三个 dirty domain。
+- [ ] 定义清洗后的稳定错误码和诊断字段白名单。
+
+### Rust 持久化
+
+- [ ] 增加 `sync_runtime_state` migration 和单行状态模型。
+- [ ] Todo、便签、附件写入成功后在业务层标记对应 domain dirty。
+- [ ] 同步 command 记录尝试、分域成功、全局成功和失败。
+- [ ] 启动时把未完成尝试归一化为 interrupted。
+- [ ] 删除凭据或关闭同步时保留未上传 dirty 状态。
+
+### 前端
+
+- [ ] `syncApi.ts` 增加严格类型查询接口。
+- [ ] `autoSync.ts` 从持久化快照恢复，不再把内存 store 当作唯一事实。
+- [ ] 主面板同步胶囊显示重启后仍可靠的状态和时间。
+- [ ] 设置页增加分域结果、待同步数量、重试和复制诊断信息。
+- [ ] 中英文和窄面板布局通过。
+
+### 验证
+
+- [ ] 新旧数据库 migration 测试通过。
+- [ ] 本地修改后强制退出，重启仍显示未同步。
+- [ ] Todo 成功、附件失败时不显示全局已同步。
+- [ ] 离线、凭据错误、ETag 冲突和重试成功通过。
+- [ ] 诊断文本敏感信息扫描通过。
+
+完成条件：用户在任何重启路径后都能准确判断本地修改是否已到达远端。
+
+## DNS2：智能列表
+
+### 共享规则
+
+- [ ] 与鸿蒙端冻结 `overdue`、`next7`、`no_date`、`important`、`recently_completed` 语义。
+- [ ] 建立日期边界和跨时区共用 fixtures。
+- [ ] 明确与分组、搜索、隐藏已完成和排序的组合规则。
+
+### 实现
+
+- [ ] 增加 `SmartViewId` 本地类型和纯函数筛选。
+- [ ] 在“更多”菜单增加智能列表入口和计数。
+- [ ] 使用可关闭筛选胶囊表示当前智能列表。
+- [ ] 禁止在智能列表子集内拖动排序。
+- [ ] 本机保存上次选择，不进入 S3。
+- [ ] 增加中英文空状态和无障碍标签。
+
+### 验证
+
+- [ ] 日期、时刻、午夜、夏令时和最近完成边界测试通过。
+- [ ] 500 条任务切换无明显卡顿。
+- [ ] 默认宽度和最窄面板下按钮、计数不截断。
+
+完成条件：高频筛选最多两次操作可达，且不改变 Todo 顺序和同步内容。
+
+## DNS3：通知直接完成
+
+### 实现
+
+- [ ] 核对 Windows 通知动作和 macOS/Linux 降级能力。
+- [ ] 增加稳定的 complete action 与 Todo UUID 参数。
+- [ ] 抽取 UI、通知共用的完成用例。
+- [ ] 重复任务走现有下一实例生成逻辑。
+- [ ] 完成后刷新提醒、托盘角标、列表和 sync dirty。
+- [ ] 已完成、已删除、不存在和重复动作按幂等规则处理。
+
+### 验证
+
+- [ ] 普通任务通知完成通过。
+- [ ] 重复任务只生成一个下一实例。
+- [ ] 面板隐藏时动作不会意外显示主窗口。
+- [ ] macOS/Linux 不支持按钮时普通通知仍可用。
+
+完成条件：支持的平台可从通知一步完成任务，业务结果与面板内完成一致。
+
+## DNS4：快速收集
+
+### 共享草稿
+
+- [ ] 与鸿蒙端冻结 `CaptureDraft` 类型、长度和清洗规则。
+- [ ] 明确草稿不自动保存、不进入同步对象。
+- [ ] 定义 Todo 与 Note 的预填映射。
+
+### 桌面入口
+
+- [ ] 保留现有全局快捷新增 Todo 行为。
+- [ ] 增加可配置的全局快速新建便签快捷键。
+- [ ] 增加安全的 `eggdone://capture` 或命令行捕获入口。
+- [ ] 单实例参数转发到已有进程并复用现有编辑器。
+- [ ] 剪贴板只在用户明确操作后读取。
+- [ ] 中英文和最窄面板布局通过。
+
+### 验证
+
+- [ ] 中文、英文、URL、空内容和超长文本通过。
+- [ ] 应用隐藏、应用已运行和第二次启动参数通过。
+- [ ] 恶意 scheme、路径和控制字符被拒绝或清洗。
+- [ ] 取消不产生空记录，确认后 dirty 和同步正确。
+
+完成条件：从全局快捷键或受信任外部入口可快速进入待确认 Todo/Note 草稿。
+
+## DNS5：自定义重复
+
+### 跨端协议门槛
+
+- [ ] 与鸿蒙端冻结 `recurrence-rules.json` v1 schema。
+- [ ] 固定 Object Key、ETag、墓碑和冲突决胜规则。
+- [ ] 固定 occurrence key 和跨语言 UUID v5 fixtures。
+- [ ] 固定月末、时区、结束日期、结束次数和漏过实例策略。
+- [ ] 验证旧客户端同步 Todo 时不会触碰规则对象。
+
+### 桌面数据层
+
+- [ ] 增加 recurrence rule migration、Repository 和 Rust 类型。
+- [ ] 实现规则 CRUD、当前实例关联和删除墓碑。
+- [ ] 实现确定性下一实例生成和并发去重。
+- [ ] 同步增加独立规则对象、dirty、ETag 和有限冲突重试。
+- [ ] 导入导出和 `.eggdone-backup` 纳入规则元数据。
+
+### 桌面 UI
+
+- [ ] 保留四个现有快捷重复选项。
+- [ ] 增加独立“自定义重复”弹层。
+- [ ] 支持间隔、指定星期、月内日期和结束条件。
+- [ ] 列表和编辑器显示可读摘要。
+- [ ] 英文长摘要可截断并通过 tooltip 查看完整内容。
+
+### 验证
+
+- [ ] Rust 与 ArkTS 共用 fixtures 全部通过。
+- [ ] 两端离线同时完成不产生重复实例。
+- [ ] 月末、闰年、夏令时和跨时区通过。
+- [ ] 旧备份、旧同步对象和旧客户端兼容测试通过。
+
+完成条件：两端可安全创建和处理相同自定义重复，旧客户端不会损坏 Todo 主对象。
+
+## DNS6：后续能力决策
+
+- [ ] 通过实际使用反馈决定是否进入轻量检查清单设计。
+- [ ] 决定专注历史仅本地保存还是需要独立同步对象。
+- [ ] 设计任务与便签关联的独立 link 模型。
+- [ ] 完成加密同步的密钥恢复和轮换威胁模型。
+- [ ] 每项形成独立方案和 Roadmap 后才能编码。
+
+完成条件：至少选定一项下一阶段能力，并明确不做项和数据边界。
+
+## DNS7：回归与发布
+
+- [ ] `pnpm release:check` 通过。
+- [ ] Windows 中英文、亮暗主题、窄面板和高 DPI 回归通过。
+- [ ] Windows 通知动作、托盘、快捷键和自动更新验证通过。
+- [ ] Linux ksni、凭据库、AppImage/deb 和通知降级通过。
+- [ ] macOS 菜单栏、窗口定位、快捷键和通知降级通过。
+- [ ] 与鸿蒙端完成真实 S3 / MinIO 双向同步和冲突测试。
+- [ ] 更新 README、发布说明、版本号和 handoff。
+
+完成条件：自动检查、平台人工验收和双端协议验收均有记录，可生成正式发布包。
+
+## 推荐提交边界
+
+1. `docs(next): define desktop reliability and workflow roadmap`
+2. `feat(sync): persist desktop sync runtime state`
+3. `feat(views): add desktop smart lists`
+4. `feat(reminders): complete tasks from desktop notifications`
+5. `feat(capture): add desktop quick capture entry points`
+6. `feat(recurrence): add desktop custom recurrence foundation`
+7. `feat(sync): sync desktop recurrence rules`
+8. `test(release): close desktop next-stage regression`
