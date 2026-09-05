@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use time::{Date, Duration, Month};
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RecurrenceSchedule {
     pub anchor_date: String,

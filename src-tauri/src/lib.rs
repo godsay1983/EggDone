@@ -11,6 +11,8 @@ mod note_sync;
 mod notes;
 mod panel_position;
 pub mod recurrence;
+pub mod recurrence_protocol;
+pub mod recurrence_store;
 mod reminders;
 mod s3_sync;
 mod schedule;

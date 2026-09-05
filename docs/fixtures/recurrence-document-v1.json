@@ -1,0 +1,1759 @@
+{
+  "base_rule": {
+    "uuid": "123e4567-e89b-42d3-a456-426614174000",
+    "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "daily",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "timezone_id": null,
+    "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+    "current_date": "2026-09-05",
+    "generated_count": 1,
+    "exhausted": false,
+    "updated_at": 1000,
+    "updated_by": "device-a",
+    "deleted_at": null
+  },
+  "valid": [
+    {
+      "id": "empty",
+      "document": {
+        "format_version": 1,
+        "rules": []
+      }
+    },
+    {
+      "id": "first",
+      "document": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "advanced",
+      "document": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "e9cb6d09-664e-5c54-bdf7-69f395808585",
+            "current_date": "2026-09-06",
+            "generated_count": 2,
+            "exhausted": false,
+            "updated_at": 900,
+            "updated_by": "device-b",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "tombstone",
+      "document": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": 500
+          }
+        ]
+      }
+    },
+    {
+      "id": "exhausted",
+      "document": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "count",
+              "end_date": null,
+              "max_occurrences": 1,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": true,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "timed",
+      "document": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": 570
+            },
+            "timezone_id": "Asia/Shanghai",
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "id": "future-version",
+      "document": {
+        "format_version": 2,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "missing-root",
+      "document": {
+        "format_version": 1
+      }
+    },
+    {
+      "id": "extra-root",
+      "document": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ],
+        "todos": []
+      }
+    },
+    {
+      "id": "duplicate-id",
+      "document": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          },
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "duplicate-link",
+      "document": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          },
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174002",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "missing-null",
+      "document": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "missing-schedule-null",
+      "document": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "extra-field",
+      "document": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null,
+            "title": "ignored?"
+          }
+        ]
+      }
+    },
+    {
+      "id": "extra-schedule-field",
+      "document": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null,
+              "custom": true
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "null-record",
+      "document": {
+        "format_version": 1,
+        "rules": [
+          null
+        ]
+      }
+    },
+    {
+      "id": "array-schedule",
+      "document": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": [],
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "string-interval",
+      "document": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": "1",
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "fractional",
+      "document": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1.5,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "wrong-clock-zone",
+      "document": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": "UTC",
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "timed-missing-zone",
+      "document": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": 1
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "invalid-zone",
+      "document": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": 1
+            },
+            "timezone_id": "../UTC",
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "unsafe-timestamp",
+      "document": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 9007199254740992,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "future-deletion",
+      "document": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": 1001
+          }
+        ]
+      }
+    },
+    {
+      "id": "nonascii-device",
+      "document": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "设备",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "wrong-count",
+      "document": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 2,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "wrong-first-link",
+      "document": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "e9cb6d09-664e-5c54-bdf7-69f395808585",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "false-exhaustion",
+      "document": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": true,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "uppercase-uuid",
+      "document": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123E4567-E89B-42D3-A456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    }
+  ],
+  "merges": [
+    {
+      "id": "idempotent",
+      "left": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      },
+      "expected": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "progress-over-clock",
+      "left": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "e9cb6d09-664e-5c54-bdf7-69f395808585",
+            "current_date": "2026-09-06",
+            "generated_count": 2,
+            "exhausted": false,
+            "updated_at": 900,
+            "updated_by": "device-b",
+            "deleted_at": null
+          }
+        ]
+      },
+      "expected": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "e9cb6d09-664e-5c54-bdf7-69f395808585",
+            "current_date": "2026-09-06",
+            "generated_count": 2,
+            "exhausted": false,
+            "updated_at": 900,
+            "updated_by": "device-b",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "tombstone-over-progress",
+      "left": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "e9cb6d09-664e-5c54-bdf7-69f395808585",
+            "current_date": "2026-09-06",
+            "generated_count": 2,
+            "exhausted": false,
+            "updated_at": 900,
+            "updated_by": "device-b",
+            "deleted_at": null
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": 500
+          }
+        ]
+      },
+      "expected": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": 500
+          }
+        ]
+      }
+    },
+    {
+      "id": "missing-not-delete",
+      "left": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "rules": []
+      },
+      "expected": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "device-ascii-tie",
+      "left": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-z",
+            "deleted_at": null
+          }
+        ]
+      },
+      "expected": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-z",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "exhausted-monotonic",
+      "left": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "count",
+              "end_date": null,
+              "max_occurrences": 1,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 2000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "count",
+              "end_date": null,
+              "max_occurrences": 1,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": true,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      },
+      "expected": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "count",
+              "end_date": null,
+              "max_occurrences": 1,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": true,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "immutable-rule",
+      "left": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 2,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      },
+      "error": true
+    },
+    {
+      "id": "immutable-first",
+      "left": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174002",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174002",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      },
+      "error": true
+    },
+    {
+      "id": "conflicting-series",
+      "left": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174002",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      },
+      "error": true
+    },
+    {
+      "id": "stop-and-replace",
+      "left": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": 500
+          },
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174002",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      },
+      "expected": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": 500
+          },
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174002",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "current_date": "2026-09-05",
+            "generated_count": 1,
+            "exhausted": false,
+            "updated_at": 1000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    }
+  ],
+  "keys": [
+    {
+      "id": "default",
+      "todo": "todos.json",
+      "occupied": [],
+      "expected": "recurrence-rules.json"
+    },
+    {
+      "id": "directory",
+      "todo": "folder/custom.json",
+      "occupied": [],
+      "expected": "folder/recurrence-rules.json"
+    },
+    {
+      "id": "todo-collision",
+      "todo": "recurrence-rules.json",
+      "occupied": [],
+      "error": true
+    },
+    {
+      "id": "notes-collision",
+      "todo": "folder/todos.json",
+      "occupied": [
+        "folder/recurrence-rules.json"
+      ],
+      "error": true
+    },
+    {
+      "id": "blank",
+      "todo": "",
+      "occupied": [],
+      "error": true
+    },
+    {
+      "id": "parent",
+      "todo": "../todos.json",
+      "occupied": [],
+      "error": true
+    },
+    {
+      "id": "space",
+      "todo": " todos.json",
+      "occupied": [],
+      "error": true
+    },
+    {
+      "id": "windows",
+      "todo": "folder\\todos.json",
+      "occupied": [],
+      "error": true
+    }
+  ]
+}

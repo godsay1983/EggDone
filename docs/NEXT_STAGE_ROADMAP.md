@@ -188,17 +188,29 @@
 原生时区转换、夏令时 epoch、真实双端并发去重、旧客户端集成验收尚未完成，不因 UUID 一致而提前勾选。
 下一步 DNS5-B/HNS5-B：冻结完整规则文档、时区策略、同步冲突和删除语义，再接入两端持久化及事务。
 
+### DNS5-B：规则协议与独立持久化（2026-09-05）
+
+- [x] 冻结 [规则协议 v1](RECURRENCE_RULES_PROTOCOL.md)：严格字段校验、固定时区策略、墓碑优先、进度单调合并、活动关联冲突和键名碰撞检查。
+- [x] schema17 新增独立规则表、活动关联唯一索引、版本/ETag 状态；批量合并、dirty 触发器和回滚处于同一事务。
+- [x] 相同数据重放不增加版本；过期 ACK 不清除新修改；缺少远端记录不解释为删除。
+- [x] 47 组共享协议 fixtures；新库、v16 升级、重复迁移、失败回滚及原有 Todo 文档往返保持规则不变。
+
+验证：`pnpm release:check` 通过；收尾新增旧 Todo 往返测试后，全部 133 项 Rust 单测通过。
+两端契约/fixtures 一致，鸿蒙生产 Repository/主机 SQLite 回归通过。未进行真实 S3 或设备联动验收。
+边界：只实现规则文档存储；尚未接入用户创建规则、Todo 完成事务、定时 epoch 转换、规则网络请求或备份。
+下一步 DNS5-C/HNS5-C：实现时区适配与“当前任务完成/跳过、下一任务插入、规则推进”的统一事务，再接入独立 S3 同步域。
+
 ### 跨端协议门槛
 
-- [ ] 与鸿蒙端冻结 `recurrence-rules.json` v1 schema。
-- [ ] 固定 Object Key、ETag、墓碑和冲突决胜规则。
+- [x] 与鸿蒙端冻结 `recurrence-rules.json` v1 schema。
+- [x] 固定 Object Key、ETag、墓碑和冲突决胜规则。
 - [x] 固定 occurrence key 和跨语言 UUID v5 fixtures。
-- [ ] 固定月末、时区、结束日期、结束次数和漏过实例策略。
+- [x] 固定月末、时区、结束日期、结束次数和漏过实例策略。
 - [ ] 验证旧客户端同步 Todo 时不会触碰规则对象。
 
 ### 桌面数据层
 
-- [ ] 增加 recurrence rule migration、Repository 和 Rust 类型。
+- [x] 增加 recurrence rule migration、Repository 和 Rust 类型。
 - [ ] 实现规则 CRUD、当前实例关联和删除墓碑。
 - [ ] 实现确定性下一实例生成和并发去重。
 - [ ] 同步增加独立规则对象、dirty、ETag 和有限冲突重试。
