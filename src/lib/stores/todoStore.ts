@@ -80,12 +80,10 @@ export function createTodoStore(api = todoApi, onChanged = scheduleAutoSync) {
       const result = await api.setCompleted(todo.id, !todo.completed);
       update((state) => ({
         ...state,
-        items: [
-          ...state.items.map((item) =>
-            item.id === result.updated_todo.id ? result.updated_todo : item,
-          ),
+        items: mergeCompletedTodos(state.items, [
+          result.updated_todo,
           ...(result.created_todo ? [result.created_todo] : []),
-        ].sort(sortTodos),
+        ]),
         error: null,
       }));
       onChanged();
@@ -261,23 +259,25 @@ export function createTodoStore(api = todoApi, onChanged = scheduleAutoSync) {
       if (targets.length === 0) return [];
 
       const updatedTodos: Todo[] = [];
-      const createdTodos: Todo[] = [];
-      for (const todo of targets) {
-        const result = await api.setCompleted(todo.id, true);
-        updatedTodos.push(result.updated_todo);
-        if (result.created_todo) createdTodos.push(result.created_todo);
+      const changedTodos: Todo[] = [];
+      try {
+        for (const todo of targets) {
+          const result = await api.setCompleted(todo.id, true);
+          updatedTodos.push(result.updated_todo);
+          changedTodos.push(result.updated_todo);
+          if (result.created_todo) changedTodos.push(result.created_todo);
+        }
+      } finally {
+        // Each task commits independently. Keep successful edits visible on partial failure.
+        if (changedTodos.length > 0) {
+          update((state) => ({
+            ...state,
+            items: mergeCompletedTodos(state.items, changedTodos),
+            error: null,
+          }));
+          onChanged();
+        }
       }
-
-      const updatedById = new Map(updatedTodos.map((todo) => [todo.id, todo]));
-      update((state) => ({
-        ...state,
-        items: [
-          ...state.items.map((item) => updatedById.get(item.id) ?? item),
-          ...createdTodos,
-        ].sort(sortTodos),
-        error: null,
-      }));
-      onChanged();
       return updatedTodos;
     },
 
@@ -402,6 +402,14 @@ export function createTodoStore(api = todoApi, onChanged = scheduleAutoSync) {
       update((state) => ({ ...state, error: getErrorMessage(error) }));
     },
   };
+}
+
+function mergeCompletedTodos(items: Todo[], changed: Todo[]) {
+  const byUuid = new Map(items.map((todo) => [todo.uuid, todo]));
+  for (const todo of changed) byUuid.set(todo.uuid, todo);
+  return [...byUuid.values()]
+    .filter((todo) => todo.deleted_at === null && todo.archived_at === null)
+    .sort(sortTodos);
 }
 
 function sortTodos(left: Todo, right: Todo) {

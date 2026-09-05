@@ -1,4 +1,4 @@
-//! Internal custom-rule transaction API. UI and S3 integration remain gated.
+//! Shared transaction core for sync reconciliation and normal task completion.
 use crate::recurrence::{recurrence_occurrence_key, RecurrenceOccurrence};
 use crate::recurrence_progress::{
     plan_recurrence_advance, CompletionEvidence, RecurrenceAdvancePlan,
@@ -79,6 +79,33 @@ fn source(connection: &Connection, uuid: &str) -> Result<Option<Source>, String>
 fn inherited_reminder(source: &Source, next_due: Option<i64>, now: i64) -> Option<i64> {
     let value = next_due?.checked_add(source.reminder_at?.checked_sub(source.due_at?)?)?;
     (value > now && (0..=MAX_SAFE).contains(&value)).then_some(value)
+}
+
+// Resolve from the same database snapshot as the task edit, never from UI state.
+pub(crate) fn complete_current_for_todo(
+    tx: &Transaction<'_>,
+    uuid: &str,
+    now: i64,
+    device_id: &str,
+) -> Result<Option<RecurrenceAdvancePlan>, String> {
+    let snapshot = recurrence_store::snapshot(tx)?;
+    let Some(rule) = snapshot.document.rules.iter().find(|rule| {
+        rule.deleted_at.is_none() && !rule.exhausted && rule.current_todo_uuid == uuid
+    }) else {
+        return Ok(None);
+    };
+    advance_in_transaction(
+        tx,
+        &AdvanceRequest {
+            rule_uuid: &rule.uuid,
+            current_todo_uuid: uuid,
+            action: RecurrenceAction::Complete,
+            now,
+            device_id,
+            // The completion caller owns reminder validation and consumption.
+            reminder_at: None,
+        },
+    )
 }
 
 pub fn advance_current(

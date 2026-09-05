@@ -292,6 +292,64 @@ describe("todo store", () => {
     expect(get(store).items.map((todo) => todo.id)).toEqual([2, 1]);
   });
 
+  it("upserts an already downloaded next instance by UUID", async () => {
+    const current = makeTodo(1);
+    const next = makeTodo(2);
+    const api = createApi([current, next]);
+    vi.mocked(api.setCompleted).mockResolvedValue({
+      updated_todo: { ...current, completed: true },
+      created_todo: { ...next, title: "remote edit" },
+    });
+    const store = createTodoStore(api, vi.fn());
+    await store.load();
+    await store.toggle(current);
+    expect(get(store).items).toHaveLength(2);
+    expect(get(store).items.find((todo) => todo.uuid === next.uuid)?.title).toBe("remote edit");
+  });
+
+  it("does not resurrect tombstoned or archived completion results", async () => {
+    for (const hidden of [{ deleted_at: 100 }, { archived_at: 100 }]) {
+      const current = makeTodo(1);
+      const api = createApi([current, makeTodo(2)]);
+      vi.mocked(api.setCompleted).mockResolvedValue({
+        updated_todo: { ...current, completed: true }, created_todo: makeTodo(2, hidden),
+      });
+      const store = createTodoStore(api, vi.fn());
+      await store.load();
+      await store.toggle(current);
+      expect(get(store).items.map((todo) => todo.id)).toEqual([1]);
+    }
+  });
+
+  it("keeps later completion when the batch contains an existing next instance", async () => {
+    const current = makeTodo(1);
+    const next = makeTodo(2);
+    const api = createApi([current, next]);
+    vi.mocked(api.setCompleted)
+      .mockResolvedValueOnce({ updated_todo: { ...current, completed: true }, created_todo: next })
+      .mockResolvedValueOnce({ updated_todo: { ...next, completed: true }, created_todo: makeTodo(3) });
+    const store = createTodoStore(api, vi.fn());
+    await store.load();
+    await store.completeMany([1, 2]);
+    expect(get(store).items).toHaveLength(3);
+    expect(get(store).items.find((todo) => todo.id === 2)?.completed).toBe(true);
+  });
+
+  it("refreshes and schedules sync for committed tasks on partial batch failure", async () => {
+    const current = makeTodo(1);
+    const api = createApi([current, makeTodo(2)]);
+    vi.mocked(api.setCompleted)
+      .mockResolvedValueOnce({ updated_todo: { ...current, completed: true }, created_todo: makeTodo(3) })
+      .mockRejectedValueOnce(new Error("RECURRENCE_LINK_CONFLICT"));
+    const onChanged = vi.fn();
+    const store = createTodoStore(api, onChanged);
+    await store.load();
+    await expect(store.completeMany([1, 2])).rejects.toThrow("RECURRENCE_LINK_CONFLICT");
+    expect(get(store).items).toHaveLength(3);
+    expect(get(store).items.find((todo) => todo.id === 1)?.completed).toBe(true);
+    expect(onChanged).toHaveBeenCalledOnce();
+  });
+
   it("removes all todos returned by a repeat series deletion", async () => {
     const current = makeTodo(1, {
       repeat_rule: "daily",

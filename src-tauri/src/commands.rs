@@ -1937,7 +1937,9 @@ fn set_todo_completed_in_connection(
     id: i64,
     completed: bool,
 ) -> Result<TodoCompletion, String> {
-    let transaction = connection.transaction().map_err(database_error)?;
+    let transaction = connection
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+        .map_err(database_error)?;
     let result = apply_todo_completion(&transaction, id, completed)?;
     transaction.commit().map_err(database_error)?;
     Ok(result)
@@ -1945,19 +1947,51 @@ fn set_todo_completed_in_connection(
 
 // Callers own the transaction so a notification receipt and repeat creation commit together.
 fn apply_todo_completion(
-    connection: &Connection,
+    connection: &rusqlite::Transaction<'_>,
     id: i64,
     completed: bool,
 ) -> Result<TodoCompletion, String> {
     let before = find_todo(connection, id)?.ok_or_else(|| "任务不存在".to_string())?;
+    if before.deleted_at.is_some() || before.archived_at.is_some() {
+        return Err("任务不存在".to_string());
+    }
+    let now = now_millis().max(before.updated_at.saturating_add(1));
+    if !(0..=9_007_199_254_740_991).contains(&now) {
+        return Err("INVALID_RECURRENCE_PROGRESS".to_string());
+    }
+    let updated_by = device_id(connection).map_err(database_error)?;
+    if completed {
+        if let Some(plan) = crate::recurrence_transaction::complete_current_for_todo(
+            connection,
+            &before.uuid,
+            now,
+            &updated_by,
+        )? {
+            let created_todo = match plan.next {
+                Some(next) => {
+                    let next_id: i64 = connection
+                        .query_row("SELECT id FROM todos WHERE uuid=?1", [&next.uuid], |row| {
+                            row.get(0)
+                        })
+                        .map_err(database_error)?;
+                    find_todo(connection, next_id)?
+                        .filter(|todo| todo.deleted_at.is_none() && todo.archived_at.is_none())
+                }
+                None => None,
+            };
+            return Ok(TodoCompletion {
+                updated_todo: find_todo(connection, id)?
+                    .ok_or_else(|| "更新后未能读取任务".to_string())?,
+                created_todo,
+            });
+        }
+    }
     if before.completed == completed {
         return Ok(TodoCompletion {
             updated_todo: before,
             created_todo: None,
         });
     }
-    let now = now_millis();
-    let updated_by = device_id(connection).map_err(database_error)?;
     let changed = connection
         .execute(
             "
@@ -2003,7 +2037,9 @@ pub(crate) fn complete_todo_from_reminder(
     if Uuid::parse_str(uuid).is_err() || reminder_at <= 0 {
         return Ok(false);
     }
-    let transaction = connection.transaction().map_err(database_error)?;
+    let transaction = connection
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+        .map_err(database_error)?;
     let key = format!("reminder.complete.v1:{uuid}:{reminder_at}");
     let consumed: bool = transaction
         .query_row(
@@ -2029,7 +2065,9 @@ pub(crate) fn complete_todo_from_reminder(
     };
     let before = find_todo(&transaction, id)?.ok_or_else(|| "任务不存在".to_string())?;
     let changed = !before.completed;
+    let revision_before = crate::recurrence_store::snapshot(&transaction)?.revision;
     apply_todo_completion(&transaction, id, true)?;
+    let rule_changed = crate::recurrence_store::snapshot(&transaction)?.revision != revision_before;
     transaction
         .execute(
             "INSERT INTO app_metadata (key, value) VALUES (?1, ?2)",
@@ -2037,7 +2075,7 @@ pub(crate) fn complete_todo_from_reminder(
         )
         .map_err(database_error)?;
     transaction.commit().map_err(database_error)?;
-    Ok(changed)
+    Ok(changed || rule_changed)
 }
 
 fn update_todo_title_in_connection(
@@ -2958,6 +2996,10 @@ fn is_leap_year(year: u32) -> bool {
 fn database_error(error: rusqlite::Error) -> String {
     format!("数据库操作失败：{error}")
 }
+
+#[cfg(test)]
+#[path = "todo_completion_recurrence_tests.rs"]
+mod recurrence_completion_tests;
 
 #[cfg(test)]
 mod tests {
