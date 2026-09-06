@@ -10,6 +10,8 @@ Status: implemented for candidate 1.0.10, not released. Native acceptance pendin
 - Comfortable: 480 x 680 logical pixels, 125% content zoom.
 - Large: 640 x 820 logical pixels, 150% content zoom.
 - Zoom choices: 100%, 115%, 125%, 150%.
+- The zoom label and a fixed-width percentage selector share a dedicated row,
+  separated from presets and reset by consistent spacing, in both themes/languages.
 - Ctrl/Cmd + plus or minus steps the zoom; Ctrl/Cmd + 0 resets zoom only.
 - Reset window restores both the small size and 100% zoom.
 - Actual dimensions are constrained to the current display work area. At larger

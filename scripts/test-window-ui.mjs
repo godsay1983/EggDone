@@ -72,6 +72,16 @@ try {
     await page.goto(base+'?lang='+lang+'&theme='+theme);
     await page.waitForFunction(()=>window.ready);
     assert.equal(await page.locator('.settings-card').evaluate(el=>el.scrollWidth<=el.clientWidth),true);
+    const zoomLayout = await page.locator('.window-settings').evaluate(section => {
+      const presets = section.querySelector('.language-options').getBoundingClientRect();
+      const label = section.querySelector('.window-zoom > span').getBoundingClientRect();
+      const select = section.querySelector('select').getBoundingClientRect();
+      return { gap: select.top - presets.bottom, centerOffset: Math.abs((label.top + label.height / 2) - (select.top + select.height / 2)),
+        width: select.width, aligned: Math.abs(select.right - presets.right) < 1, separated: label.right < select.left };
+    });
+    assert.ok(zoomLayout.gap >= 11, 'zoom row needs separation from presets');
+    assert.ok(zoomLayout.centerOffset < 1 && zoomLayout.aligned && zoomLayout.separated, 'zoom label/control must align without overlap');
+    assert.equal(zoomLayout.width, 96);
     for(const button of await page.locator('.language-options button').all()) {
       assert.equal(await button.evaluate(el=>el.scrollWidth<=el.clientWidth),true,'button label must fit');
     }
