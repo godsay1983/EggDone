@@ -2,7 +2,8 @@ import { get, writable } from "svelte/store";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { currentMonitor, primaryMonitor, getCurrentWindow, LogicalSize, PhysicalPosition } from "@tauri-apps/api/window";
-import { fitWindow, nextZoom, normalizeWindowPreferences, WINDOW_PREFERENCES_KEY, WINDOW_PRESETS, type WindowPreferences } from "$lib/utils/windowPreferences";
+import { fitWindow, nextZoom, normalizeWindowPreferences, WINDOW_PRESETS, type WindowPreferences } from "$lib/utils/windowPreferences";
+import { readWindowPreferences, saveWindowPreferences } from "$lib/api/windowPreferencesApi";
 
 export const windowPreferences = writable<WindowPreferences>({ ...WINDOW_PRESETS.small });
 export const windowPreferenceError = writable(false);
@@ -10,6 +11,7 @@ export const windowPreferenceBusy = writable(false);
 let queue: Promise<void> = Promise.resolve();
 let applying = false;
 let displaySignature = "";
+let storageReady = false;
 
 function monitorSignature(monitor: NonNullable<Awaited<ReturnType<typeof currentMonitor>>>) {
   return JSON.stringify([monitor.scaleFactor, monitor.workArea]);
@@ -47,6 +49,10 @@ async function applyPreferences(prefs: WindowPreferences) {
 
 export function updateWindowPreferences(change: Partial<WindowPreferences>) {
   queue = queue.then(async () => {
+    if (!storageReady) {
+      windowPreferenceError.set(true);
+      return;
+    }
     const previous = get(windowPreferences);
     const next = normalizeWindowPreferences({ ...previous, ...change });
     applying = true;
@@ -54,7 +60,7 @@ export function updateWindowPreferences(change: Partial<WindowPreferences>) {
     windowPreferenceError.set(false);
     try {
       await applyPreferences(next);
-      localStorage.setItem(WINDOW_PREFERENCES_KEY, JSON.stringify(next));
+      await saveWindowPreferences(next);
       windowPreferences.set(next);
     } catch {
       windowPreferenceError.set(true);
@@ -69,8 +75,12 @@ export function updateWindowPreferences(change: Partial<WindowPreferences>) {
 
 export async function initializeWindowPreferences(): Promise<() => void> {
   try {
-    windowPreferences.set(normalizeWindowPreferences(JSON.parse(localStorage.getItem(WINDOW_PREFERENCES_KEY) ?? "null")));
-  } catch { windowPreferences.set({ ...WINDOW_PRESETS.small }); }
+    windowPreferences.set(await readWindowPreferences());
+    storageReady = true;
+  } catch {
+    windowPreferenceError.set(true);
+    return () => {};
+  }
   await updateWindowPreferences({});
   let disposed = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -86,17 +96,22 @@ export async function initializeWindowPreferences(): Promise<() => void> {
   window.addEventListener("keydown", keydown, true);
   if (isTauri()) {
     const win = getCurrentWindow();
-    const saveSize = async () => {
+    const saveSize = () => {
       clearTimeout(timer);
       timer = undefined;
-      if (disposed || applying) return;
-      try {
-        const [size, scale] = await Promise.all([win.innerSize(), win.scaleFactor()]);
+      // Serialize resize persistence with preset/zoom changes so a delayed read
+      // cannot write an older zoom over a newly selected one.
+      queue = queue.then(async () => {
         if (disposed || applying) return;
-        const prefs = normalizeWindowPreferences({ ...get(windowPreferences), width: size.width / scale, height: size.height / scale });
-        localStorage.setItem(WINDOW_PREFERENCES_KEY, JSON.stringify(prefs));
-        windowPreferences.set(prefs);
-      } catch { windowPreferenceError.set(true); }
+        try {
+          const [size, scale] = await Promise.all([win.innerSize(), win.scaleFactor()]);
+          if (disposed || applying) return;
+          const prefs = normalizeWindowPreferences({ ...get(windowPreferences), width: size.width / scale, height: size.height / scale });
+          await saveWindowPreferences(prefs);
+          windowPreferences.set(prefs);
+        } catch { windowPreferenceError.set(true); }
+      });
+      return queue;
     };
     try {
       unlisten.push(await win.onResized(() => {

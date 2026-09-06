@@ -430,6 +430,8 @@ export const enUS = {
   "settings.languageSystem": "System",
   "settings.subtitle": "Manage language, startup, and focus preferences",
   "settings.shortcutTitle": "Global shortcut",
+  "settings.shortcutRegistrationFailed": "Could not register the shortcut; it may be in use. Saved preferences are unchanged: {detail}",
+  "settings.shortcutSaveFailed": "Could not save shortcut preferences. Please retry: {detail}",
   "settings.shortcutHelp": "Open the panel and focus the task input",
   "settings.shortcutCombination": "Shortcut combination",
   "settings.autostartTitle": "Launch at startup",

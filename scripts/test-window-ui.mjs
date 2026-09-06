@@ -24,7 +24,17 @@ export const getCurrentWindow=()=>win;
 export const currentMonitor=async()=>n.monitor;
 export const primaryMonitor=currentMonitor;
 export const isTauri=()=>true;
-export const invoke=async command=>{n.calls.push(command);};
+export const invoke=async (command,args)=>{
+ n.calls.push(command);
+ if(command==='get_window_preferences') {
+   if(new URLSearchParams(location.search).has('failRead')) throw Error('injected read failure');
+   return JSON.parse(sessionStorage.getItem('native-window-preferences') ?? 'null');
+ }
+ if(command==='save_window_preferences') {
+   if(n.failSave) {n.failSave=false;throw Error('injected write failure');}
+   sessionStorage.setItem('native-window-preferences',JSON.stringify(args.preferences));
+ }
+};
 export const getCurrentWebview=()=>({setZoom:async zoom=>{if(n.fail){n.fail=false;throw Error('injected');}n.zoom=zoom;}});
 `;
 const html = `<!doctype html><html><head><meta charset="utf-8"></head><body>
@@ -101,14 +111,23 @@ try {
     cases++;
   }
   // Persistence and DPI conversion use logical rather than physical pixels.
+  // Upgrade from the previous WebView-only preference, then restore without it.
+  await page.evaluate(()=>{
+    sessionStorage.removeItem('native-window-preferences');
+    localStorage.setItem('eggdone-window-preferences-v1',JSON.stringify({width:650,height:740,zoom:1.15}));
+  });
+  await page.reload(); await page.waitForFunction(()=>window.ready);
+  assert.equal(await page.evaluate(()=>window.native.zoom),1.15);
+  assert.equal(await page.evaluate(()=>JSON.parse(sessionStorage.getItem('native-window-preferences')).width),650);
   await page.evaluate(async()=>{await window.updatePrefs({width:700,height:760,zoom:1.25});});
+  await page.evaluate(()=>localStorage.removeItem('eggdone-window-preferences-v1'));
   await page.reload(); await page.waitForFunction(()=>window.ready);
   assert.equal(await page.evaluate(()=>window.native.size.width),700);
   assert.equal(await page.evaluate(()=>window.native.zoom),1.25);
   await page.evaluate(()=>{window.native.monitor.scaleFactor=2;window.native.size={width:1400,height:1520};window.native.events.resize({});window.native.events.focus({payload:true});});
-  await page.waitForFunction(()=>JSON.parse(localStorage.getItem('eggdone-window-preferences-v1')).width===700);
+  await page.waitForFunction(()=>JSON.parse(sessionStorage.getItem('native-window-preferences')).width===700);
   await page.waitForTimeout(500);
-  assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('eggdone-window-preferences-v1')).width),700);
+  assert.equal(await page.evaluate(()=>JSON.parse(sessionStorage.getItem('native-window-preferences')).width),700);
   // A display change must not leave an oversized window offscreen.
   await page.evaluate(()=>{window.native.monitor={scaleFactor:1,workArea:{position:{x:-800,y:0},size:{width:800,height:600}}};window.native.events.move({});});
   await page.waitForFunction(()=>window.native.max.height===584);
@@ -116,11 +135,21 @@ try {
   // Failed zoom must not overwrite the previous preference and must report failure.
   await page.evaluate(async()=>{window.native.fail=true;await window.updatePrefs({zoom:1.5});});
   await page.locator('[role="alert"]').waitFor();
-  assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('eggdone-window-preferences-v1')).zoom),1.25);
+  assert.equal(await page.evaluate(()=>JSON.parse(sessionStorage.getItem('native-window-preferences')).zoom),1.25);
+  await page.evaluate(async()=>{window.native.failSave=true;await window.updatePrefs({zoom:1.5});});
+  assert.equal(await page.evaluate(()=>window.native.zoom),1.25);
+  assert.equal(await page.evaluate(()=>JSON.parse(sessionStorage.getItem('native-window-preferences')).zoom),1.25);
   await page.locator('[data-direction="SouthEast"]').dispatchEvent('pointerdown',{button:0});
   await page.waitForFunction(()=>window.native.direction==='SouthEast');
   await page.evaluate(()=>window.stopPrefs());
   assert.equal(await page.evaluate(()=>Object.keys(window.native.events).length),0);
+  // A failed native read must not overwrite saved preferences with defaults.
+  await page.goto(base+'?lang=en-US&theme=dark&failRead=1');
+  await page.waitForFunction(()=>window.ready);
+  await page.locator('[role="alert"]').waitFor();
+  await page.evaluate(async()=>{await window.updatePrefs({zoom:1});});
+  assert.equal(await page.evaluate(()=>window.native.calls.includes('save_window_preferences')),false);
+  assert.equal(await page.evaluate(()=>JSON.parse(sessionStorage.getItem('native-window-preferences')).zoom),1.25);
   assert.deepEqual(errors,[]);
   console.log('Window UI: '+cases+' language/theme/width combinations passed; preset, zoom, keyboard, restore, DPI, display fitting, error rollback, resize IPC, cleanup passed. Native transport is mocked.');
 } catch(error) { console.error(error); process.exitCode=1; }

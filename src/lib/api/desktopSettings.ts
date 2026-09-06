@@ -1,4 +1,6 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
+import { get } from "svelte/store";
+import { translator } from "$lib/i18n";
 import {
   register,
   unregister,
@@ -41,16 +43,44 @@ export interface DesktopSettings {
 let activeShortcut: string | null = null;
 let activeNoteShortcut: string | null = null;
 
+type ShortcutKind = "panel" | "note";
+interface ShortcutPreference { shortcut: string; enabled: boolean }
+
+async function savePreference(kind: ShortcutKind, preference: ShortcutPreference): Promise<void> {
+  if (isTauri()) {
+    await invoke("save_shortcut_preference", { kind, preference });
+    return;
+  }
+  localStorage.setItem(kind === "note" ? NOTE_SHORTCUT_KEY : SHORTCUT_KEY, preference.shortcut);
+  localStorage.setItem(kind === "note" ? NOTE_SHORTCUT_ENABLED_KEY : SHORTCUT_ENABLED_KEY, String(preference.enabled));
+}
+
+async function readPreference(kind: ShortcutKind): Promise<ShortcutPreference> {
+  if (isTauri()) {
+    const saved = await invoke<ShortcutPreference | null>("get_shortcut_preference", { kind });
+    if (saved !== null) return saved;
+  }
+  const options = kind === "note" ? noteShortcutOptions : shortcutOptions;
+  const legacy = localStorage.getItem(kind === "note" ? NOTE_SHORTCUT_KEY : SHORTCUT_KEY);
+  const enabled = localStorage.getItem(kind === "note" ? NOTE_SHORTCUT_ENABLED_KEY : SHORTCUT_ENABLED_KEY);
+  const preference = {
+    shortcut: options.find(option => option.value === legacy)?.value ?? options[0].value,
+    enabled: kind === "note" ? enabled === "true" : enabled !== "false",
+  };
+  // Migrate the user's intent even if this launch cannot register the shortcut.
+  // A native read error propagates instead of overwriting durable settings.
+  await savePreference(kind, preference);
+  return preference;
+}
+
 export async function initializeDesktopSettings(): Promise<DesktopSettings> {
-  const shortcut =
-    localStorage.getItem(SHORTCUT_KEY) ?? shortcutOptions[0].value;
-  const shortcutEnabled =
-    localStorage.getItem(SHORTCUT_ENABLED_KEY) !== "false";
+  const panelPreference = await readPreference("panel");
+  const notePreference = await readPreference("note");
+  const { shortcut, enabled: shortcutEnabled } = panelPreference;
   let shortcutError: string | null = null;
   let autostartEnabled = false;
   let autostartError: string | null = null;
-  const noteShortcut = localStorage.getItem(NOTE_SHORTCUT_KEY) ?? noteShortcutOptions[0].value;
-  const noteShortcutEnabled = localStorage.getItem(NOTE_SHORTCUT_ENABLED_KEY) === "true";
+  const { shortcut: noteShortcut, enabled: noteShortcutEnabled } = notePreference;
   let noteShortcutError: string | null = null;
 
   if (shortcutEnabled) {
@@ -74,10 +104,10 @@ export async function initializeDesktopSettings(): Promise<DesktopSettings> {
 
   return {
     noteShortcut,
-    noteShortcutEnabled: noteShortcutEnabled && noteShortcutError === null,
+    noteShortcutEnabled,
     noteShortcutError,
     shortcut,
-    shortcutEnabled: shortcutEnabled && shortcutError === null,
+    shortcutEnabled,
     autostartEnabled,
     shortcutError,
     autostartError,
@@ -90,28 +120,26 @@ export async function updateShortcut(
   shortcut: string,
   enabled: boolean,
 ): Promise<void> {
+  const previousActive = activeShortcut;
   if (activeShortcut) {
     await unregister(activeShortcut);
     activeShortcut = null;
   }
 
-  if (enabled) {
-    try {
-      await registerShortcut(shortcut);
-    } catch (error) {
-      if (previousEnabled && previousShortcut) {
-        try {
-          await registerShortcut(previousShortcut);
-        } catch {
-          activeShortcut = null;
-        }
-      }
-      throw new Error(shortcutErrorMessage(error));
+  let saving = false;
+  try {
+    if (enabled) await registerShortcut(shortcut);
+    saving = true;
+    await savePreference("panel", { shortcut, enabled });
+  } catch (error) {
+    if (activeShortcut) {
+      try { await unregister(activeShortcut); activeShortcut = null; } catch { /* Retain the actual registration for a later retry. */ }
     }
+    if (previousActive && previousEnabled && previousShortcut && !activeShortcut) {
+      try { await registerShortcut(previousActive); } catch { activeShortcut = null; }
+    }
+    throw new Error(saving ? shortcutSaveErrorMessage(error) : shortcutErrorMessage(error));
   }
-
-  localStorage.setItem(SHORTCUT_KEY, shortcut);
-  localStorage.setItem(SHORTCUT_ENABLED_KEY, String(enabled));
 }
 
 export async function updateAutostart(enabled: boolean): Promise<boolean> {
@@ -129,19 +157,24 @@ export async function updateNoteShortcut(shortcut: string, enabled: boolean): Pr
     await unregister(previous);
     activeNoteShortcut = null;
   }
+  let saving = false;
   try {
     if (enabled) await registerNoteShortcut(shortcut);
+    saving = true;
+    await savePreference("note", { shortcut, enabled });
   } catch (error) {
-    if (previous) {
+    if (activeNoteShortcut) {
+      try { await unregister(activeNoteShortcut); activeNoteShortcut = null; } catch { /* Retain the actual registration for a later retry. */ }
+    }
+    if (previous && !activeNoteShortcut) {
       try { await registerNoteShortcut(previous); } catch { activeNoteShortcut = null; }
     }
-    throw new Error(shortcutErrorMessage(error));
+    throw new Error(saving ? shortcutSaveErrorMessage(error) : shortcutErrorMessage(error));
   }
-  localStorage.setItem(NOTE_SHORTCUT_KEY, shortcut);
-  localStorage.setItem(NOTE_SHORTCUT_ENABLED_KEY, String(enabled));
 }
 
 async function registerNoteShortcut(shortcut: string) {
+  if (activeNoteShortcut === shortcut) return;
   await register(shortcut, async (event) => {
     if (event.state === "Pressed") await invoke("quick_capture_note");
   });
@@ -149,6 +182,7 @@ async function registerNoteShortcut(shortcut: string) {
 }
 
 async function registerShortcut(shortcut: string) {
+  if (activeShortcut === shortcut) return;
   await register(shortcut, async (event) => {
     if (event.state === "Pressed") {
       await invoke("toggle_panel_from_shortcut");
@@ -159,7 +193,12 @@ async function registerShortcut(shortcut: string) {
 
 function shortcutErrorMessage(error: unknown) {
   const detail = error instanceof Error ? error.message : String(error);
-  return `快捷键注册失败，可能已被其他程序占用：${detail}`;
+  return get(translator)("settings.shortcutRegistrationFailed", { detail });
+}
+
+function shortcutSaveErrorMessage(error: unknown) {
+  const detail = error instanceof Error ? error.message : String(error);
+  return get(translator)("settings.shortcutSaveFailed", { detail });
 }
 
 function settingErrorMessage(message: string, error: unknown) {

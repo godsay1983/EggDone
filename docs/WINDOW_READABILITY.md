@@ -17,9 +17,15 @@ Status: implemented for candidate 1.0.10, not released. Native acceptance pendin
 - Actual dimensions are constrained to the current display work area. At larger
   zoom levels, minimum dimensions grow to preserve the usable layout viewport.
 
-Preferences are stored under `eggdone-window-preferences-v1` in localStorage.
+Native preferences are stored under `main_window_preferences_v1` in the existing
+local database `app_metadata` table. Startup reads this record first. When absent,
+the old `eggdone-window-preferences-v1` localStorage value is migrated after a
+successful restore. Browser-only previews still use localStorage.
 Only logical width, height and content zoom are stored, not absolute position.
-They are not synchronized to other devices. Corrupt values fall back to defaults.
+They are not synchronized to other devices. Invalid legacy values fall back to
+defaults; native read failures report an error without overwriting the saved record.
+Native close/exit callbacks flush actual logical dimensions after initialization,
+without depending on the WebView resize debounce or shutdown storage flushing.
 Native API/persistence failures leave an error in the settings section and attempt
 to restore the previous visual settings.
 
@@ -30,7 +36,8 @@ defocusing the main panel still hides it rather than quitting. Tray positioning
 continues using actual window dimensions. Display changes and focus restore
 recheck work-area constraints. There is no new full-screen or pinned-window mode.
 
-No sync schema, credentials, database, task or recurrence behavior is changed.
+No database schema, sync schema, credentials, task or recurrence behavior is changed.
+Only a local metadata preference is added; no migration is required.
 
 ## Automated Evidence
 
@@ -43,6 +50,8 @@ No sync schema, credentials, database, task or recurrence behavior is changed.
   presets, zoom, shortcuts, persistence, DPI conversion, display fitting, failed
   operation rollback, resize command and listener cleanup checks. Set
   `PLAYWRIGHT_PATH` to an available Playwright module; Microsoft Edge is used.
+- Persistence regression: legacy migration, restore with legacy storage removed,
+  native read/write failure protection, and SQLite close/reopen round-trip.
 - Browser screenshots inspected for Chinese/light and English/dark settings.
 
 The browser suite uses real Svelte components with a mocked native transport.

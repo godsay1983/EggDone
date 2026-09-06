@@ -409,6 +409,8 @@ export const zhCN = {
   "settings.languageSystem": "跟随系统",
   "settings.subtitle": "管理语言、启动与专注偏好",
   "settings.shortcutTitle": "全局快捷键",
+  "settings.shortcutRegistrationFailed": "快捷键注册失败，可能已被占用；已保存的设置保持不变：{detail}",
+  "settings.shortcutSaveFailed": "快捷键设置保存失败，请重试：{detail}",
   "settings.shortcutHelp": "快速打开面板并聚焦输入框",
   "settings.shortcutCombination": "快捷键组合",
   "settings.autostartTitle": "开机自动运行",

@@ -109,6 +109,7 @@
       onChange({ ...settings, noteShortcut: shortcut, noteShortcutEnabled: enabled, noteShortcutError: null });
     } catch (reason) {
       error = reason instanceof Error ? reason.message : String(reason);
+      onChange({ ...settings, noteShortcutError: error });
     } finally {
       busy = false;
     }

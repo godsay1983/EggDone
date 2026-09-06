@@ -27,12 +27,14 @@ pub mod recurrence_transport;
 mod reminders;
 mod s3_sync;
 mod schedule;
+mod shortcut_preferences;
 mod sync;
 mod sync_runtime_state;
 mod sync_target;
 mod tray;
 #[cfg(target_os = "linux")]
 mod tray_ksni;
+mod window_preferences;
 
 use serde::Serialize;
 use tauri::{Emitter, Manager, WindowEvent};
@@ -83,6 +85,7 @@ pub fn run() {
         .manage(i18n::I18nState::default())
         .manage(capture::CaptureInbox::default())
         .manage(tray::PanelState::default())
+        .manage(window_preferences::WindowPreferencesReady::default())
         .manage(s3_sync::SyncRuntime::default())
         .setup(|app| {
             let database = db::Database::open(app.handle())?;
@@ -107,6 +110,9 @@ pub fn run() {
             match event {
                 WindowEvent::CloseRequested { api, .. } if window.label() == "main" => {
                     api.prevent_close();
+                    if let Err(error) = window_preferences::flush_size(window.app_handle()) {
+                        eprintln!("Window size save failed: {error}");
+                    }
                     let _ = window.hide();
                 }
                 WindowEvent::CloseRequested { api, .. } if window.label() == "focus" => {
@@ -125,6 +131,10 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            shortcut_preferences::get_shortcut_preference,
+            shortcut_preferences::save_shortcut_preference,
+            window_preferences::get_window_preferences,
+            window_preferences::save_window_preferences,
             recurrence_commands::recurrence_editor_context,
             recurrence_commands::save_recurrence_rule,
             recurrence_commands::stop_recurrence_rule,
@@ -203,6 +213,13 @@ pub fn run() {
             data_exchange::confirm_full_backup_import,
             data_exchange::backup_database,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if matches!(event, tauri::RunEvent::ExitRequested { .. }) {
+                if let Err(error) = window_preferences::flush_size(app) {
+                    eprintln!("Window size save failed on exit: {error}");
+                }
+            }
+        });
 }
