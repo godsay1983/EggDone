@@ -39,7 +39,8 @@
 - 本轮完整检查首次失败于超时测试前置 GET 被误设 80ms；已修复测试条件并完整重跑，不是仅忽略或重跑失败用例。
 - 保留原有 TraySnapshot.locale 未读警告；Vite HMR WebSocket 被 Chrome 本地网络检查阻止，但页面断言完成，未关闭安全检查。
 - 日志：TEMP/eggdone-ns7-release-final.log、TEMP/eggdone-ns7-ui.log；截图 TEMP/eggdone-recurrence-ui。没有提交构建产物或凭据。
-- 鸿蒙最终 98 LocalTest、13 ohosTest、20 宿主脚本、595 英文伪本地化和 assembleApp 通过。模拟器不是实体设备/真实 S3 验收。
+- 鸿蒙 98 LocalTest、20 宿主脚本、595 英文伪本地化和 assembleApp 通过；后续补充4项原生编辑器测试，手机/大平板模拟器各17 ohosTest通过。Stage应用上下文替代测试夹具过早获取前台页面；生产代码未随该测试修复变化。两台均 HarmonyOS 7，不能视为 HarmonyOS 6 实体设备/真实 S3 验收。
+- 最终原生报告目录与大平板首页检查边界见双端同版 NS7_REGRESSION_AND_RELEASE.md；桌面本补充只更新记录，不重做上一提交的产品开发或重复计入验证次数。
 
 ## Critical Files
 

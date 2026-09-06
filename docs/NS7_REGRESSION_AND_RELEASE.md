@@ -28,7 +28,7 @@ NS5-E3B 备份和 E3C 自定义重复界面开发完成；NS6 后续能力设计
 | 桌面浏览器 | 17 场景：中英文、亮暗、320/480/920 宽度，保存失败重试、停止、历史/旧规则、未保存日期保护 | 实际 Svelte 组件 + mock IPC；不是实际用户库 |
 | 鸿蒙宿主 | 20 个 `scripts/test-*.cjs` 脚本全部通过，包含生产 ArkTS、共享 fixtures、宿主 SQLite 和故障注入 | 平台网络/时区部分使用替身 |
 | 鸿蒙 Local Test | 98 run / 98 pass / 0 Failure / 0 Error / 0 Ignore | 本地测试，不代表设备 API |
-| 鸿蒙 ohosTest | Mate 80 Pro Max 模拟器 5 套、13 run / 13 pass / 0 Failure / 0 Error / 0 Ignore | 原生时区 7、事务 2、数据库 2、专注会话 1、页面导航 1；不是全部新 UI/真实 S3 端到端 |
+| 鸿蒙 ohosTest | Mate 80 Pro Max 与 MatePad Pro 13 模拟器各 6 套、17 run / 17 pass / 0 Failure / 0 Error / 0 Ignore | 各含原生时区 7、事务 2、规则编辑 4、数据库 2、专注会话 1、页面导航 1；两台均 HarmonyOS 7，不是 HarmonyOS 6 真机或真实 S3 验收 |
 | 鸿蒙国际化 | 595 英文伪本地化、13 个共享快捷新增用例、三套资源和包内应用名称检查通过 | 不生成伪语言资源 |
 | 鸿蒙构建 | 主/测试 debug HAP 通过，`assembleApp` 成功 | 本机现有签名产物，未验证正式 Profile 邀请测试升级资格 |
 | 安装数据保留 | 新版本主包及测试包顺序 `install -r` 成功，无卸载 | 仅当前模拟器覆盖安装，不代表所有历史市场包升级 |
@@ -36,6 +36,15 @@ NS5-E3B 备份和 E3C 自定义重复界面开发完成；NS6 后续能力设计
 已知工具提示：Rust 保留已有 `TraySnapshot.locale` 未使用警告；ArkTS 保留异常传播等提示。Chrome 阻止 Vite HMR 本地 WebSocket，17 个页面断言仍完成，未放宽浏览器安全设置。
 
 本机日志保存在 TEMP：桌面 `eggdone-ns7-release-final.log`、`eggdone-ns7-ui.log`；鸿蒙 `eggdone-harmony-ns7-local.log`、`eggdone-harmony-ns7-i18n.log`、`eggdone-harmony-ns7-app.log`。最终设备运行目录后缀 `5cf22e8042a545f880fcc768fb61e84a` 包含完整报告、安装日志和构建 HAP 的 SHA256；这些文件不提交，不包含同步凭据。
+
+### 原生编辑器与平板补充回归（2026-09-06）
+
+- 新增 4 项真实 RDB 编辑器测试：创建/替换/停止并保留任务，任务/规则/回执/dirty revision 失败回滚与精确重试，拒绝过期替换，原生 UTC 定时投影。使用独立临时数据库，不读写用户任务库。
+- 平板首次运行 16/17 通过，首项错误为 `GetCurrentTopAbility failed`，属于测试夹具在冷启动时过早获取前台页面。尝试直接使用测试代理 `getAppContext()` 后，当前运行环境拒绝该上下文；最终统一改为 Stage `application.getApplicationContext()`，不是重跑掩盖错误或放宽断言。
+- 页面冒烟通过 Stage 模块上下文读取当前语言文案，仍真实启动应用并等待/点击控件；不依赖固定睡眠，不跳过 UI 验证。
+- 修复后的完整测试在两台模拟器各 17/17 通过。TEMP 目录：平板 `eggdone-device-tests-14ce66022ba5495daca985ef775b5684`，手机 `eggdone-device-tests-8f9498b3783348b0a89d0fa3c66a6ba6`。包含报告、覆盖安装日志和 HAP SHA256；此前失败日志保留，不作为通过证据。
+- 另查看 MatePad Pro 13 横屏 2880×1920 的中文亮色首页：智能列表、便签、设置入口可见，无当前截图可见的截断。截图位于 TEMP/`eggdone-ns7-tablet.jpeg`。此检查未覆盖规则编辑器、输入法、大字体或其他主题，R1 保持待验收。
+- 本补充只改测试与记录，候选版本、生产行为、数据库版本和签名均未变化。报告解析器仍要求全量通过，18 项解析器回归通过。
 
 ## 安全复跑
 
