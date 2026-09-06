@@ -664,7 +664,9 @@
             </select>
             {/if}
           </label>
-          <button type="button" disabled={scheduleSaving} onclick={openRecurrence}>{$translator("recurrence.title")}</button>
+          <div class="schedule-actions schedule-repeat-actions">
+            <button type="button" disabled={scheduleSaving} onclick={openRecurrence}>{$translator("recurrence.title")}</button>
+          </div>
           <div class="schedule-footer">
             <button type="button" disabled={scheduleSaving} onclick={() => void setSchedule(null)}>{$translator("common.clear")}</button>
             <button type="button" disabled={scheduleSaving || !canSaveSchedule} onclick={() => void setSchedule(customDate)}>{$translator("common.save")}</button>

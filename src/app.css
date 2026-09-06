@@ -2297,6 +2297,20 @@ html[data-theme="dark"] .summary-menu hr { border-color: #665742; }
   margin: -2px 0 8px;
 }
 
+.schedule-repeat-actions {
+  margin-bottom: 8px;
+}
+
+.schedule-repeat-actions button {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.schedule-repeat-actions button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
 .schedule-time-actions button {
   flex: 1;
   padding-inline: 4px;

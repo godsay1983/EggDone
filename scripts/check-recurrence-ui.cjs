@@ -101,6 +101,39 @@ async function main() {
     await stop.getByRole('button', { name: 'Stop repeating', exact: true }).click();
     await stop.waitForFunction(() => window.stoppedRule && window.closedEditor);
     count++; await stop.close();
+    for (const locale of ['en-US', 'zh-CN']) for (const theme of ['light', 'dark']) {
+      const page = await browser.newPage({ viewport: { width: 320, height: 720 } });
+      await mount(page, locale, theme, 'item');
+      await page.locator('.due-badge').click();
+      await page.mouse.move(0, 0);
+      const trigger = page.locator('.schedule-repeat-actions button');
+      const appearance = await page.evaluate(() => {
+        const button = document.querySelector('.schedule-repeat-actions button');
+        const reference = document.querySelector('.schedule-footer button');
+        const properties = ['fontSize', 'fontFamily', 'borderRadius', 'borderWidth', 'padding', 'color', 'backgroundColor'];
+        const pick = node => properties.map(key => getComputedStyle(node)[key]);
+        const bounds = button.getBoundingClientRect();
+        const panel = button.closest('.schedule-popover').getBoundingClientRect();
+        const footer = document.querySelector('.schedule-footer').getBoundingClientRect();
+        return { actual: pick(button), expected: pick(reference), fits: bounds.left >= panel.left &&
+          bounds.right <= panel.right && bounds.right <= innerWidth && bounds.bottom <= footer.top &&
+          button.scrollWidth <= button.clientWidth + 1 };
+      });
+      assert.deepEqual(appearance.actual, appearance.expected);
+      assert.equal(appearance.fits, true);
+      await trigger.hover();
+      const hoverColor = await trigger.evaluate(node => getComputedStyle(node).backgroundColor);
+      await page.locator('.schedule-footer button').first().hover();
+      assert.equal(hoverColor, await page.locator('.schedule-footer button').first().evaluate(node => getComputedStyle(node).backgroundColor));
+      await page.mouse.move(0, 0);
+      await page.keyboard.press('Tab');
+      await trigger.focus();
+      assert.equal(await trigger.evaluate(node => getComputedStyle(node).outlineStyle), 'solid');
+      await page.screenshot({ path: path.join(output, 'schedule-trigger-' + locale + '-' + theme + '.png') });
+      await trigger.click();
+      await page.locator('dialog[open]').waitFor();
+      count++; await page.close();
+    }
     const item = await browser.newPage({ viewport: { width: 480, height: 720 } });
     await mount(item, 'en-US', 'light', 'item');
     await item.locator('.due-badge').click();
