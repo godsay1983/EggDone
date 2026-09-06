@@ -67,6 +67,7 @@
   import DataManager from "./DataManager.svelte";
   import SettingsPanel from "./SettingsPanel.svelte";
   import TodoItem from "./TodoItem.svelte";
+  import { refreshRecurrenceRules } from "$lib/stores/recurrenceStore";
   import NoteEditor from "./NoteEditor.svelte";
   import NoteList from "./NoteList.svelte";
 
@@ -393,6 +394,10 @@
       : "/focus-illustration.png";
 
   onMount(() => {
+    let lastItems: Todo[] | null = null;
+    const unsubscribeRules = todos.subscribe(state => {
+      if (state.items !== lastItems) { lastItems = state.items; void refreshRecurrenceRules(); }
+    });
     let filterTimezoneOffset = new Date().getTimezoneOffset();
     const refreshFilterTime = () => {
       filterNow = new Date();
@@ -526,6 +531,7 @@
     }
 
     return () => {
+      unsubscribeRules();
       mounted = false;
       setAutoSyncForeground(false);
       window.removeEventListener("pointerdown", handlePointerDown, true);

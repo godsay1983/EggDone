@@ -2248,6 +2248,16 @@ fn set_todo_schedule_in_connection(
         .ok_or_else(|| "任务不存在".to_string())?;
     let scope = normalize_repeat_edit_scope(repeat_scope)?;
     let ids = repeat_edit_ids(connection, &current, scope)?;
+    let custom_series = current.repeat_rule.is_none()
+        && (current.repeat_series_uuid.is_some()
+            || crate::recurrence_store::snapshot(connection)?
+                .document
+                .rules
+                .iter()
+                .any(|r| r.first_todo_uuid == current.uuid || r.current_todo_uuid == current.uuid));
+    if custom_series && repeat_rule.is_some() {
+        return Err("RECURRENCE_LINK_CONFLICT".into());
+    }
     let repeat_due_date = match (&repeat_rule, &due_date, due_at) {
         (Some(_), Some(date), _) => Some(date.clone()),
         (Some(_), None, Some(timestamp)) => Some(local_date_from_timestamp(timestamp)?),
@@ -2257,12 +2267,16 @@ fn set_todo_schedule_in_connection(
         (Some(date), Some(rule)) => Some(next_repeat_due_date(date, rule)?),
         _ => None,
     };
-    let repeat_series_uuid = repeat_rule.as_ref().map(|_| {
-        current
-            .repeat_series_uuid
-            .clone()
-            .unwrap_or(current.uuid.clone())
-    });
+    let repeat_series_uuid = if custom_series {
+        current.repeat_series_uuid.clone()
+    } else {
+        repeat_rule.as_ref().map(|_| {
+            current
+                .repeat_series_uuid
+                .clone()
+                .unwrap_or(current.uuid.clone())
+        })
+    };
     let now = now_millis();
     let updated_by = device_id(connection).map_err(database_error)?;
 
@@ -3065,6 +3079,9 @@ mod recurrence_deletion_tests;
 #[cfg(test)]
 #[path = "todo_completion_recurrence_tests.rs"]
 mod recurrence_completion_tests;
+#[cfg(test)]
+#[path = "recurrence_ui_action_tests.rs"]
+mod recurrence_ui_action_tests;
 
 #[cfg(test)]
 mod tests {

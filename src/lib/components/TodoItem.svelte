@@ -3,6 +3,11 @@
   import { fly } from "svelte/transition";
 
   import { languageState, translator } from "$lib/i18n";
+  import type { TranslationKey } from "$lib/i18n";
+  import RecurrenceEditor from "./RecurrenceEditor.svelte";
+  import { recurrenceRules } from "$lib/stores/recurrenceStore";
+  import { associatedRule } from "$lib/utils/recurrenceForm";
+  import { recurrenceSummary } from "$lib/utils/recurrenceSummary";
   import type { TodoScheduleInput } from "$lib/api/todoApi";
   import type {
     RepeatDeleteScope,
@@ -77,6 +82,21 @@
   let editError = "";
   let saving = false;
   let scheduleOpen = false;
+  let recurrenceOpen = false;
+  $: customRule = associatedRule($recurrenceRules, todo.uuid, todo.repeat_series_uuid);
+  $: customSummary = customRule ? recurrenceSummary(customRule, key => $translator(("recurrence." + key) as TranslationKey)) :
+    todo.repeat_rule === null && todo.repeat_series_uuid !== null ? $translator("recurrence.unknown") : "";
+  let scheduleBaseline = "";
+  function scheduleFingerprint() {
+    return JSON.stringify([customDate, customDueTime, reminderChoice, repeatChoice, customReminderDateTime]);
+  }
+  function openRecurrence() {
+    if (scheduleOpen && scheduleFingerprint() !== scheduleBaseline) {
+      scheduleError = $translator("recurrence.unsaved");
+      return;
+    }
+    scheduleOpen = false; actionsOpen = false; recurrenceOpen = true;
+  }
   let scheduleSaving = false;
   let scheduleError = "";
   let noteOpen = false;
@@ -185,6 +205,7 @@
       todo.reminder_at !== null
         ? timestampToDateTimeLocal(todo.reminder_at)
         : defaultCustomReminderDateTime(customDate);
+    scheduleBaseline = scheduleFingerprint();
   }
 
   function toggleActions() {
@@ -500,7 +521,7 @@
           {notePreview}
         </button>
       {/if}
-      {#if currentGroup || dueLabel || todo.pinned || todo.priority === 1 || todo.reminder_at !== null || todo.repeat_rule !== null}
+      {#if currentGroup || dueLabel || todo.pinned || todo.priority === 1 || todo.reminder_at !== null || todo.repeat_rule !== null || customSummary}
         <div class="todo-meta">
           {#if currentGroup}
             <span
@@ -563,6 +584,9 @@
             >
               {$translator("todo.repeat")} {repeatLabel(todo.repeat_rule)}
             </button>
+          {/if}
+          {#if customSummary}
+            <button class="repeat-badge custom-repeat-badge" type="button" title={customSummary} onclick={openRecurrence}>{customSummary}</button>
           {/if}
         </div>
       {/if}
@@ -628,14 +652,19 @@
           {/if}
           <label>
             <span>{$translator("todo.repeat")}</span>
-            <select bind:value={repeatChoice} disabled={scheduleSaving}>
+            {#if customSummary}
+              <span class="custom-repeat-summary">{customSummary}</span>
+            {:else}
+            <select bind:value={repeatChoice} disabled={scheduleSaving || Boolean(customSummary)}>
               <option value="none">{$translator("todo.noRepeat")}</option>
               <option value="daily">{$translator("todo.repeatDaily")}</option>
               <option value="weekly">{$translator("todo.repeatWeekly")}</option>
               <option value="monthly">{$translator("todo.repeatMonthly")}</option>
               <option value="weekdays">{$translator("todo.repeatWeekdays")}</option>
             </select>
+            {/if}
           </label>
+          <button type="button" disabled={scheduleSaving} onclick={openRecurrence}>{$translator("recurrence.title")}</button>
           <div class="schedule-footer">
             <button type="button" disabled={scheduleSaving} onclick={() => void setSchedule(null)}>{$translator("common.clear")}</button>
             <button type="button" disabled={scheduleSaving || !canSaveSchedule} onclick={() => void setSchedule(customDate)}>{$translator("common.save")}</button>
@@ -801,7 +830,7 @@
         >
           {$translator("todo.moveDown")}
         </button>
-        {#if todo.repeat_rule !== null}
+        {#if todo.repeat_rule !== null || todo.repeat_series_uuid !== null}
           <button
             class="danger"
             type="button"
@@ -841,3 +870,9 @@
     {/if}
   </div>
 </article>
+{#if recurrenceOpen}
+  <RecurrenceEditor {todo} onClose={() => recurrenceOpen = false} />
+{/if}
+<style>
+  .custom-repeat-badge { max-width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+</style>

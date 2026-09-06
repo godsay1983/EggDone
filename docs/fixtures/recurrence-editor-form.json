@@ -1,0 +1,228 @@
+{
+  "base": {
+    "start": "2026-09-06",
+    "frequency": "daily",
+    "interval": "1",
+    "weekdays": [
+      7
+    ],
+    "monthDay": "6",
+    "end": "never",
+    "until": "2026-09-06",
+    "count": "10",
+    "allDay": true,
+    "time": "09:00",
+    "zone": "Asia/Shanghai"
+  },
+  "cases": [
+    {
+      "id": "daily",
+      "change": {},
+      "anchor": "2026-09-06"
+    },
+    {
+      "id": "interval",
+      "change": {
+        "interval": "99"
+      },
+      "anchor": "2026-09-06"
+    },
+    {
+      "id": "weekly-first",
+      "change": {
+        "frequency": "weekly",
+        "weekdays": [
+          1,
+          3,
+          5
+        ]
+      },
+      "anchor": "2026-09-07"
+    },
+    {
+      "id": "weekly-order",
+      "change": {
+        "frequency": "weekly",
+        "weekdays": [
+          7,
+          1
+        ]
+      },
+      "anchor": "2026-09-06"
+    },
+    {
+      "id": "monthly-last",
+      "change": {
+        "frequency": "monthly",
+        "monthDay": "0"
+      },
+      "anchor": "2026-09-30"
+    },
+    {
+      "id": "monthly-next",
+      "change": {
+        "frequency": "monthly",
+        "monthDay": "2"
+      },
+      "anchor": "2026-10-02"
+    },
+    {
+      "id": "month-short",
+      "change": {
+        "start": "2026-02-01",
+        "frequency": "monthly",
+        "monthDay": "31"
+      },
+      "anchor": "2026-02-28"
+    },
+    {
+      "id": "month-leap",
+      "change": {
+        "start": "2028-02-01",
+        "frequency": "monthly",
+        "monthDay": "31"
+      },
+      "anchor": "2028-02-29"
+    },
+    {
+      "id": "count-first",
+      "change": {
+        "end": "count",
+        "count": "1"
+      },
+      "anchor": "2026-09-06"
+    },
+    {
+      "id": "until-first",
+      "change": {
+        "end": "date",
+        "until": "2026-09-06"
+      },
+      "anchor": "2026-09-06"
+    },
+    {
+      "id": "timed",
+      "change": {
+        "allDay": false,
+        "time": "23:59",
+        "zone": "Asia/Shanghai"
+      },
+      "anchor": "2026-09-06"
+    },
+    {
+      "id": "bad-date",
+      "change": {
+        "start": "2026-02-29"
+      },
+      "error": true
+    },
+    {
+      "id": "empty-interval",
+      "change": {
+        "interval": ""
+      },
+      "error": true
+    },
+    {
+      "id": "zero-interval",
+      "change": {
+        "interval": "0"
+      },
+      "error": true
+    },
+    {
+      "id": "large-interval",
+      "change": {
+        "interval": "100"
+      },
+      "error": true
+    },
+    {
+      "id": "fraction-interval",
+      "change": {
+        "interval": "1.5"
+      },
+      "error": true
+    },
+    {
+      "id": "empty-days",
+      "change": {
+        "frequency": "weekly",
+        "weekdays": []
+      },
+      "error": true
+    },
+    {
+      "id": "duplicate-days",
+      "change": {
+        "frequency": "weekly",
+        "weekdays": [
+          1,
+          1
+        ]
+      },
+      "error": true
+    },
+    {
+      "id": "bad-month",
+      "change": {
+        "frequency": "monthly",
+        "monthDay": "32"
+      },
+      "error": true
+    },
+    {
+      "id": "until-before-anchor",
+      "change": {
+        "frequency": "weekly",
+        "weekdays": [
+          1
+        ],
+        "end": "date",
+        "until": "2026-09-06"
+      },
+      "error": true
+    },
+    {
+      "id": "zero-count",
+      "change": {
+        "end": "count",
+        "count": "0"
+      },
+      "error": true
+    },
+    {
+      "id": "large-count",
+      "change": {
+        "end": "count",
+        "count": "100001"
+      },
+      "error": true
+    },
+    {
+      "id": "bad-time",
+      "change": {
+        "allDay": false,
+        "time": "24:00"
+      },
+      "error": true
+    },
+    {
+      "id": "missing-zone",
+      "change": {
+        "allDay": false,
+        "zone": ""
+      },
+      "error": true
+    },
+    {
+      "id": "year-overflow",
+      "change": {
+        "start": "9999-12-31",
+        "frequency": "monthly",
+        "monthDay": "1"
+      },
+      "error": true
+    }
+  ]
+}

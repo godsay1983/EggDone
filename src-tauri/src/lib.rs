@@ -12,6 +12,7 @@ mod notes;
 mod panel_position;
 pub mod recurrence;
 mod recurrence_backup;
+mod recurrence_commands;
 pub mod recurrence_editor;
 pub mod recurrence_links;
 pub mod recurrence_progress;
@@ -124,6 +125,9 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            recurrence_commands::recurrence_editor_context,
+            recurrence_commands::save_recurrence_rule,
+            recurrence_commands::stop_recurrence_rule,
             capture::peek_capture,
             capture::take_capture_error,
             capture::dismiss_capture,
