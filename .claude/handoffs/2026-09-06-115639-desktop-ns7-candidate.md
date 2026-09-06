@@ -44,6 +44,8 @@
 
 ## Critical Files
 
+2026-09-06 补充：新增 src-tauri/src/recurrence_s3_integration_tests.rs，仅cfg(test)编译，两个用例在普通cargo test中显式ignored；鸿蒙隔离脚本分别强制执行，两段各1/1，并与鸿蒙原生NetworkKit完成真实双向传输。最终证据 TEMP/eggdone-ns7-d64a7cf22efe453f845848845092ece6。不使用生产桶或配置；服务和映射已清理。详见 docs/NS7_S3_INTEGRATION.md，这不是整应用离线同步或附件互导验收，R4/R5仍待完成。
+
 | File | Purpose |
 | --- | --- |
 | docs/NEXT_STAGE_ROADMAP.md | NS5 开发完成，NS7 人工门槛仍未完成 |

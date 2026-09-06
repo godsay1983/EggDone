@@ -458,6 +458,8 @@ NS7 自动回归与开发资料已完成，仍非正式发布验收完成。17 �
 
 完成条件：自动检查、平台人工验收和双端协议验收均有记录，可生成正式发布包。
 
+2026-09-06 S3 补充：新增两个显式 opt-in Rust 集成测试，配合鸿蒙脚本在独立 SeaweedFS 上完成桌面 → 鸿蒙原生 → 桌面三段传输。验证签名、404 条件创建、ETag 冲突、错误凭据和特殊路径；普通 cargo test 不连接外部服务。它不替代真实应用库离线合并、旧客户端或附件恢复验收，详见 [隔离 S3 集成](NS7_S3_INTEGRATION.md)。
+
 ## 推荐提交边界
 
 1. `docs(next): define desktop reliability and workflow roadmap`

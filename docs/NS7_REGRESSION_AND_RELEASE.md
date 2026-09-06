@@ -32,10 +32,11 @@ NS5-E3B 备份和 E3C 自定义重复界面开发完成；NS6 后续能力设计
 | 鸿蒙国际化 | 595 英文伪本地化、13 个共享快捷新增用例、三套资源和包内应用名称检查通过 | 不生成伪语言资源 |
 | 鸿蒙构建 | 主/测试 debug HAP 通过，`assembleApp` 成功 | 本机现有签名产物，未验证正式 Profile 邀请测试升级资格 |
 | 安装数据保留 | 新版本主包及测试包顺序 `install -r` 成功，无卸载 | 仅当前模拟器覆盖安装，不代表所有历史市场包升级 |
+| 双端 S3 原生传输 | 独立 SeaweedFS 4.34；桌面准备 1/1 → 鸿蒙 NetworkKit 集成 1/1 → 桌面复核 1/1，最终脚本完整复跑通过 | 非 HTTP 替身；仅规则传输，不代表 R4 整应用离线合并/迟到回包或 R5 附件互导 |
 
 已知工具提示：Rust 保留已有 `TraySnapshot.locale` 未使用警告；ArkTS 保留异常传播等提示。Chrome 阻止 Vite HMR 本地 WebSocket，17 个页面断言仍完成，未放宽浏览器安全设置。
 
-本机日志保存在 TEMP：桌面 `eggdone-ns7-release-final.log`、`eggdone-ns7-ui.log`；鸿蒙 `eggdone-harmony-ns7-local.log`、`eggdone-harmony-ns7-i18n.log`、`eggdone-harmony-ns7-app.log`。最终设备运行目录后缀 `5cf22e8042a545f880fcc768fb61e84a` 包含完整报告、安装日志和构建 HAP 的 SHA256；这些文件不提交，不包含同步凭据。
+本机日志保存在 TEMP：桌面 `eggdone-ns7-release-final.log`、`eggdone-ns7-ui.log`；鸿蒙 `eggdone-harmony-ns7-local.log`、`eggdone-harmony-ns7-i18n.log`、`eggdone-harmony-ns7-app.log`。初始 13 项设备运行目录后缀 `5cf22e8042a545f880fcc768fb61e84a` 包含完整报告、安装日志和构建 HAP 的 SHA256；后续 17 项及 S3 结果见下文。这些文件不提交，不包含用户同步凭据。
 
 ### 原生编辑器与平板补充回归（2026-09-06）
 
@@ -45,6 +46,16 @@ NS5-E3B 备份和 E3C 自定义重复界面开发完成；NS6 后续能力设计
 - 修复后的完整测试在两台模拟器各 17/17 通过。TEMP 目录：平板 `eggdone-device-tests-14ce66022ba5495daca985ef775b5684`，手机 `eggdone-device-tests-8f9498b3783348b0a89d0fa3c66a6ba6`。包含报告、覆盖安装日志和 HAP SHA256；此前失败日志保留，不作为通过证据。
 - 另查看 MatePad Pro 13 横屏 2880×1920 的中文亮色首页：智能列表、便签、设置入口可见，无当前截图可见的截断。截图位于 TEMP/`eggdone-ns7-tablet.jpeg`。此检查未覆盖规则编辑器、输入法、大字体或其他主题，R1 保持待验收。
 - 本补充只改测试与记录，候选版本、生产行为、数据库版本和签名均未变化。报告解析器仍要求全量通过，18 项解析器回归通过。
+
+### 隔离 S3 补充回归（2026-09-06）
+
+实际执行桌面 Rust 与鸿蒙原生 NetworkKit，通过同一个随机临时桶验证双向规则内容、中文及字面百分号路径、HEAD 变化、404 条件创建、过期 ETag 冲突和错误凭据拒绝。没有改应用同步配置或生产传输逻辑。
+
+最终日志位于 TEMP/`eggdone-ns7-d64a7cf22efe453f845848845092ece6`；同期默认原生 17/17 回归位于 `eggdone-device-tests-c8cafbb6e238457bb2976b3307475dcc`。本轮创建的容器及 hdc 反向端口均已删除，其他项目服务未改。复跑步骤、隔离约束和证据边界见 [S3 原生集成](NS7_S3_INTEGRATION.md)。
+
+桌面新增的两个集成用例在普通 cargo test 中显式 ignored，已由专用脚本分别强制执行并校验各 1/1 成功，不将忽略计为通过。鸿蒙默认 17 项与专用 1 项分别校验，不混淆测试套件。本次 CLI lint 实际扫描 0 文件，未作为有效检查证据。
+
+集成测试加入后再次运行桌面完整 `pnpm release:check` 成功：220 Rust / 147 Vitest，普通 Cargo 另有 2 个明确 opt-in 的 ignored 用例；Svelte、国际化、构建、cargo fmt/check 均通过。日志为 TEMP/`eggdone-ns7-s3-release-check.log`；已有 TraySnapshot.locale 未读警告保留。
 
 ## 安全复跑
 

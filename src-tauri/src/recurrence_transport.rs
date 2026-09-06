@@ -176,3 +176,7 @@ impl RecurrenceTransport {
 #[cfg(test)]
 #[path = "recurrence_transport_tests.rs"]
 pub(crate) mod tests;
+
+#[cfg(test)]
+#[path = "recurrence_s3_integration_tests.rs"]
+mod s3_integration_tests;
