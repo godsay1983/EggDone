@@ -187,6 +187,11 @@ pub(crate) fn domain_revision(connection: &Connection, domain: SyncDomain) -> Re
 // Rule-only concurrent edits still need to be visible to the existing aggregate Todo status.
 pub(crate) fn retain_todos_pending(connection: &Connection) -> Result<(), String> {
     let tx = connection.unchecked_transaction().map_err(database_error)?;
+    retain_todos_pending_in_transaction(&tx)?;
+    tx.commit().map_err(database_error)
+}
+
+pub(crate) fn retain_todos_pending_in_transaction(tx: &Connection) -> Result<(), String> {
     let raw: String = tx
         .query_row(
             "SELECT dirty_domains FROM sync_runtime_state WHERE id=1",
@@ -200,7 +205,7 @@ pub(crate) fn retain_todos_pending(connection: &Connection) -> Result<(), String
     }
     tx.execute("UPDATE sync_runtime_state SET dirty_domains=?1,dirty_since=COALESCE(dirty_since,?2) WHERE id=1",
         params![serde_json::to_string(&domains).map_err(|_|"SYNC_STATE_INVALID")?,now_millis()]).map_err(database_error)?;
-    tx.commit().map_err(database_error)
+    Ok(())
 }
 
 pub fn record_success(connection: &Connection) -> Result<(), String> {

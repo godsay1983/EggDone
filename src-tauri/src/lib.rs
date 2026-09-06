@@ -11,6 +11,7 @@ mod note_sync;
 mod notes;
 mod panel_position;
 pub mod recurrence;
+mod recurrence_backup;
 pub mod recurrence_editor;
 pub mod recurrence_links;
 pub mod recurrence_progress;

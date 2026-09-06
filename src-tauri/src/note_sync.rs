@@ -94,9 +94,19 @@ pub(crate) fn merge_remote_document(
     remote: &NoteSyncDocument,
     generated_at: i64,
 ) -> Result<NoteSyncDocument, String> {
-    let local = build_document(connection, generated_at)?;
-    let merged = merge_documents(&local, remote, generated_at)?;
     let transaction = connection.transaction().map_err(database_error)?;
+    let merged = merge_in_transaction(&transaction, remote, generated_at)?;
+    transaction.commit().map_err(database_error)?;
+    Ok(merged)
+}
+
+pub(crate) fn merge_in_transaction(
+    transaction: &Connection,
+    remote: &NoteSyncDocument,
+    generated_at: i64,
+) -> Result<NoteSyncDocument, String> {
+    let local = build_document(transaction, generated_at)?;
+    let merged = merge_documents(&local, remote, generated_at)?;
 
     for note in &merged.notes {
         transaction
@@ -129,7 +139,6 @@ pub(crate) fn merge_remote_document(
             .map_err(database_error)?;
     }
 
-    transaction.commit().map_err(database_error)?;
     Ok(merged)
 }
 

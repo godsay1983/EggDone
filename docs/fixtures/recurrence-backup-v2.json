@@ -1,0 +1,186 @@
+{
+  "all_day": {
+    "format_version": 2,
+    "exported_at": 4000,
+    "groups": [],
+    "todos": [
+      {
+        "uuid": "123e4567-e89b-42d3-a456-426614174001",
+        "title": "keep title",
+        "note": null,
+        "group_uuid": null,
+        "completed": true,
+        "pinned": false,
+        "priority": 0,
+        "sort_order": 0,
+        "created_at": 1,
+        "updated_at": 3000,
+        "completed_at": 3000,
+        "deleted_at": null,
+        "archived_at": null,
+        "due_date": "2026-09-05",
+        "due_at": null,
+        "reminder_at": null,
+        "repeat_rule": null,
+        "repeat_next_due_date": null,
+        "repeat_series_uuid": "123e4567-e89b-42d3-a456-426614174001"
+      },
+      {
+        "uuid": "e9cb6d09-664e-5c54-bdf7-69f395808585",
+        "title": "keep title",
+        "note": null,
+        "group_uuid": null,
+        "completed": false,
+        "pinned": false,
+        "priority": 0,
+        "sort_order": -1024,
+        "created_at": 3000,
+        "updated_at": 3000,
+        "completed_at": null,
+        "deleted_at": null,
+        "archived_at": null,
+        "due_date": "2026-09-06",
+        "due_at": null,
+        "reminder_at": null,
+        "repeat_rule": null,
+        "repeat_next_due_date": null,
+        "repeat_series_uuid": "123e4567-e89b-42d3-a456-426614174001"
+      }
+    ],
+    "notes": [],
+    "note_attachments": [],
+    "attachment_files_included": false,
+    "recurrence": {
+      "document": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": null
+            },
+            "timezone_id": null,
+            "current_todo_uuid": "e9cb6d09-664e-5c54-bdf7-69f395808585",
+            "current_date": "2026-09-06",
+            "generated_count": 2,
+            "exhausted": false,
+            "updated_at": 3000,
+            "updated_by": "00000000-0000-4000-8000-00000000000b",
+            "deleted_at": null
+          }
+        ]
+      },
+      "instances": [
+        {
+          "todo_uuid": "e9cb6d09-664e-5c54-bdf7-69f395808585",
+          "rule_uuid": "123e4567-e89b-42d3-a456-426614174000",
+          "occurrence_key": "eggdone/recurrence/v1/123e4567-e89b-42d3-a456-426614174000/2026-09-06Tdate/2",
+          "planned_date": "2026-09-06",
+          "planned_due_at": null,
+          "purged": false
+        }
+      ]
+    }
+  },
+  "timed": {
+    "format_version": 2,
+    "exported_at": 4000,
+    "groups": [],
+    "todos": [
+      {
+        "uuid": "123e4567-e89b-42d3-a456-426614174001",
+        "title": "keep title",
+        "note": null,
+        "group_uuid": null,
+        "completed": true,
+        "pinned": false,
+        "priority": 0,
+        "sort_order": 0,
+        "created_at": 1,
+        "updated_at": 3000,
+        "completed_at": 3000,
+        "deleted_at": null,
+        "archived_at": null,
+        "due_date": null,
+        "due_at": 1788571800000,
+        "reminder_at": 1788571500000,
+        "repeat_rule": null,
+        "repeat_next_due_date": null,
+        "repeat_series_uuid": "123e4567-e89b-42d3-a456-426614174001"
+      },
+      {
+        "uuid": "fb55037e-5aa3-57ed-a61e-40adb65dd342",
+        "title": "keep title",
+        "note": null,
+        "group_uuid": null,
+        "completed": false,
+        "pinned": false,
+        "priority": 0,
+        "sort_order": -1024,
+        "created_at": 3000,
+        "updated_at": 3000,
+        "completed_at": null,
+        "deleted_at": null,
+        "archived_at": null,
+        "due_date": null,
+        "due_at": 1788658200000,
+        "reminder_at": 1788657900000,
+        "repeat_rule": null,
+        "repeat_next_due_date": null,
+        "repeat_series_uuid": "123e4567-e89b-42d3-a456-426614174001"
+      }
+    ],
+    "notes": [],
+    "note_attachments": [],
+    "attachment_files_included": false,
+    "recurrence": {
+      "document": {
+        "format_version": 1,
+        "rules": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "first_todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "schedule": {
+              "anchor_date": "2026-09-05",
+              "frequency": "daily",
+              "interval": 1,
+              "weekdays": [],
+              "month_day": null,
+              "end_type": "never",
+              "end_date": null,
+              "max_occurrences": null,
+              "local_time_minutes": 570
+            },
+            "timezone_id": "Asia/Shanghai",
+            "current_todo_uuid": "fb55037e-5aa3-57ed-a61e-40adb65dd342",
+            "current_date": "2026-09-06",
+            "generated_count": 2,
+            "exhausted": false,
+            "updated_at": 3000,
+            "updated_by": "00000000-0000-4000-8000-00000000000b",
+            "deleted_at": null
+          }
+        ]
+      },
+      "instances": [
+        {
+          "todo_uuid": "fb55037e-5aa3-57ed-a61e-40adb65dd342",
+          "rule_uuid": "123e4567-e89b-42d3-a456-426614174000",
+          "occurrence_key": "eggdone/recurrence/v1/123e4567-e89b-42d3-a456-426614174000/2026-09-06T09:30/2",
+          "planned_date": "2026-09-06",
+          "planned_due_at": 1788658200000,
+          "purged": false
+        }
+      ]
+    }
+  }
+}

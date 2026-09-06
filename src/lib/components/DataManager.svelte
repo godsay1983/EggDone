@@ -166,6 +166,7 @@
       <div class="import-preview">
         <strong>{$translator("data.confirmImportFile", { name: preview.file_name })}</strong>
         <span>{$translator("data.previewSummary", { tasks: preview.total, notes: preview.note_total, attachments: preview.attachment_total })}</span>
+        <span>{$translator("data.recurrenceSummary", { count: preview.recurrence_total })}</span>
         <div>
           <span>{$translator("data.taskChanges", { added: preview.added, updated: preview.updated, unchanged: preview.unchanged })}</span>
           <span>{$translator("data.noteChanges", { added: preview.note_added, updated: preview.note_updated, unchanged: preview.note_unchanged })}</span>

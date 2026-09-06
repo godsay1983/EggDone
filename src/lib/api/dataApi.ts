@@ -13,6 +13,7 @@ export interface ImportPreview {
   note_updated: number;
   note_unchanged: number;
   attachment_total: number;
+  recurrence_total: number;
   attachment_added: number;
   attachment_updated: number;
   attachment_unchanged: number;

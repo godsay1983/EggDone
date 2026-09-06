@@ -22,7 +22,7 @@ use crate::{
     tray::PanelState,
 };
 
-const FORMAT_VERSION: u32 = 1;
+const FORMAT_VERSION: u32 = 2;
 const BACKUP_FORMAT_VERSION: u32 = 1;
 const BACKUP_MAX_ENTRY_COUNT: usize = 10_000;
 const BACKUP_MAX_TOTAL_BYTES: u64 = 512 * 1024 * 1024;
@@ -86,6 +86,12 @@ struct TodoExport {
     note_attachments: Vec<SyncNoteAttachment>,
     #[serde(default)]
     attachment_files_included: bool,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::recurrence_backup::deserialize"
+    )]
+    recurrence: Option<crate::recurrence_backup::RuleBackup>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -124,6 +130,7 @@ pub struct ImportPreview {
     note_updated: usize,
     note_unchanged: usize,
     attachment_total: usize,
+    recurrence_total: usize,
     attachment_added: usize,
     attachment_updated: usize,
     attachment_unchanged: usize,
@@ -185,6 +192,7 @@ pub fn export_todos(
         note_attachments: note_attachment_sync::build_document(&connection, exported_at)?
             .attachments,
         attachment_files_included: false,
+        recurrence: Some(crate::recurrence_backup::export(&connection)?),
     };
     let json = serde_json::to_string_pretty(&export)
         .map_err(|error| format!("生成导出文件失败：{error}"))?;
@@ -222,6 +230,7 @@ pub fn export_full_backup(
         notes: note_sync::build_document(&connection, exported_at)?.notes,
         note_attachments: attachment_document.attachments.clone(),
         attachment_files_included: true,
+        recurrence: Some(crate::recurrence_backup::export(&connection)?),
     };
     drop(connection);
 
@@ -738,7 +747,9 @@ pub fn confirm_todo_import(
     path: String,
     app: AppHandle,
     database: State<'_, Database>,
+    runtime: State<'_, crate::s3_sync::SyncRuntime>,
 ) -> Result<ImportResult, String> {
+    let _sync_guard = runtime.acquire()?;
     let import = read_import_file(Path::new(&path))?;
     let result = {
         let mut connection = lock_database(&database)?;
@@ -755,7 +766,9 @@ pub fn confirm_full_backup_import(
     path: String,
     app: AppHandle,
     database: State<'_, Database>,
+    runtime: State<'_, crate::s3_sync::SyncRuntime>,
 ) -> Result<ImportResult, String> {
+    let _sync_guard = runtime.acquire()?;
     let token = Uuid::new_v4();
     let app_data_root = app
         .path()
@@ -765,7 +778,6 @@ pub fn confirm_full_backup_import(
     fs::create_dir_all(&asset_root).map_err(|error| format!("创建附件目录失败：{error}"))?;
     let staging_root = asset_root.join(format!(".backup-import-{token}"));
     let rollback_root = asset_root.join(format!(".backup-rollback-{token}"));
-    let database_snapshot = app_data_root.join(format!(".backup-database-{token}.sqlite3"));
 
     let validated = match read_full_backup_archive(Path::new(&path), Some(&staging_root)) {
         Ok(validated) => validated,
@@ -783,23 +795,24 @@ pub fn confirm_full_backup_import(
         .collect::<Vec<_>>();
 
     let restore_result = (|| {
-        let local_attachments = {
-            let connection = lock_database(&database)?;
-            backup_connection(&connection, &database_snapshot)?;
-            note_attachment_sync::build_backup_document(&connection, now_millis())?.attachments
-        };
+        let mut connection = lock_database(&database)?;
+        let transaction = connection
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+            .map_err(database_error)?;
+        let local_attachments =
+            note_attachment_sync::build_backup_document(&transaction, now_millis())?.attachments;
         let restore_uuids = restore_candidate_uuids(&local_attachments, &active_attachments);
         let installed =
             install_backup_assets(&asset_root, &staging_root, &rollback_root, &restore_uuids)?;
         let database_result: Result<ImportResult, String> = (|| {
-            let mut connection = lock_database(&database)?;
-            let mut result = merge_import(&mut connection, validated.import)?;
-            set_restored_attachment_paths(&connection, &active_attachments, &restore_uuids)?;
+            let mut result = merge_import_in_transaction(&transaction, validated.import)?;
+            set_restored_attachment_paths(&transaction, &active_attachments, &restore_uuids)?;
             result.restored_file_count = restore_uuids
                 .iter()
                 .filter_map(|uuid| active_attachments.iter().find(|item| &item.uuid == uuid))
                 .map(|attachment| if attachment.kind == "image" { 2 } else { 1 })
                 .sum();
+            transaction.commit().map_err(database_error)?;
             Ok(result)
         })();
         match database_result {
@@ -810,17 +823,9 @@ pub fn confirm_full_backup_import(
             Err(error) => {
                 let asset_rollback_error =
                     rollback_installed_assets(&asset_root, &rollback_root, &installed).err();
-                let restore_error = lock_database(&database)
-                    .and_then(|mut connection| {
-                        restore_connection(&mut connection, &database_snapshot)
-                    })
-                    .err();
                 let mut message = error;
                 if let Some(rollback_error) = asset_rollback_error {
                     message.push_str(&format!("；附件回滚失败：{rollback_error}"));
-                }
-                if let Some(rollback_error) = restore_error {
-                    message.push_str(&format!("；数据库回滚失败：{rollback_error}"));
                 }
                 Err(message)
             }
@@ -828,8 +833,10 @@ pub fn confirm_full_backup_import(
     })();
 
     let _ = fs::remove_dir_all(&staging_root);
-    let _ = fs::remove_dir_all(&rollback_root);
-    let _ = fs::remove_file(&database_snapshot);
+    // Preserve remaining originals if a filesystem rollback itself failed.
+    if restore_result.is_ok() {
+        let _ = fs::remove_dir_all(&rollback_root);
+    }
     if restore_result.is_ok() {
         crate::tray::update_task_badge(&app);
     }
@@ -910,16 +917,6 @@ fn backup_connection(source: &Connection, path: &Path) -> Result<(), String> {
     backup
         .run_to_completion(32, std::time::Duration::from_millis(10), None)
         .map_err(|error| format!("数据库备份失败：{error}"))
-}
-
-fn restore_connection(destination: &mut Connection, path: &Path) -> Result<(), String> {
-    let source =
-        Connection::open(path).map_err(|error| format!("打开数据库回滚点失败：{error}"))?;
-    let backup = Backup::new(&source, destination)
-        .map_err(|error| format!("初始化数据库回滚失败：{error}"))?;
-    backup
-        .run_to_completion(32, std::time::Duration::from_millis(10), None)
-        .map_err(|error| format!("数据库回滚失败：{error}"))
 }
 
 fn restore_candidate_uuids(
@@ -1018,7 +1015,7 @@ fn set_restored_attachment_paths(
     attachments: &[SyncNoteAttachment],
     restore_uuids: &HashSet<String>,
 ) -> Result<(), String> {
-    let transaction = connection.unchecked_transaction().map_err(database_error)?;
+    let transaction = connection;
     for attachment in attachments
         .iter()
         .filter(|attachment| restore_uuids.contains(&attachment.uuid))
@@ -1036,7 +1033,7 @@ fn set_restored_attachment_paths(
             )
             .map_err(database_error)?;
     }
-    transaction.commit().map_err(database_error)
+    Ok(())
 }
 
 fn read_import_file(path: &Path) -> Result<TodoExport, String> {
@@ -1057,6 +1054,20 @@ fn validate_complete_import(import: &TodoExport) -> Result<(), String> {
 }
 
 fn validate_import_mode(import: &TodoExport, expect_attachment_files: bool) -> Result<(), String> {
+    match (import.format_version, &import.recurrence) {
+        (1, None) => {}
+        (2, Some(backup)) => {
+            crate::recurrence_backup::validate(backup)?;
+            if backup
+                .instances
+                .iter()
+                .any(|i| i.purged == import.todos.iter().any(|t| t.uuid == i.todo_uuid))
+            {
+                return Err("INVALID_RECURRENCE_BACKUP".into());
+            }
+        }
+        _ => return Err("INVALID_RECURRENCE_BACKUP_VERSION".into()),
+    }
     if import.format_version > FORMAT_VERSION {
         return Err(format!(
             "导入文件版本 {} 高于当前支持的版本 {}",
@@ -1280,6 +1291,10 @@ fn build_preview(
         note_updated,
         note_unchanged,
         attachment_total: import.note_attachments.len(),
+        recurrence_total: import
+            .recurrence
+            .as_ref()
+            .map_or(0, |r| r.document.rules.len()),
         attachment_added,
         attachment_updated,
         attachment_unchanged,
@@ -1290,14 +1305,14 @@ fn build_preview(
 }
 
 fn merge_transfer(
-    connection: &mut Connection,
+    connection: &Connection,
     imported_groups: &[TransferGroup],
     imported: &[TransferTodo],
 ) -> Result<ImportResult, String> {
     let local_versions = local_versions(connection)?;
     let local_group_versions = local_group_versions(connection)?;
     let local_device_id = device_id(connection).map_err(database_error)?;
-    let transaction = connection.transaction().map_err(database_error)?;
+    let transaction = connection;
     let mut result = ImportResult {
         added: 0,
         updated: 0,
@@ -1322,6 +1337,7 @@ fn merge_transfer(
     }
 
     for todo in imported {
+        crate::recurrence_backup::reject_purged_restore(connection, &todo.uuid)?;
         match local_versions.get(&todo.uuid) {
             None => {
                 insert_todo(&transaction, todo, &local_device_id)?;
@@ -1335,11 +1351,23 @@ fn merge_transfer(
         }
     }
 
-    transaction.commit().map_err(database_error)?;
     Ok(result)
 }
 
 fn merge_import(connection: &mut Connection, import: TodoExport) -> Result<ImportResult, String> {
+    validate_import_mode(&import, import.attachment_files_included)?;
+    let transaction = connection
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+        .map_err(database_error)?;
+    let result = merge_import_in_transaction(&transaction, import)?;
+    transaction.commit().map_err(database_error)?;
+    Ok(result)
+}
+
+fn merge_import_in_transaction(
+    connection: &Connection,
+    import: TodoExport,
+) -> Result<ImportResult, String> {
     let note_changes = count_note_changes(connection, &import.notes)?;
     let attachment_changes = count_attachment_changes(connection, &import.note_attachments)?;
     let mut result = merge_transfer(connection, &import.groups, &import.todos)?;
@@ -1356,7 +1384,7 @@ fn merge_import(connection: &mut Connection, import: TodoExport) -> Result<Impor
             generated_at: import.exported_at,
             notes: import.notes,
         };
-        note_sync::merge_remote_document(connection, &remote, now_millis())?;
+        note_sync::merge_in_transaction(connection, &remote, now_millis())?;
     }
     if !import.note_attachments.is_empty() {
         let remote = NoteAttachmentSyncDocument {
@@ -1365,7 +1393,12 @@ fn merge_import(connection: &mut Connection, import: TodoExport) -> Result<Impor
             generated_at: import.exported_at,
             attachments: import.note_attachments,
         };
-        note_attachment_sync::merge_remote_document(connection, &remote, now_millis())?;
+        note_attachment_sync::merge_in_transaction(connection, &remote, now_millis())?;
+    }
+    if let Some(backup) = &import.recurrence {
+        crate::recurrence_backup::restore(connection, backup)?;
+    } else {
+        crate::recurrence_backup::check_links(connection)?;
     }
     Ok(result)
 }
@@ -1729,6 +1762,10 @@ fn database_error(error: rusqlite::Error) -> String {
 }
 
 #[cfg(test)]
+#[path = "recurrence_backup_tests.rs"]
+mod recurrence_backup_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::db::{configure_connection, migrate};
@@ -1863,7 +1900,7 @@ mod tests {
         .unwrap();
 
         let export = TodoExport {
-            format_version: FORMAT_VERSION,
+            format_version: 1,
             exported_at: 10,
             groups: read_all_groups(&source).unwrap(),
             todos: read_all_todos(&source).unwrap(),
@@ -1872,6 +1909,7 @@ mod tests {
                 .unwrap()
                 .attachments,
             attachment_files_included: false,
+            recurrence: None,
         };
         let json = serde_json::to_string(&export).unwrap();
         let exported: TodoExport = serde_json::from_str(&json).unwrap();
@@ -1951,28 +1989,31 @@ mod tests {
             notes: vec![],
             note_attachments: vec![],
             attachment_files_included: false,
+            recurrence: None,
         };
         assert!(validate_import(&future).is_err());
 
         let duplicated = TodoExport {
-            format_version: FORMAT_VERSION,
+            format_version: 1,
             exported_at: 1,
             groups: vec![],
             todos: vec![shared.clone(), shared],
             notes: vec![],
             note_attachments: vec![],
             attachment_files_included: false,
+            recurrence: None,
         };
         assert!(validate_import(&duplicated).is_err());
 
         let falsely_complete = TodoExport {
-            format_version: FORMAT_VERSION,
+            format_version: 1,
             exported_at: 1,
             groups: vec![],
             todos: vec![],
             notes: vec![],
             note_attachments: vec![],
             attachment_files_included: true,
+            recurrence: None,
         };
         assert!(validate_import(&falsely_complete).is_err());
     }
@@ -2028,13 +2069,14 @@ mod tests {
         let result = merge_import(
             &mut connection,
             TodoExport {
-                format_version: FORMAT_VERSION,
+                format_version: 1,
                 exported_at: 11,
                 groups: vec![],
                 todos: vec![],
                 notes: vec![imported.clone()],
                 note_attachments: vec![],
                 attachment_files_included: false,
+                recurrence: None,
             },
         )
         .unwrap();
@@ -2098,13 +2140,14 @@ mod tests {
         exported_attachment.byte_size = asset.len() as i64;
         exported_attachment.sha256 = asset_sha256.clone();
         let export = TodoExport {
-            format_version: FORMAT_VERSION,
+            format_version: 1,
             exported_at: 10,
             groups: vec![],
             todos: vec![],
             notes: vec![note(note_uuid, "restore", 4)],
             note_attachments: vec![exported_attachment],
             attachment_files_included: true,
+            recurrence: None,
         };
         let data = serde_json::to_vec(&export).unwrap();
         let asset_path = directory.join("original");

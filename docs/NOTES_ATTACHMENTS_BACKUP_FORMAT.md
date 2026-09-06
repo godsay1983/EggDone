@@ -4,7 +4,7 @@
 
 ## 1. 普通 JSON
 
-现有 `eggdone-data.json` 继续使用 `format_version: 1`，并增加两个向后兼容的可选字段：
+自 2026-09-06 的 E3B 起，新导出使用数据 `format_version: 2` 并包含必需的 `recurrence` 区，详见 [规则备份恢复契约](RECURRENCE_BACKUP_CONTRACT.md)。旧数据 v1 仍可导入；下例展示原有 v1 基础字段，附件字段及行为在 v2 中保持不变。ZIP manifest 的版本仍为 1，不等于 data.json 的版本。
 
 ```json
 {

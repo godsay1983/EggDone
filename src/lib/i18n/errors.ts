@@ -34,6 +34,11 @@ export function localizedErrorMessage(reason: unknown): string {
   const parsed = parseCodedError(raw);
   if (!parsed) return safeDetail(raw);
   const locale = getLanguageState().resolvedLocale;
+  if (parsed.code === "DATA_EXCHANGE_FAILED") {
+    if (/RECURRENCE_SYNC_BUSY|同步正在进行/.test(parsed.detail)) return translate(locale, "data.restoreBusy");
+    if (/RECURRENCE_OCCURRENCE_MISSING/.test(parsed.detail)) return translate(locale, "data.restorePurged");
+    if (/RECURRENCE/.test(parsed.detail)) return translate(locale, "data.restoreRuleConflict");
+  }
   const [titleKey, actionKey] = MESSAGE_KEYS[parsed.code];
   return `${translate(locale, titleKey)} ${translate(locale, actionKey)}`;
 }

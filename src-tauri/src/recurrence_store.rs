@@ -57,8 +57,17 @@ pub fn merge(
     connection: &mut Connection,
     incoming: &RecurrenceDocument,
 ) -> Result<RuleSnapshot, String> {
-    encode_document(incoming)?;
     let transaction = connection.transaction().map_err(db_error)?;
+    let result = merge_in_transaction(&transaction, incoming)?;
+    transaction.commit().map_err(db_error)?;
+    Ok(result)
+}
+
+pub(crate) fn merge_in_transaction(
+    transaction: &Connection,
+    incoming: &RecurrenceDocument,
+) -> Result<RuleSnapshot, String> {
+    encode_document(incoming)?;
     let current = snapshot(&transaction)?;
     let mut merged = merge_documents(&current.document, incoming)?;
     encode_document(&merged)?;
@@ -75,7 +84,6 @@ pub fn merge(
             params![rule.uuid, rule.current_todo_uuid, rule.deleted_at.is_none() && !rule.exhausted, record]).map_err(db_error)?;
     }
     let result = snapshot(&transaction)?;
-    transaction.commit().map_err(db_error)?;
     Ok(result)
 }
 
