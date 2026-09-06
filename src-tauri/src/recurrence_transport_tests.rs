@@ -423,14 +423,17 @@ fn recurrence_transport_duplicate_etags_and_network_errors_are_not_empty() {
         delayed.delay = Duration::from_millis(150);
         let server = Server::new(vec![Reply::new(404, None, b""), delayed]);
         let mut client = server.client();
+        // Only the PUT under test should have a short timeout, not its setup GET.
+        let remote = client.download().await.unwrap();
+        assert!(server.request().head.starts_with("GET "));
         client.bucket = client
             .bucket
             .with_request_timeout(Duration::from_millis(80))
             .unwrap();
-        let remote = client.download().await.unwrap();
         assert_eq!(
             client.upload(&empty(), &remote).await.unwrap_err(),
             "RECURRENCE_TRANSPORT_NETWORK"
         );
+        assert!(server.request().head.starts_with("PUT "));
     });
 }
