@@ -2,6 +2,14 @@
 
 实现方案见 [NEXT_STAGE_IMPLEMENTATION_PLAN.md](NEXT_STAGE_IMPLEMENTATION_PLAN.md)。鸿蒙端配套 Roadmap 位于 `D:\Develop\EggDoneHarmony\docs\HARMONY_NEXT_STAGE_ROADMAP.md`。
 
+## 当前收口状态（2026-09-06）
+
+- [x] NS0-NS5 双端开发完成，NS6 后续能力设计完成，NS7 自动回归与交付资料完成。
+- [x] 用户收到验收操作清单后明确反馈“验收通过”，本轮开发按用户验收结论收口。
+- 用户未提供逐项平台、设备和日志；不将整体确认改写为代理独立验证，也不虚构 Linux/macOS 或正式签名升级结果。
+- 下方各日期阶段记录保留；其中未勾选的验收项作为逐项证据补录清单，不再表示等待用户整体确认。正式发布核对见 [NS7 记录](NS7_REGRESSION_AND_RELEASE.md)。
+- 代码与文档本地提交；推送、商店上传及下一轮任务便签关联 L1-L5 不在本次验收收口中执行。
+
 ## 执行规则
 
 - NS1 至 NS5 必须与鸿蒙端同编号阶段共同评审。
