@@ -25,6 +25,7 @@
   import type { DefaultListViewMode } from "$lib/utils/viewPreferences";
   import { onMount } from "svelte";
   import SyncSettings from "./SyncSettings.svelte";
+  import WindowSettings from "./WindowSettings.svelte";
 
   export let settings: DesktopSettings;
   export let defaultListViewMode: DefaultListViewMode;
@@ -148,6 +149,7 @@
       <button type="button" aria-label={$translator("common.close")} onclick={onClose}>×</button>
     </header>
 
+    <WindowSettings />
     <section class="language-settings-section" aria-labelledby="language-settings-title">
       <div class="language-settings-heading">
         <strong id="language-settings-title">{$translator("settings.language")}</strong>

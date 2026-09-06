@@ -2,6 +2,15 @@ import type { TranslationMessage } from "../types";
 import type { zhCN } from "./zh-CN";
 
 export const enUS = {
+  "window.title": "Appearance & window",
+  "window.size": "Window size",
+  "window.small": "Small",
+  "window.comfortable": "Comfortable",
+  "window.large": "Large",
+  "window.zoom": "Content zoom",
+  "window.reset": "Reset window",
+  "window.resize": "Drag to resize the window",
+  "window.error": "Could not apply or save window settings. Please retry.",
   "recurrence.confirmStop": "Confirm stop",
   "recurrence.title": "Custom repeat",
   "recurrence.start": "Start date",

@@ -1,4 +1,13 @@
 export const zhCN = {
+  "window.title": "外观与窗口",
+  "window.size": "窗口大小",
+  "window.small": "小巧",
+  "window.comfortable": "舒适",
+  "window.large": "大窗口",
+  "window.zoom": "内容缩放",
+  "window.reset": "恢复默认窗口",
+  "window.resize": "拖动调整窗口大小",
+  "window.error": "窗口设置未能应用或保存，请重试。",
   "recurrence.confirmStop": "确认停止",
   "recurrence.title": "自定义重复",
   "recurrence.start": "开始日期",

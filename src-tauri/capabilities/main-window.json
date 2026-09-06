@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main-window",
+  "description": "Local main panel size and content zoom controls",
+  "windows": ["main"],
+  "permissions": [
+    "core:window:allow-start-resize-dragging",
+    "core:window:allow-set-size",
+    "core:window:allow-set-min-size",
+    "core:window:allow-set-max-size",
+    "core:window:allow-set-position",
+    "core:webview:allow-set-webview-zoom"
+  ]
+}
