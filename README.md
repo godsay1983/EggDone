@@ -1,5 +1,7 @@
 # EggDone（蛋定 Todo）
 
+当前开发候选版：**1.0.8**。自定义重复、规则备份及后续能力设计已完成本轮开发；自动检查通过，正式发布仍待平台与真实跨端验收。变化、测试路径和商店说明草稿见 [NS7 候选版记录](docs/NS7_REGRESSION_AND_RELEASE.md)。
+
 快速收集：设置中可开启“快速便签快捷键”，也可通过 `--capture` 命令行接收文字/链接；确认后才保存任务或便签，不自动读取剪贴板。用法和待验收项见 [快速收集契约](docs/QUICK_CAPTURE_CONTRACT.md)。
 
 ![Screenshot](./docs/Screenshot.png)
