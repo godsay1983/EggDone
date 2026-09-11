@@ -54,11 +54,11 @@ describe("desktop i18n foundation", () => {
     expect(formatRelativeTime(0, 60_000, "en-US")).toBe("1 minute ago");
   });
 
-  it("switches the active language in place without reloading component state", () => {
+  it("switches the active language in place without reloading component state", async () => {
     const draft = { title: "Draft title", content: "Unsaved body" };
-    setLanguageMode("en-US");
+    await setLanguageMode("en-US");
     expect(getLanguageState()).toEqual({ mode: "en-US", resolvedLocale: "en-US" });
     expect(draft).toEqual({ title: "Draft title", content: "Unsaved body" });
-    setLanguageMode("system");
+    await setLanguageMode("system");
   });
 });

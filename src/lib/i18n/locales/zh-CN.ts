@@ -158,6 +158,8 @@ export const zhCN = {
   "common.previous": "上一步",
   "common.processing": "处理中…",
   "common.retry": "重试",
+  "settings.preferenceReadFailed": "部分设置读取失败，暂用已知值或默认值。恢复存储访问后请重启应用。",
+  "settings.preferenceWriteFailed": "部分设置未保存，请重新选择这些设置以重试。",
   "common.save": "保存",
   "common.selectAll": "全选",
   "common.share": "分享",

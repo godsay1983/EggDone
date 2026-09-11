@@ -1,4 +1,5 @@
 import { derived, get, writable } from "svelte/store";
+import { readPreference, writePreference, PREFERENCES_CHANGED_EVENT } from '../utils/preferenceStorage';
 
 import { enUS } from "./locales/en-US";
 import { zhCN } from "./locales/zh-CN";
@@ -37,16 +38,19 @@ export function initializeLanguage(): LanguageState {
     initialized = true;
     window.addEventListener("storage", handleStorageChange);
     window.addEventListener("languagechange", handleSystemLanguageChange);
+    window.addEventListener(PREFERENCES_CHANGED_EVENT, () => {
+      applyLanguageMode(normalizeLanguageMode(readPreference(LANGUAGE_STORAGE_KEY)));
+    });
   }
   return applyLanguageMode(
-    normalizeLanguageMode(window.localStorage.getItem(LANGUAGE_STORAGE_KEY)),
+    normalizeLanguageMode(readPreference(LANGUAGE_STORAGE_KEY)),
   );
 }
 
-export function setLanguageMode(mode: LanguageMode): LanguageState {
+export async function setLanguageMode(mode: LanguageMode): Promise<LanguageState> {
   const normalized = normalizeLanguageMode(mode);
   if (typeof window !== "undefined") {
-    window.localStorage.setItem(LANGUAGE_STORAGE_KEY, normalized);
+    if (!(await writePreference(LANGUAGE_STORAGE_KEY, normalized))) return get(languageState);
   }
   return applyLanguageMode(normalized);
 }
@@ -121,7 +125,7 @@ function systemLanguages(): readonly string[] {
 function handleStorageChange(event: StorageEvent) {
   if (event.key === null || event.key === LANGUAGE_STORAGE_KEY) {
     applyLanguageMode(
-      normalizeLanguageMode(window.localStorage.getItem(LANGUAGE_STORAGE_KEY)),
+      normalizeLanguageMode(readPreference(LANGUAGE_STORAGE_KEY)),
     );
   }
 }
@@ -130,4 +134,3 @@ function handleSystemLanguageChange() {
   const current = get(languageState);
   if (current.mode === "system") applyLanguageMode("system");
 }
-

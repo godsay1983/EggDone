@@ -161,6 +161,8 @@ export const enUS = {
   "common.previous": "Previous",
   "common.processing": "Working…",
   "common.retry": "Retry",
+  "settings.preferenceReadFailed": "Some preferences could not be read. Known values or defaults are in use. Restore storage access, then restart the app.",
+  "settings.preferenceWriteFailed": "Some preferences were not saved. Select them again to retry.",
   "common.save": "Save",
   "common.selectAll": "Select all",
   "common.share": "Share",

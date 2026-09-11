@@ -7,6 +7,8 @@
   import { flip } from "svelte/animate";
   import { onMount, tick } from "svelte";
   import { preserveScroll } from "$lib/utils/scrollContext";
+  import { readPreference, writePreference, PREFERENCES_CHANGED_EVENT } from "$lib/utils/preferenceStorage";
+  import PreferenceStatus from './PreferenceStatus.svelte';
   import packageMetadata from "../../../package.json";
 
   import { languageState, translator } from "$lib/i18n";
@@ -409,6 +411,11 @@
     let lastItems: Todo[] | null = null;
     const unsubscribeRules = todos.subscribe(state => {
       if (state.items !== lastItems) { lastItems = state.items; void refreshRecurrenceRules(); }
+      if (!state.loading && !state.error && selectedGroup !== 'all' && selectedGroup !== 'ungrouped' &&
+        !state.groups.some(group => group.uuid === selectedGroup)) {
+        selectedGroup = 'all';
+        void writePreference('eggdone-selected-group', 'all');
+      }
     });
     let filterTimezoneOffset = new Date().getTimezoneOffset();
     const refreshFilterTime = () => {
@@ -432,21 +439,27 @@
     const focusInterval = window.setInterval(updateFocusTimer, 1000);
     window.addEventListener(FOCUS_SETTINGS_CHANGED_EVENT, refreshFocusDurations);
     window.addEventListener("storage", refreshFocusDurations);
+    const refreshNativePreferences = () => {
+      refreshFocusDurations();
+      const saved = readPreference('eggdone-theme');
+      if (saved === 'light' || saved === 'dark') { theme = saved; applyTheme(theme); }
+    };
+    window.addEventListener(PREFERENCES_CHANGED_EVENT, refreshNativePreferences);
     groupResizeObserver.observe(groupScrollElement);
     groupMutationObserver.observe(groupScrollElement, { childList: true });
     updateGroupScrollState();
-    const savedTheme = localStorage.getItem("eggdone-theme");
+    const savedTheme = readPreference("eggdone-theme");
     showCompleted =
-      localStorage.getItem("eggdone-show-completed") !== "false";
+      readPreference("eggdone-show-completed") !== "false";
     defaultListViewMode = normalizeDefaultListViewMode(
-      localStorage.getItem(DEFAULT_LIST_VIEW_KEY),
+      readPreference(DEFAULT_LIST_VIEW_KEY),
     );
     listView = initialListView(
       defaultListViewMode,
-      localStorage.getItem(LAST_LIST_VIEW_KEY),
+      readPreference(LAST_LIST_VIEW_KEY),
     );
-    selectedGroup = localStorage.getItem("eggdone-selected-group") ?? "all";
-    smartView = normalizeSmartView(localStorage.getItem(SMART_VIEW_KEY));
+    selectedGroup = readPreference("eggdone-selected-group") ?? "all";
+    smartView = normalizeSmartView(readPreference(SMART_VIEW_KEY));
     if (smartView) listView = "all";
     theme =
       savedTheme === "light" || savedTheme === "dark"
@@ -566,15 +579,17 @@
         refreshFocusDurations,
       );
       window.removeEventListener("storage", refreshFocusDurations);
+      window.removeEventListener(PREFERENCES_CHANGED_EVENT, refreshNativePreferences);
       groupResizeObserver.disconnect();
       groupMutationObserver.disconnect();
       removeDragListeners();
     };
   });
 
-  function toggleTheme() {
-    theme = theme === "light" ? "dark" : "light";
-    localStorage.setItem("eggdone-theme", theme);
+  async function toggleTheme() {
+    const next = theme === "light" ? "dark" : "light";
+    if (!(await writePreference("eggdone-theme", next))) return;
+    theme = next;
     applyTheme(theme);
   }
 
@@ -605,7 +620,7 @@
   function toggleCompletedVisibility() {
     showCompleted = !showCompleted;
     summaryMenuOpen = false;
-    localStorage.setItem("eggdone-show-completed", String(showCompleted));
+    writePreference("eggdone-show-completed", String(showCompleted));
     clearBatchSelection();
     cancelDrag();
   }
@@ -634,7 +649,7 @@
       agendaDatePickerOpen = false;
     }
     summaryMenuOpen = false;
-    if (view !== "notes") localStorage.setItem(LAST_LIST_VIEW_KEY, view);
+    if (view !== "notes") writePreference(LAST_LIST_VIEW_KEY, view);
     selectedTodoId = null;
     clearBatchSelection();
     cancelDrag();
@@ -645,12 +660,12 @@
     if (!(await setListView("all"))) return;
     smartView = id;
     filterNow = new Date();
-    localStorage.setItem(SMART_VIEW_KEY, id);
+    writePreference(SMART_VIEW_KEY, id);
   }
 
   function clearSmartView() {
     smartView = null;
-    localStorage.removeItem(SMART_VIEW_KEY);
+    writePreference(SMART_VIEW_KEY, null);
     clearBatchSelection();
     cancelDrag();
   }
@@ -1033,9 +1048,9 @@
     await notes.restore(note);
   }
 
-  function setDefaultListViewMode(mode: DefaultListViewMode) {
+  async function setDefaultListViewMode(mode: DefaultListViewMode) {
+    if (!(await writePreference(DEFAULT_LIST_VIEW_KEY, mode))) return;
     defaultListViewMode = mode;
-    localStorage.setItem(DEFAULT_LIST_VIEW_KEY, mode);
     if (mode !== "remember") {
       setListView(mode);
     }
@@ -1043,7 +1058,7 @@
 
   function setSelectedGroup(group: string) {
     selectedGroup = group;
-    localStorage.setItem("eggdone-selected-group", group);
+    writePreference("eggdone-selected-group", group);
     managingGroup = false;
     confirmingGroupDelete = false;
     selectedTodoId = null;
@@ -1153,7 +1168,7 @@
     showSearch = false;
     searchQuery = "";
     showCompleted = true;
-    localStorage.setItem("eggdone-show-completed", "true");
+    writePreference("eggdone-show-completed", "true");
     setSelectedGroup("all");
 
     await tick();
@@ -2192,6 +2207,7 @@
 />
 
 <main class="panel-shell">
+  <PreferenceStatus />
   <header class="panel-header">
     <div class="brand">
       <img class="mascot" src="/eggdone-icon.png" alt="" aria-hidden="true" />

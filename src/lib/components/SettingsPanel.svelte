@@ -23,15 +23,16 @@
     type TranslationKey,
   } from "$lib/i18n";
   import type { DefaultListViewMode } from "$lib/utils/viewPreferences";
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import SyncSettings from "./SyncSettings.svelte";
   import WindowSettings from "./WindowSettings.svelte";
+  import PreferenceStatus from './PreferenceStatus.svelte';
 
   export let settings: DesktopSettings;
   export let defaultListViewMode: DefaultListViewMode;
   export let onClose: () => void;
   export let onChange: (settings: DesktopSettings) => void;
-  export let onDefaultListViewChange: (mode: DefaultListViewMode) => void;
+  export let onDefaultListViewChange: (mode: DefaultListViewMode) => void | Promise<void>;
 
   let busy = false;
   let error = settings.shortcutError ?? settings.noteShortcutError ?? settings.autostartError ?? "";
@@ -115,16 +116,23 @@
     }
   }
 
-  function setFocusDuration(minutes: number) {
-    focusDurationMinutes = saveFocusDurationMinutes(minutes);
+  async function setFocusDuration(minutes: number) {
+    focusDurationMinutes = await saveFocusDurationMinutes(minutes);
   }
 
-  function setBreakDuration(minutes: number) {
-    breakDurationMinutes = saveBreakDurationMinutes(minutes);
+  async function setBreakDuration(minutes: number) {
+    breakDurationMinutes = await saveBreakDurationMinutes(minutes);
   }
 
   function selectLanguage(mode: LanguageMode) {
     setLanguageMode(mode);
+  }
+
+  async function selectDefaultView(element: HTMLSelectElement) {
+    await onDefaultListViewChange(element.value as DefaultListViewMode);
+    await tick();
+    // A rejected save leaves the prop unchanged; restore the native select as well.
+    element.value = defaultListViewMode;
   }
 </script>
 
@@ -150,6 +158,7 @@
       <button type="button" aria-label={$translator("common.close")} onclick={onClose}>×</button>
     </header>
 
+    <PreferenceStatus />
     <WindowSettings />
     <section class="language-settings-section" aria-labelledby="language-settings-title">
       <div class="language-settings-heading">
@@ -244,10 +253,7 @@
       <span>{$translator("settings.defaultView")}</span>
       <select
         value={defaultListViewMode}
-        onchange={(event) =>
-          onDefaultListViewChange(
-            event.currentTarget.value as DefaultListViewMode,
-          )}
+        onchange={(event) => { void selectDefaultView(event.currentTarget); }}
       >
         <option value="remember">{$translator("settings.rememberLastView")}</option>
         <option value="all">{$translator("nav.all")}</option>

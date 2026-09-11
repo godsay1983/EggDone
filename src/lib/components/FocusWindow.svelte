@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { readPreference, PREFERENCES_CHANGED_EVENT } from '$lib/utils/preferenceStorage';
+  import PreferenceStatus from './PreferenceStatus.svelte';
   import { invoke, isTauri } from "@tauri-apps/api/core";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -58,6 +60,8 @@
     window.addEventListener(FOCUS_SETTINGS_CHANGED_EVENT, refreshFocusDurations);
     window.addEventListener(FOCUS_TARGET_CHANGED_EVENT, refreshFocusTarget);
     window.addEventListener("storage", refreshFocusFromStorage);
+    const refreshNativePreferences = () => { refreshThemeFromStorage(); refreshFocusDurations(); };
+    window.addEventListener(PREFERENCES_CHANGED_EVENT, refreshNativePreferences);
     window.addEventListener("focus", refreshThemeFromStorage);
     window.addEventListener("focus", refreshFocusDurations);
     window.addEventListener("focus", refreshFocusTarget);
@@ -85,6 +89,7 @@
       );
       window.removeEventListener(FOCUS_TARGET_CHANGED_EVENT, refreshFocusTarget);
       window.removeEventListener("storage", refreshFocusFromStorage);
+      window.removeEventListener(PREFERENCES_CHANGED_EVENT, refreshNativePreferences);
       window.removeEventListener("focus", refreshThemeFromStorage);
       window.removeEventListener("focus", refreshFocusDurations);
       window.removeEventListener("focus", refreshFocusTarget);
@@ -95,7 +100,7 @@
   });
 
   function refreshThemeFromStorage() {
-    const savedTheme = localStorage.getItem("eggdone-theme");
+    const savedTheme = readPreference("eggdone-theme");
     const theme =
       savedTheme === "light" || savedTheme === "dark"
         ? savedTheme
@@ -306,6 +311,7 @@
   class:resting={focusPhase === "break" && !focusCompletionVisible}
   class="focus-window-shell"
 >
+  <PreferenceStatus />
   <header class="focus-window-header" role="presentation" onmousedown={startWindowDrag}>
     <div>
       <p>{$translator("focus.timerName")}</p>

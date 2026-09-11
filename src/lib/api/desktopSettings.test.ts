@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ invoke: vi.fn(), register: vi.fn(), unregister: vi.fn() }));
+const mocks = vi.hoisted(() => ({ invoke: vi.fn(), register: vi.fn(), unregister: vi.fn(),
+  enableAutostart: vi.fn(), disableAutostart: vi.fn(), readAutostart: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: mocks.invoke, isTauri: () => true }));
 vi.mock("@tauri-apps/plugin-global-shortcut", () => ({ register: mocks.register, unregister: mocks.unregister }));
 vi.mock("@tauri-apps/plugin-autostart", () => ({
-  enable: vi.fn(), disable: vi.fn(), isEnabled: vi.fn(async () => false),
+  enable: mocks.enableAutostart, disable: mocks.disableAutostart, isEnabled: mocks.readAutostart,
 }));
 
 interface Preference { shortcut: string; enabled: boolean }
@@ -18,6 +19,9 @@ let occupied: string | null;
 beforeEach(() => {
   vi.resetModules();
   vi.clearAllMocks();
+  mocks.enableAutostart.mockReset().mockResolvedValue(undefined);
+  mocks.disableAutostart.mockReset().mockResolvedValue(undefined);
+  mocks.readAutostart.mockReset().mockResolvedValue(false);
   saved = {};
   legacy = new Map();
   registered = new Set();
@@ -46,6 +50,34 @@ beforeEach(() => {
 });
 
 describe("desktop shortcut persistence", () => {
+  it("reports unreadable autostart as an error without changing OS settings or shortcut intent", async () => {
+    saved.note = { shortcut: "Alt+Shift+N", enabled: true };
+    mocks.readAutostart.mockRejectedValue(Error("OS status unavailable"));
+    const settings = await (await import("./desktopSettings")).initializeDesktopSettings();
+    expect(settings.autostartError).toContain("OS status unavailable");
+    expect(settings.noteShortcutEnabled).toBe(true);
+    expect(mocks.enableAutostart).not.toHaveBeenCalled();
+    expect(mocks.disableAutostart).not.toHaveBeenCalled();
+  });
+
+  it("returns the OS readback rather than assuming requested autostart is active", async () => {
+    const api = await import("./desktopSettings");
+    expect(await api.updateAutostart(true)).toBe(false);
+    expect(mocks.enableAutostart).toHaveBeenCalledOnce();
+    mocks.readAutostart.mockResolvedValue(true);
+    expect(await api.updateAutostart(false)).toBe(true);
+    expect(mocks.disableAutostart).toHaveBeenCalledOnce();
+  });
+
+  it("propagates autostart operation and readback failures without claiming success", async () => {
+    const api = await import("./desktopSettings");
+    mocks.enableAutostart.mockRejectedValue(Error("OS denied"));
+    await expect(api.updateAutostart(true)).rejects.toThrow("OS denied");
+    expect(mocks.readAutostart).not.toHaveBeenCalled();
+    mocks.readAutostart.mockRejectedValue(Error("readback failed"));
+    await expect(api.updateAutostart(false)).rejects.toThrow("readback failed");
+  });
+
   it("migrates legacy settings and restores them after a fresh runtime without localStorage", async () => {
     legacy.set("eggdone-note-shortcut", "Alt+Shift+N");
     legacy.set("eggdone-note-shortcut-enabled", "true");

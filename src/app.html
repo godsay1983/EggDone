@@ -8,7 +8,8 @@
     <title>蛋定 Todo</title>
     <script>
       (() => {
-        const savedTheme = localStorage.getItem("eggdone-theme");
+        let savedTheme = null;
+        try { savedTheme = localStorage.getItem("eggdone-theme"); } catch { /* The mounted app reports storage failures. */ }
         const theme =
           savedTheme === "light" || savedTheme === "dark"
             ? savedTheme

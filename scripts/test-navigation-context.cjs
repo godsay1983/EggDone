@@ -13,7 +13,7 @@ const searchContexts={tasks:{query:'',visible:false},notes:{query:'',visible:fal
 let selectedQuadrant='important',selectedAgendaDate='2026-09-12',agendaWeekStartAt=123,agendaWeekVersion=0;
 let agendaDatePickerOpen=false,summaryMenuOpen=false,selectedTodoId=1;
 const clearSmartView=()=>{smartView=null}; const clearBatchSelection=()=>{},cancelDrag=()=>{};
-const startOfAgendaWeek=()=>0,LAST_LIST_VIEW_KEY='last',localStorage={setItem(){}};
+const startOfAgendaWeek=()=>0,LAST_LIST_VIEW_KEY='last',writePreference=()=>true;
 ${fn.getText(ast)}
 return { setListView, query(q,visible=true){searchQuery=q;showSearch=visible},
   state(){return {listView,smartView,searchQuery,showSearch,selectedAgendaDate,selectedQuadrant}},

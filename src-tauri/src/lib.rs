@@ -3,6 +3,7 @@ mod commands;
 mod data_exchange;
 mod db;
 mod error_codes;
+mod general_preferences;
 mod i18n;
 mod note_asset_store;
 mod note_attachment_sync;
@@ -135,6 +136,9 @@ pub fn run() {
             shortcut_preferences::save_shortcut_preference,
             window_preferences::get_window_preferences,
             window_preferences::save_window_preferences,
+            general_preferences::get_general_preferences,
+            general_preferences::initialize_general_preferences,
+            general_preferences::patch_general_preference,
             recurrence_commands::recurrence_editor_context,
             recurrence_commands::save_recurrence_rule,
             recurrence_commands::stop_recurrence_rule,
