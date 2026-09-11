@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ invoke: vi.fn(), register: vi.fn(), unregister: vi.fn(),
+const mocks = vi.hoisted(() => ({ invoke: vi.fn(), register: vi.fn(), unregister: vi.fn(), isRegistered: vi.fn(),
   enableAutostart: vi.fn(), disableAutostart: vi.fn(), readAutostart: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: mocks.invoke, isTauri: () => true }));
-vi.mock("@tauri-apps/plugin-global-shortcut", () => ({ register: mocks.register, unregister: mocks.unregister }));
+vi.mock("@tauri-apps/plugin-global-shortcut", () => ({ register: mocks.register, unregister: mocks.unregister, isRegistered: mocks.isRegistered }));
 vi.mock("@tauri-apps/plugin-autostart", () => ({
   enable: mocks.enableAutostart, disable: mocks.disableAutostart, isEnabled: mocks.readAutostart,
 }));
@@ -25,6 +25,7 @@ beforeEach(() => {
   saved = {};
   legacy = new Map();
   registered = new Set();
+  mocks.isRegistered.mockReset().mockImplementation(async (key: string) => registered.has(key));
   failRead = false;
   failSave = false;
   occupied = null;
@@ -50,11 +51,68 @@ beforeEach(() => {
 });
 
 describe("desktop shortcut persistence", () => {
+  it("refreshes actual status without re-registering or writing preferences", async () => {
+    const api = await import("./desktopSettings");
+    const initial = await api.initializeDesktopSettings();
+    registered.clear();
+    mocks.invoke.mockClear(); mocks.register.mockClear();
+    mocks.readAutostart.mockResolvedValue(true);
+    const current = await api.refreshDesktopSettings();
+    expect(current.shortcutEnabled).toBe(initial.shortcutEnabled);
+    expect(current.shortcutStatus).toBe("inactive");
+    expect(current.autostartStatus).toBe("enabled");
+    expect(mocks.register).not.toHaveBeenCalled();
+    expect(mocks.enableAutostart).not.toHaveBeenCalled();
+    expect(mocks.disableAutostart).not.toHaveBeenCalled();
+    expect(mocks.invoke.mock.calls.every(([command]) => command === "get_shortcut_preference")).toBe(true);
+    await api.updateShortcut(current.shortcut, true, current.shortcut, true);
+    expect((await api.refreshDesktopSettings()).shortcutStatus).toBe("enabled");
+  });
+
+  it("isolates one shortcut read failure and recovers with a read-only refresh", async () => {
+    saved.note = { shortcut: "Alt+Shift+N", enabled: true };
+    mocks.invoke.mockRejectedValueOnce(Error("panel read failed"));
+    const api = await import("./desktopSettings");
+    const initial = await api.initializeDesktopSettings();
+    expect(initial.shortcutPreferenceKnown).toBe(false);
+    expect(initial.noteShortcutStatus).toBe("enabled");
+    expect(initial.autostartStatus).toBe("disabled");
+    mocks.invoke.mockClear(); mocks.register.mockClear();
+    const recovered = await api.refreshDesktopSettings();
+    expect(recovered.shortcutPreferenceKnown).toBe(true);
+    expect(recovered.shortcutStatus).toBe("inactive");
+    expect(mocks.register).not.toHaveBeenCalled();
+    expect(mocks.invoke.mock.calls.every(([command]) => command === "get_shortcut_preference")).toBe(true);
+  });
+
+  it("reports an OS query failure as unknown without clearing saved intent", async () => {
+    const api = await import("./desktopSettings");
+    await api.initializeDesktopSettings();
+    mocks.isRegistered.mockRejectedValueOnce(Error("query failed"));
+    const unknown = await api.refreshDesktopSettings();
+    expect(unknown.shortcutStatus).toBe("unknown");
+    expect(unknown.shortcutPreferenceKnown).toBe(true);
+    expect(unknown.shortcutEnabled).toBe(true);
+    expect(unknown.shortcutError).toContain("query failed");
+    expect((await api.refreshDesktopSettings()).shortcutStatus).toBe("enabled");
+  });
+
+  it("preserves disabled intent when a stale OS registration remains", async () => {
+    const api = await import("./desktopSettings");
+    const initial = await api.initializeDesktopSettings();
+    saved.panel!.enabled = false;
+    const current = await api.refreshDesktopSettings();
+    expect(current.shortcutEnabled).toBe(false);
+    expect(current.shortcutStatus).toBe("enabled");
+    expect(registered.has(initial.shortcut)).toBe(true);
+  });
+
   it("reports unreadable autostart as an error without changing OS settings or shortcut intent", async () => {
     saved.note = { shortcut: "Alt+Shift+N", enabled: true };
     mocks.readAutostart.mockRejectedValue(Error("OS status unavailable"));
     const settings = await (await import("./desktopSettings")).initializeDesktopSettings();
     expect(settings.autostartError).toContain("OS status unavailable");
+    expect(settings.autostartStatus).toBe("unknown");
     expect(settings.noteShortcutEnabled).toBe(true);
     expect(mocks.enableAutostart).not.toHaveBeenCalled();
     expect(mocks.disableAutostart).not.toHaveBeenCalled();
@@ -123,7 +181,11 @@ describe("desktop shortcut persistence", () => {
   it("never replaces a native read failure with defaults", async () => {
     saved.note = { shortcut: "Alt+Shift+N", enabled: true };
     failRead = true;
-    await expect((await import("./desktopSettings")).initializeDesktopSettings()).rejects.toThrow("read failed");
+    const settings = await (await import("./desktopSettings")).initializeDesktopSettings();
+    expect(settings.shortcutPreferenceKnown).toBe(false);
+    expect(settings.noteShortcutPreferenceKnown).toBe(false);
+    expect(settings.shortcutStatus).toBe("unknown");
+    expect(settings.autostartStatus).toBe("disabled");
     expect(mocks.invoke.mock.calls.some(([command]) => command === "save_shortcut_preference")).toBe(false);
     expect(saved.note.enabled).toBe(true);
   });

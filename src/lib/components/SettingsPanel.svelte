@@ -5,6 +5,8 @@
     updateNoteShortcut,
     updateAutostart,
     updateShortcut,
+    refreshDesktopSettings,
+    type CapabilityStatus,
     type DesktopSettings,
   } from "$lib/api/desktopSettings";
   import {
@@ -35,6 +37,12 @@
   export let onDefaultListViewChange: (mode: DefaultListViewMode) => void | Promise<void>;
 
   let busy = false;
+  let mounted = true;
+  const statusLabels: Record<CapabilityStatus, TranslationKey> = {
+    unknown: "settings.capabilityUnknown", enabled: "settings.capabilityEnabled",
+    disabled: "settings.capabilityDisabled", inactive: "settings.capabilityInactive",
+    unsupported: "settings.capabilityUnsupported",
+  };
   let error = settings.shortcutError ?? settings.noteShortcutError ?? settings.autostartError ?? "";
   let focusDurationMinutes = 25;
   let breakDurationMinutes = 5;
@@ -47,7 +55,22 @@
   onMount(() => {
     focusDurationMinutes = getFocusDurationMinutes();
     breakDurationMinutes = getBreakDurationMinutes();
+    void refreshCapabilities();
+    return () => { mounted = false; };
   });
+
+  async function readCapabilities() {
+    const actual = await refreshDesktopSettings();
+    if (mounted) onChange(actual);
+  }
+
+  async function refreshCapabilities() {
+    if (busy || !mounted) return;
+    error = "";
+    busy = true;
+    try { await readCapabilities(); }
+    finally { busy = false; }
+  }
 
   async function setShortcutEnabled(enabled: boolean) {
     await saveShortcut(settings.shortcut, enabled);
@@ -79,6 +102,7 @@
       error = reason instanceof Error ? reason.message : String(reason);
       onChange({ ...previous, shortcutError: error });
     } finally {
+      await readCapabilities();
       busy = false;
     }
   }
@@ -97,6 +121,7 @@
     } catch (reason) {
       error = reason instanceof Error ? reason.message : String(reason);
     } finally {
+      await readCapabilities();
       busy = false;
     }
   }
@@ -112,6 +137,7 @@
       error = reason instanceof Error ? reason.message : String(reason);
       onChange({ ...settings, noteShortcutError: error });
     } finally {
+      await readCapabilities();
       busy = false;
     }
   }
@@ -136,7 +162,28 @@
   }
 </script>
 
+<style>
+  .capability-retry {
+    margin: 6px 0 12px;
+    padding: 8px 14px;
+    border: 1px solid var(--action-border);
+    border-radius: 999px;
+    background: var(--action-bg);
+    color: var(--action-text);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .capability-retry:disabled { opacity: 0.55; cursor: default; }
+  .capability-error { overflow-wrap: anywhere; }
+  .setting-row div > span[role="status"] { font-size: 12px; color: #655943; }
+  :global(html[data-theme="dark"]) .setting-row div > span[role="status"] {
+    color: #dccfb5;
+  }
+</style>
+
 <svelte:window
+  onfocus={() => { void refreshCapabilities(); }}
   onkeydown={(event) => {
     if (event.key === "Escape" && !busy) onClose();
   }}
@@ -187,12 +234,16 @@
       <div>
         <strong>{$translator("settings.shortcutTitle")}</strong>
         <span>{$translator("settings.shortcutHelp")}</span>
+        <span role="status">{$translator(statusLabels[settings.shortcutStatus ?? "unknown"])}</span>
+        {#if settings.shortcutError}<span class="capability-error">{settings.shortcutError}</span>{/if}
       </div>
       <label class="switch">
         <input
           type="checkbox"
+          aria-label={$translator("settings.shortcutTitle")}
+          indeterminate={!settings.shortcutPreferenceKnown}
           checked={settings.shortcutEnabled}
-          disabled={busy}
+          disabled={busy || !settings.shortcutPreferenceKnown || settings.shortcutStatus === "unsupported"}
           onchange={(event) =>
             void setShortcutEnabled(event.currentTarget.checked)}
         />
@@ -204,7 +255,7 @@
       <span>{$translator("settings.shortcutCombination")}</span>
       <select
         value={settings.shortcut}
-        disabled={busy || !settings.shortcutEnabled}
+        disabled={busy || !settings.shortcutPreferenceKnown || !settings.shortcutEnabled || settings.shortcutStatus === "unsupported"}
         onchange={(event) => void setShortcut(event.currentTarget.value)}
       >
         {#each shortcutOptions as option}
@@ -213,41 +264,58 @@
       </select>
     </label>
 
+    {#if settings.shortcutPreferenceKnown && settings.shortcutEnabled && settings.shortcutStatus === "inactive"}
+      <button class="capability-retry" type="button" disabled={busy} onclick={() => saveShortcut(settings.shortcut, true)}>{$translator("settings.capabilityRetryShortcut")}</button>
+    {/if}
+
     <div class="setting-row">
       <div>
         <strong>{$translator("capture.shortcut")}</strong>
         <span>{$translator("capture.pending")}</span>
+        <span role="status">{$translator(statusLabels[settings.noteShortcutStatus ?? "unknown"])}</span>
+        {#if settings.noteShortcutError}<span class="capability-error">{settings.noteShortcutError}</span>{/if}
       </div>
       <label class="switch">
-        <input type="checkbox" checked={settings.noteShortcutEnabled} disabled={busy}
+        <input type="checkbox" aria-label={$translator("capture.shortcut")} indeterminate={!settings.noteShortcutPreferenceKnown} checked={settings.noteShortcutEnabled} disabled={busy || !settings.noteShortcutPreferenceKnown || settings.noteShortcutStatus === "unsupported"}
           onchange={(event) => void saveNoteShortcut(settings.noteShortcut, event.currentTarget.checked)} />
         <span></span>
       </label>
     </div>
     <label class="shortcut-select">
       <span>{$translator("settings.shortcutCombination")}</span>
-      <select value={settings.noteShortcut} disabled={busy || !settings.noteShortcutEnabled}
+      <select value={settings.noteShortcut} disabled={busy || !settings.noteShortcutPreferenceKnown || !settings.noteShortcutEnabled || settings.noteShortcutStatus === "unsupported"}
         onchange={(event) => void saveNoteShortcut(event.currentTarget.value, settings.noteShortcutEnabled)}>
         {#each noteShortcutOptions as option}
           <option value={option.value}>{option.label}</option>
         {/each}
       </select>
     </label>
+    {#if settings.noteShortcutPreferenceKnown && settings.noteShortcutEnabled && settings.noteShortcutStatus === "inactive"}
+      <button class="capability-retry" type="button" disabled={busy} onclick={() => saveNoteShortcut(settings.noteShortcut, true)}>{$translator("settings.capabilityRetryShortcut")}</button>
+    {/if}
     <div class="setting-row">
       <div>
         <strong>{$translator("settings.autostartTitle")}</strong>
         <span>{$translator("settings.autostartHelp")}</span>
+        <span role="status">{$translator(statusLabels[settings.autostartStatus ?? "unknown"])}</span>
+        {#if settings.autostartError}<span class="capability-error">{settings.autostartError}</span>{/if}
       </div>
       <label class="switch">
         <input
           type="checkbox"
           checked={settings.autostartEnabled}
-          disabled={busy}
+          aria-label={$translator("settings.autostartTitle")}
+          indeterminate={settings.autostartStatus === "unknown"}
+          disabled={busy || settings.autostartStatus === "unknown" || settings.autostartStatus === "unsupported"}
           onchange={(event) => void setAutostart(event.currentTarget.checked)}
         />
         <span></span>
       </label>
     </div>
+
+    <button class="capability-retry" type="button" disabled={busy} onclick={refreshCapabilities}>
+      {$translator(busy ? "settings.capabilityChecking" : "settings.capabilityRefresh")}
+    </button>
 
     <label class="preference-select">
       <span>{$translator("settings.defaultView")}</span>

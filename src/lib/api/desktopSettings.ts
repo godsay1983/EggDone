@@ -4,6 +4,7 @@ import { translator } from "$lib/i18n";
 import {
   register,
   unregister,
+  isRegistered,
 } from "@tauri-apps/plugin-global-shortcut";
 import {
   disable as disableAutostart,
@@ -29,7 +30,13 @@ export const shortcutOptions = [
   { value: "CommandOrControl+Shift+E", label: "Ctrl + Shift + E" },
 ] as const;
 
+export type CapabilityStatus = "unknown" | "enabled" | "disabled" | "inactive" | "unsupported";
 export interface DesktopSettings {
+  shortcutPreferenceKnown: boolean;
+  noteShortcutPreferenceKnown: boolean;
+  shortcutStatus: CapabilityStatus;
+  noteShortcutStatus: CapabilityStatus;
+  autostartStatus: CapabilityStatus;
   noteShortcut: string;
   noteShortcutEnabled: boolean;
   noteShortcutError: string | null;
@@ -55,7 +62,7 @@ async function savePreference(kind: ShortcutKind, preference: ShortcutPreference
   localStorage.setItem(kind === "note" ? NOTE_SHORTCUT_ENABLED_KEY : SHORTCUT_ENABLED_KEY, String(preference.enabled));
 }
 
-async function readPreference(kind: ShortcutKind): Promise<ShortcutPreference> {
+async function readPreference(kind: ShortcutKind, migrate = true): Promise<ShortcutPreference> {
   if (isTauri()) {
     const saved = await invoke<ShortcutPreference | null>("get_shortcut_preference", { kind });
     if (saved !== null) return saved;
@@ -69,49 +76,67 @@ async function readPreference(kind: ShortcutKind): Promise<ShortcutPreference> {
   };
   // Migrate the user's intent even if this launch cannot register the shortcut.
   // A native read error propagates instead of overwriting durable settings.
-  await savePreference(kind, preference);
+  if (migrate) await savePreference(kind, preference);
   return preference;
 }
 
 export async function initializeDesktopSettings(): Promise<DesktopSettings> {
-  const panelPreference = await readPreference("panel");
-  const notePreference = await readPreference("note");
-  const { shortcut, enabled: shortcutEnabled } = panelPreference;
-  let shortcutError: string | null = null;
+  return readDesktopSettings(true);
+}
+
+/** Opening settings and returning to the app must never re-enable an OS capability. */
+export async function refreshDesktopSettings(): Promise<DesktopSettings> {
+  return readDesktopSettings(false);
+}
+
+async function readDesktopSettings(initialize: boolean): Promise<DesktopSettings> {
+  const panel = await readShortcutCapability("panel", initialize);
+  const note = await readShortcutCapability("note", initialize);
   let autostartEnabled = false;
+  let autostartStatus: CapabilityStatus = isTauri() ? "unknown" : "unsupported";
   let autostartError: string | null = null;
-  const { shortcut: noteShortcut, enabled: noteShortcutEnabled } = notePreference;
-  let noteShortcutError: string | null = null;
-
-  if (shortcutEnabled) {
+  if (isTauri()) {
     try {
-      await registerShortcut(shortcut);
-    } catch (error) {
-      shortcutError = shortcutErrorMessage(error);
-    }
+      autostartEnabled = await isAutostartEnabled();
+      autostartStatus = autostartEnabled ? "enabled" : "disabled";
+    } catch (error) { autostartError = capabilityReadError(error); }
   }
-
-  try {
-    autostartEnabled = await isAutostartEnabled();
-  } catch (error) {
-    autostartError = settingErrorMessage("无法读取开机启动状态", error);
-  }
-
-  if (noteShortcutEnabled) {
-    try { await registerNoteShortcut(noteShortcut); }
-    catch (error) { noteShortcutError = shortcutErrorMessage(error); }
-  }
-
   return {
-    noteShortcut,
-    noteShortcutEnabled,
-    noteShortcutError,
-    shortcut,
-    shortcutEnabled,
-    autostartEnabled,
-    shortcutError,
-    autostartError,
+    shortcut: panel.shortcut, shortcutEnabled: panel.enabled,
+    shortcutPreferenceKnown: panel.known, shortcutStatus: panel.status, shortcutError: panel.error,
+    noteShortcut: note.shortcut, noteShortcutEnabled: note.enabled,
+    noteShortcutPreferenceKnown: note.known, noteShortcutStatus: note.status, noteShortcutError: note.error,
+    autostartEnabled, autostartStatus, autostartError,
   };
+}
+
+async function readShortcutCapability(kind: ShortcutKind, initialize: boolean) {
+  let preference: ShortcutPreference = {
+    shortcut: (kind === "note" ? noteShortcutOptions : shortcutOptions)[0].value, enabled: false,
+  };
+  let known = false;
+  let status: CapabilityStatus = isTauri() ? "unknown" : "unsupported";
+  let error: string | null = null;
+  try {
+    preference = await readPreference(kind, initialize);
+    known = true;
+  } catch (reason) { error = capabilityReadError(reason); }
+  if (known && isTauri()) {
+    if (initialize && preference.enabled) {
+      try {
+        if (kind === "note") await registerNoteShortcut(preference.shortcut);
+        else await registerShortcut(preference.shortcut);
+      } catch (reason) { error = shortcutErrorMessage(reason); }
+    }
+    try {
+      const registered = await isRegistered(preference.shortcut);
+      status = registered ? "enabled" : preference.enabled ? "inactive" : "disabled";
+      // Drop stale local handles, but do not silently register on refresh.
+      if (!registered && kind === "note" && activeNoteShortcut === preference.shortcut) activeNoteShortcut = null;
+      if (!registered && kind === "panel" && activeShortcut === preference.shortcut) activeShortcut = null;
+    } catch (reason) { error = capabilityReadError(reason); }
+  }
+  return { ...preference, known, status, error };
 }
 
 export async function updateShortcut(
@@ -201,7 +226,7 @@ function shortcutSaveErrorMessage(error: unknown) {
   return get(translator)("settings.shortcutSaveFailed", { detail });
 }
 
-function settingErrorMessage(message: string, error: unknown) {
+function capabilityReadError(error: unknown) {
   const detail = error instanceof Error ? error.message : String(error);
-  return `${message}：${detail}`;
+  return get(translator)("settings.capabilityReadFailed", { detail });
 }

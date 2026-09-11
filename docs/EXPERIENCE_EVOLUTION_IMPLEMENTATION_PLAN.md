@@ -2,7 +2,7 @@
 
 更新：2026-09-11。状态：已整理，按配套 roadmap 分阶段执行。
 
-最新实现至E6b2：桌面通用偏好迁移至本机原生metadata，鸿蒙增加默认视图/筛选持久化；契约、证据及用户验收见[PREFERENCE_PERSISTENCE.md](PREFERENCE_PERSISTENCE.md)。系统能力状态刷新留在E6b3，用户验收未提前完成。
+最新实现至E6b3（2026-09-12）：双端系统状态独立查询、未知/实际启用摘要、用户重试及返回刷新，见[SYSTEM_CAPABILITY_STATUS.md](SYSTEM_CAPABILITY_STATUS.md)。E6b2通用偏好及视图持久化已提交，见[PREFERENCE_PERSISTENCE.md](PREFERENCE_PERSISTENCE.md)；所有未确认的原生验收继续保留，E6c/E7未开始。下文旧阶段状态作为过程记录。
 
 ## 目标与基线
 
