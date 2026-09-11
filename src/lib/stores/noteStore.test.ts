@@ -49,6 +49,103 @@ afterEach(() => {
 });
 
 describe("note store", () => {
+  it("retains failed edits through refresh and retries without typing again", async () => {
+    const note = makeNote(1);
+    const api = createApi([note]);
+    const changed = vi.fn();
+    const store = createNoteStore(api, changed);
+    await store.load();
+    vi.mocked(api.update).mockRejectedValueOnce(new Error('save failed'));
+    store.scheduleUpdate(note, 'retained', 'latest');
+    await expect(store.flushPending()).rejects.toThrow('save failed');
+    expect(get(store).saving).toBe(false);
+    expect(changed).not.toHaveBeenCalled();
+    await store.refresh();
+    expect(get(store).error).toBe('save failed');
+    await store.flushPending();
+    expect(api.update).toHaveBeenCalledTimes(2);
+    expect(get(store).items[0].title).toBe('retained');
+    expect(get(store).error).toBeNull();
+  });
+
+  it("joins in-flight saves and drains newer edits before resolving either flush", async () => {
+    const note = makeNote(1);
+    const api = createApi([note]);
+    let finish!: (note: Note) => void;
+    vi.mocked(api.update).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const store = createNoteStore(api, vi.fn());
+    await store.load();
+    store.scheduleUpdate(note, 'first', 'one');
+    let resolved = false;
+    const first = store.flushPending();
+    const second = store.flushPending().then(() => { resolved = true; });
+    await Promise.resolve();
+    expect(resolved).toBe(false);
+    expect(get(store).saving).toBe(true);
+    store.scheduleUpdate(note, 'last', 'two');
+    finish({ ...note, title: 'first', content: 'one' });
+    await Promise.all([first, second]);
+    expect(api.update).toHaveBeenCalledTimes(2);
+    expect(get(store).items[0].title).toBe('last');
+    expect(get(store).saving).toBe(false);
+  });
+
+  it("keeps different note UUIDs queued independently", async () => {
+    const api = createApi([makeNote(1), makeNote(2)]);
+    const store = createNoteStore(api, vi.fn());
+    await store.load();
+    store.scheduleUpdate(makeNote(1), 'one', 'a');
+    store.scheduleUpdate(makeNote(2), 'two', 'b');
+    await store.flushPending();
+    expect(api.update).toHaveBeenNthCalledWith(1, makeNote(1).uuid, 'one', 'a');
+    expect(api.update).toHaveBeenNthCalledWith(2, makeNote(2).uuid, 'two', 'b');
+  });
+
+  it("cancel does not retry a failed in-flight write", async () => {
+    const note = makeNote(1);
+    const api = createApi([note]);
+    let fail!: (error: Error) => void;
+    vi.mocked(api.update).mockImplementationOnce(() => new Promise((_resolve, reject) => { fail = reject; }));
+    const store = createNoteStore(api, vi.fn());
+    store.scheduleUpdate(note, 'cancelled', 'body');
+    const result = store.flushPending().catch(() => undefined);
+    store.cancelPending();
+    expect(get(store).saving).toBe(true);
+    fail(new Error('failed'));
+    await result;
+    await store.flushPending();
+    expect(api.update).toHaveBeenCalledTimes(1);
+  });
+
+  it("a failed old snapshot never replaces edits typed during that write", async () => {
+    const note = makeNote(1);
+    const api = createApi([note]);
+    let fail!: (error: Error) => void;
+    vi.mocked(api.update).mockImplementationOnce(() => new Promise((_resolve, reject) => { fail = reject; }));
+    const store = createNoteStore(api, vi.fn());
+    await store.load();
+    store.scheduleUpdate(note, 'old', 'a');
+    const result = store.flushPending().catch(() => undefined);
+    store.scheduleUpdate(note, 'new', 'b');
+    fail(new Error('failed'));
+    await result;
+    await store.flushPending();
+    expect(api.update).toHaveBeenLastCalledWith(note.uuid, 'new', 'b');
+    expect(get(store).items[0].title).toBe('new');
+  });
+
+  it("pinning cannot hide an unresolved save failure", async () => {
+    const note = makeNote(1);
+    const api = createApi([note]);
+    vi.mocked(api.update).mockRejectedValue(new Error('failed'));
+    const store = createNoteStore(api, vi.fn());
+    store.scheduleUpdate(note, 'pending', 'body');
+    await expect(store.setPinned(note, true)).rejects.toThrow();
+    expect(api.setPinned).not.toHaveBeenCalled();
+    expect(get(store).error).toBe('failed');
+    store.cancelPending();
+  });
+
   it("loads creates edits and marks local changes dirty", async () => {
     const api = createApi([makeNote(1)]);
     const changed = vi.fn();

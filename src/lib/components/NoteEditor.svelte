@@ -10,8 +10,10 @@
   export let draft = false;
   export let saving = false;
   export let error: string | null = null;
+  export let saveFailed = false;
   export let onChange: (note: Note, title: string, content: string) => void;
-  export let onDone: () => Promise<void>;
+  export let onDone: () => Promise<void | boolean>;
+  export let onRetrySave: () => Promise<void> = async () => {};
   export let onPin: (note: Note, pinned: boolean) => Promise<void>;
   export let onColor: (note: Note, color: NoteColor) => Promise<void>;
   export let onDelete: (note: Note) => Promise<void>;
@@ -235,6 +237,7 @@
   <header>
     <button class="action-button" type="button" aria-busy={saving} onclick={() => void onDone()}>{$translator("common.back")}</button>
     <span>{error ? error : saving ? $translator("note.saving") : draft ? $translator("note.autoSaveHint") : $translator("note.savedLocal")}</span>
+    {#if saveFailed}<button class="action-button" type="button" disabled={saving || attachmentBusy} onclick={() => void onRetrySave()}>{$translator("common.retry")}</button>{/if}
     <input bind:this={imageInput} class="note-file-input" type="file" accept="image/jpeg,image/png,image/webp" multiple onchange={selectImages} />
     <input bind:this={attachmentInput} class="note-file-input" type="file" accept=".pdf,.txt,.md,.markdown,.docx,.xlsx,.pptx,.zip" multiple onchange={selectAttachments} />
     <div class="note-add-control">

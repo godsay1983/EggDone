@@ -248,7 +248,9 @@
   let filterNow = new Date();
   const SMART_VIEW_KEY = "eggdone-smart-view";
   let selectedNoteUuid: string | null = null;
+  let noteNavigationBusy = false;
   let noteDraft: Note | null = null;
+  let noteDraftCreated: Note | null = null;
   let noteDraftSaveTimer: ReturnType<typeof setTimeout> | null = null;
   let noteDraftCreatePromise: Promise<Note | null> | null = null;
   let deletedNote: Note | null = null;
@@ -600,12 +602,12 @@
     cancelDrag();
   }
 
-  function setListView(view: MainView) {
+  async function setListView(view: MainView) {
+    if (listView === 'notes' && view !== 'notes' && !(await closeNoteEditor())) return false;
     if (view === "all" || view === "today" || view === "notes") {
       clearSmartView();
     }
     if (listView === "notes" && view !== "notes") {
-      void closeNoteEditor();
       searchQuery = "";
       showSearch = false;
     }
@@ -624,10 +626,11 @@
     selectedTodoId = null;
     clearBatchSelection();
     cancelDrag();
+    return true;
   }
 
-  function selectSmartView(id: SmartViewId) {
-    setListView("all");
+  async function selectSmartView(id: SmartViewId) {
+    if (!(await setListView("all"))) return;
     smartView = id;
     filterNow = new Date();
     localStorage.setItem(SMART_VIEW_KEY, id);
@@ -656,7 +659,8 @@
   }
 
   async function createNote() {
-    await flushAllNoteChanges();
+    if (noteNavigationBusy || noteAttachmentBusy) return;
+    if (!(await closeNoteEditor())) return;
     const now = Date.now();
     noteDraft = {
       id: 0,
@@ -673,8 +677,8 @@
     selectedNoteUuid = null;
   }
 
-  function openNote(note: Note) {
-    discardNoteDraft();
+  async function openNote(note: Note) {
+    if (selectedNoteUuid === note.uuid || !(await closeNoteEditor())) return;
     selectedNoteUuid = note.uuid;
     void refreshNoteAttachments(note.uuid);
   }
@@ -875,16 +879,19 @@
     notes.scheduleUpdate(note, nextTitle, content);
   }
 
-  async function closeNoteEditor() {
-    if (noteDraft && !hasNoteDraftContent(noteDraft)) {
-      notes.cancelPending();
+  async function closeNoteEditor(): Promise<boolean> {
+    if (noteNavigationBusy || noteAttachmentBusy) return false;
+    noteNavigationBusy = true;
+    try {
+      await flushAllNoteChanges();
       discardNoteDraft();
       selectedNoteUuid = null;
-      return;
+      return true;
+    } catch {
+      return false;
+    } finally {
+      noteNavigationBusy = false;
     }
-    await flushAllNoteChanges();
-    discardNoteDraft();
-    selectedNoteUuid = null;
   }
 
   async function pinNote(note: Note, pinned: boolean) {
@@ -912,6 +919,7 @@
         if (created) await deleteNote(created);
         return;
       }
+      if (noteDraftCreated) await deleteNote(noteDraftCreated);
       discardNoteDraft();
       selectedNoteUuid = null;
       return;
@@ -930,7 +938,7 @@
   function scheduleNoteDraftSave() {
     if (noteDraftSaveTimer) clearTimeout(noteDraftSaveTimer);
     noteDraftSaveTimer = null;
-    if (!noteDraft || !hasNoteDraftContent(noteDraft)) return;
+    if (!noteDraft || (!noteDraftCreated && !hasNoteDraftContent(noteDraft))) return;
     noteDraftSaveTimer = setTimeout(() => {
       noteDraftSaveTimer = null;
       void persistNoteDraft().catch(() => undefined);
@@ -939,7 +947,7 @@
 
   async function persistNoteDraft(): Promise<Note | null> {
     if (noteDraftCreatePromise) return noteDraftCreatePromise;
-    if (!noteDraft || !hasNoteDraftContent(noteDraft)) return null;
+    if (!noteDraft || (!noteDraftCreated && !hasNoteDraftContent(noteDraft))) return null;
 
     const task = createNoteFromDraft(noteDraft);
     noteDraftCreatePromise = task;
@@ -951,28 +959,35 @@
   }
 
   async function createNoteFromDraft(initialDraft: Note): Promise<Note> {
-    let created = await notes.add(
+    let created = noteDraftCreated ?? await notes.add(
       initialDraft.title,
       initialDraft.content,
       initialDraft.color,
     );
-    const latestDraft = noteDraft ?? initialDraft;
-
-    if (
-      latestDraft.title !== created.title ||
-      latestDraft.content !== created.content
-    ) {
-      notes.scheduleUpdate(created, latestDraft.title, latestDraft.content);
-      created = (await notes.flushPending()) ?? created;
-    }
-    if (latestDraft.color !== created.color) {
-      created = await notes.setColor(created, latestDraft.color);
-    }
-    if (latestDraft.pinned !== created.pinned) {
-      created = await notes.setPinned(created, latestDraft.pinned);
+    // Cache the created identity until every draft field has been persisted.
+    noteDraftCreated = created;
+    while (noteDraft) {
+      const latestDraft = noteDraft;
+      if (notes.hasPendingSave() || latestDraft.title !== created.title || latestDraft.content !== created.content) {
+        notes.scheduleUpdate(created, latestDraft.title, latestDraft.content);
+        created = (await notes.flushPending()) ?? created;
+        noteDraftCreated = created;
+      }
+      if (latestDraft.color !== created.color) {
+        created = await notes.setColor(created, latestDraft.color);
+        noteDraftCreated = created;
+      }
+      if (latestDraft.pinned !== created.pinned) {
+        created = await notes.setPinned(created, latestDraft.pinned);
+        noteDraftCreated = created;
+      }
+      noteDraftCreated = created;
+      if (noteDraft === latestDraft) break;
     }
 
     noteDraft = null;
+    noteDraftCreated = null;
+    notes.clearSaveError();
     selectedNoteUuid = created.uuid;
     return created;
   }
@@ -984,7 +999,7 @@
     }
     if (noteDraftCreatePromise) {
       await noteDraftCreatePromise;
-    } else if (noteDraft && hasNoteDraftContent(noteDraft)) {
+    } else if (noteDraft && (noteDraftCreated || hasNoteDraftContent(noteDraft))) {
       await persistNoteDraft();
     }
     await notes.flushPending();
@@ -994,6 +1009,7 @@
     if (noteDraftSaveTimer) clearTimeout(noteDraftSaveTimer);
     noteDraftSaveTimer = null;
     noteDraft = null;
+    noteDraftCreated = null;
   }
 
   async function undoNoteDelete() {
@@ -1118,6 +1134,7 @@
   }
 
   async function focusTodoByUuid(uuid: string) {
+    if (!(await setListView("all"))) return;
     showAbout = false;
     showDataManager = false;
     showSettings = false;
@@ -1125,7 +1142,6 @@
     searchQuery = "";
     showCompleted = true;
     localStorage.setItem("eggdone-show-completed", "true");
-    setListView("all");
     setSelectedGroup("all");
 
     await tick();
@@ -1607,7 +1623,7 @@
     if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === "f") {
       event.preventDefault();
       if (selectedNote) {
-        void closeNoteEditor().then(() => toggleSearch());
+        void closeNoteEditor().then((closed) => { if (closed) void toggleSearch(); });
       } else {
         void toggleSearch();
       }
@@ -1615,7 +1631,7 @@
     }
     if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === "s" && selectedNote) {
       event.preventDefault();
-      void flushAllNoteChanges();
+      void flushAllNoteChanges().catch(() => undefined);
       return;
     }
     if (shouldIgnoreKeyboardNavigation(event)) return;
@@ -2723,8 +2739,10 @@
       draft={selectedNote.uuid === NOTE_DRAFT_UUID}
       saving={noteEditorSaving}
       error={noteAttachmentError || $notes.error}
+      saveFailed={!!$notes.error && (noteDraft !== null || notes.hasPendingSave())}
       onChange={updateNote}
       onDone={closeNoteEditor}
+      onRetrySave={() => flushAllNoteChanges().catch(() => undefined)}
       onPin={pinNote}
       onColor={colorNote}
       onDelete={deleteNote}

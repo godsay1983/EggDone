@@ -41,7 +41,8 @@ export function createNoteStore(
   const store = writable<NoteState>({ ...initialState });
   const { subscribe, update } = store;
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
-  let pendingSave: PendingNoteSave | null = null;
+  const pendingSaves = new Map<string, PendingNoteSave>();
+  let saveInFlight: Promise<Note | null> | null = null;
 
   function markChanged() {
     update((state) => ({
@@ -64,46 +65,63 @@ export function createNoteStore(
   }
 
   async function persistPendingSave(): Promise<Note | null> {
-    const pending = pendingSave;
-    pendingSave = null;
     if (saveTimer) {
       clearTimeout(saveTimer);
       saveTimer = null;
     }
-    if (!pending) {
+    if (saveInFlight) return saveInFlight;
+    if (pendingSaves.size === 0) {
       update((state) => ({ ...state, saving: false }));
       return null;
     }
 
+    update((state) => ({ ...state, saving: true }));
+    const task = drainPendingSaves();
+    saveInFlight = task;
     try {
-      const note = await api.update(
-        pending.note.uuid,
-        pending.title,
-        pending.content,
-      );
-      replaceNote(note);
-      markChanged();
-      return note;
+      return await task;
+    } finally {
+      saveInFlight = null;
+      update((state) => ({ ...state, saving: false }));
+    }
+  }
+
+  async function drainPendingSaves(): Promise<Note | null> {
+    let saved: Note | null = null;
+    try {
+      while (pendingSaves.size > 0) {
+        const pending = pendingSaves.values().next().value!;
+        saved = await api.update(pending.note.uuid, pending.title, pending.content);
+        // A newer edit replaces the queued snapshot, not the in-flight write.
+        if (pendingSaves.get(pending.note.uuid) === pending) pendingSaves.delete(pending.note.uuid);
+        replaceNote(saved);
+        markChanged();
+      }
+      return saved;
     } catch (error) {
+      if (saveTimer) clearTimeout(saveTimer);
+      saveTimer = null;
       update((state) => ({ ...state, error: errorMessage(error) }));
       throw error;
-    } finally {
-      update((state) => ({ ...state, saving: pendingSave !== null }));
     }
   }
 
   return {
+    hasPendingSave: () => pendingSaves.size > 0,
+    clearSaveError() {
+      if (pendingSaves.size === 0) update((state) => ({ ...state, error: null }));
+    },
     subscribe,
 
     async load() {
-      update((state) => ({ ...state, loading: true, error: null }));
+      update((state) => ({ ...state, loading: true, error: pendingSaves.size > 0 ? state.error : null }));
       try {
         const items = await api.list();
         update((state) => ({
           ...state,
           items: [...items].sort(sortNotes),
           loading: false,
-          error: null,
+          error: pendingSaves.size > 0 ? state.error : null,
         }));
       } catch (error) {
         update((state) => ({
@@ -120,7 +138,7 @@ export function createNoteStore(
         update((state) => ({
           ...state,
           items: [...items].sort(sortNotes),
-          error: null,
+          error: pendingSaves.size > 0 ? state.error : null,
         }));
       } catch (error) {
         update((state) => ({ ...state, error: errorMessage(error) }));
@@ -144,7 +162,7 @@ export function createNoteStore(
     },
 
     scheduleUpdate(note: Note, title: string, content: string) {
-      pendingSave = { note, title, content };
+      pendingSaves.set(note.uuid, { note, title, content });
       if (saveTimer) clearTimeout(saveTimer);
       update((state) => ({ ...state, saving: true, error: null }));
       saveTimer = setTimeout(() => {
@@ -158,11 +176,12 @@ export function createNoteStore(
     cancelPending() {
       if (saveTimer) clearTimeout(saveTimer);
       saveTimer = null;
-      pendingSave = null;
-      update((state) => ({ ...state, saving: false }));
+      pendingSaves.clear();
+      update((state) => ({ ...state, saving: saveInFlight !== null }));
     },
 
     async setPinned(note: Note, pinned: boolean) {
+      await persistPendingSave();
       try {
         const updatedNote = await api.setPinned(note.uuid, pinned);
         replaceNote(updatedNote);
@@ -175,6 +194,7 @@ export function createNoteStore(
     },
 
     async setColor(note: Note, color: NoteColor) {
+      await persistPendingSave();
       try {
         const updatedNote = await api.setColor(note.uuid, color);
         replaceNote(updatedNote);
