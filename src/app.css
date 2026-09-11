@@ -1,3 +1,5 @@
+@import "./lib/styles/actions.css";
+
 :root {
   font-family:
     "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
@@ -1056,34 +1058,15 @@ html[data-theme="dark"] .summary-menu hr { border-color: #665742; }
 
 .note-card-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   justify-content: flex-end;
   padding: 0 8px 8px;
 }
 
-.note-card-actions button,
-.note-editor header button,
-.note-editor footer > button {
-  padding: 4px 7px;
-  border: 0;
-  border-radius: 8px;
-  color: #86755d;
-  background: rgb(255 255 255 / 52%);
-  font-size: 10px;
-  cursor: pointer;
-}
-
 .note-card-actions button.danger,
 .note-editor button.danger {
   color: #a15f52;
-}
-
-.note-card-actions button,
-.note-editor header button,
-.note-editor footer > button {
-  border: 1px solid #d9c5a5;
-  color: #5a4632;
-  background: #f3e8d2;
 }
 
 .note-card-actions button.danger,
@@ -1093,22 +1076,9 @@ html[data-theme="dark"] .summary-menu hr { border-color: #665742; }
   background: #fbe5df;
 }
 
-.note-card-actions button:hover,
-.note-editor header button:hover,
-.note-editor footer > button:hover {
-  background: #ead9b8;
-}
-
 .note-card-actions button.danger:hover,
 .note-editor button.danger:hover {
   background: #f4d3cc;
-}
-
-.note-card-actions button:focus-visible,
-.note-editor header button:focus-visible,
-.note-editor footer > button:focus-visible {
-  outline: 2px solid #8d6b22;
-  outline-offset: 2px;
 }
 
 .note-color-picker {
@@ -1162,30 +1132,21 @@ html[data-theme="dark"] .summary-menu hr { border-color: #665742; }
 .note-editor header,
 .note-editor footer {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
 }
 
 .note-editor header span {
-  min-width: 0;
+  min-width: 40px;
   flex: 1;
   overflow: hidden;
-  color: #93846d;
-  font-size: 10px;
+  color: var(--action-text);
+  font-size: 12px;
   text-align: center;
   text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.note-editor header button.primary {
-  border-color: #e1aa30;
-  color: #3b2f24;
-  background: #f6b93b;
-}
-
-.note-editor header button.primary:hover {
-  background: #edac2f;
+  white-space: normal;
 }
 
 .note-file-input {
@@ -1193,11 +1154,7 @@ html[data-theme="dark"] .summary-menu hr { border-color: #665742; }
 }
 
 .note-editor header button.attachment-trigger {
-  width: 44px;
-  height: 28px;
-  padding: 0 5px;
-  font-size: 10px;
-  line-height: 1;
+  min-width: 44px;
 }
 
 .note-add-control {
@@ -1207,7 +1164,7 @@ html[data-theme="dark"] .summary-menu hr { border-color: #665742; }
 .note-add-menu {
   position: absolute;
   z-index: 4;
-  top: 34px;
+  top: calc(100% + 6px);
   right: 0;
   display: grid;
   width: 96px;
@@ -1221,7 +1178,7 @@ html[data-theme="dark"] .summary-menu hr { border-color: #665742; }
 
 .note-editor header .note-add-menu button {
   width: 100%;
-  height: 30px;
+  height: auto;
 }
 
 .note-editor > input,
@@ -2287,8 +2244,7 @@ html[data-theme="dark"] .summary-menu hr { border-color: #665742; }
 }
 
 .schedule-actions button,
-.schedule-time-actions button,
-.schedule-footer button {
+.schedule-time-actions button {
   padding: 5px 8px;
   border: 0;
   border-radius: 8px;
@@ -2299,8 +2255,7 @@ html[data-theme="dark"] .summary-menu hr { border-color: #665742; }
 }
 
 .schedule-actions button:hover,
-.schedule-time-actions button:hover,
-.schedule-footer button:hover {
+.schedule-time-actions button:hover {
   color: #5f4c1e;
   background: #f6c94c;
 }
@@ -2362,15 +2317,10 @@ html[data-theme="dark"] .summary-menu hr { border-color: #665742; }
 
 .schedule-footer {
   justify-content: flex-end;
+  flex-wrap: wrap;
 }
 
-.schedule-footer button:last-child {
-  color: #5f4c1e;
-  background: #f6c94c;
-  font-weight: 700;
-}
-
-.schedule-popover button:disabled,
+.schedule-popover button:not(.action-button):disabled,
 .schedule-popover input:disabled,
 .schedule-popover select:disabled {
   cursor: wait;
@@ -2434,32 +2384,11 @@ html[data-theme="dark"] .summary-menu hr { border-color: #665742; }
 
 .note-footer div {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
-.note-footer button {
-  padding: 5px 8px;
-  border: 0;
-  border-radius: 8px;
-  color: #6f6048;
-  background: #f0eadf;
-  font-size: 10px;
-  cursor: pointer;
-}
-
-.note-footer button:hover {
-  color: #5f4c1e;
-  background: #f6c94c;
-}
-
-.note-footer button:last-child {
-  color: #5f4c1e;
-  background: #f6c94c;
-  font-weight: 700;
-}
-
-.note-popover textarea:disabled,
-.note-footer button:disabled {
+.note-popover textarea:disabled {
   cursor: wait;
   opacity: 0.55;
 }
@@ -2888,7 +2817,7 @@ footer {
   font-size: 10px;
 }
 
-footer button {
+footer button:not(.action-button) {
   border: 0;
   color: #9e8e76;
   background: transparent;
@@ -4834,17 +4763,14 @@ html[data-theme="dark"] .schedule-popover strong {
 }
 
 html[data-theme="dark"] .schedule-actions button,
-html[data-theme="dark"] .schedule-time-actions button,
-html[data-theme="dark"] .schedule-footer button {
+html[data-theme="dark"] .schedule-time-actions button {
   color: #cfc4b3;
   background: #454038;
 }
 
 html[data-theme="dark"] .schedule-actions button:hover,
 html[data-theme="dark"] .schedule-time-actions button:hover,
-html[data-theme="dark"] .schedule-time-actions button.active,
-html[data-theme="dark"] .schedule-footer button:hover,
-html[data-theme="dark"] .schedule-footer button:last-child {
+html[data-theme="dark"] .schedule-time-actions button.active {
   color: #352c17;
   background: #d8ae3c;
 }
@@ -4889,17 +4815,6 @@ html[data-theme="dark"] .note-popover textarea {
 html[data-theme="dark"] .note-popover textarea:focus {
   border-color: #aa8735;
   box-shadow: 0 0 0 2px rgb(246 201 76 / 10%);
-}
-
-html[data-theme="dark"] .note-footer button {
-  color: #cfc4b3;
-  background: #454038;
-}
-
-html[data-theme="dark"] .note-footer button:hover,
-html[data-theme="dark"] .note-footer button:last-child {
-  color: #352c17;
-  background: #d8ae3c;
 }
 
 html[data-theme="dark"] .note-footer small {
@@ -5029,7 +4944,7 @@ html[data-theme="dark"] footer {
   color: #817768;
 }
 
-html[data-theme="dark"] footer button {
+html[data-theme="dark"] footer button:not(.action-button) {
   color: #aaa08f;
 }
 
@@ -5593,14 +5508,6 @@ html[data-theme="dark"] .note-image-viewer .viewer-close:hover {
   }
 }
 
-html[data-theme="dark"] .note-card-actions button,
-html[data-theme="dark"] .note-editor header button,
-html[data-theme="dark"] .note-editor footer > button {
-  border-color: #6c5947;
-  color: #fff1d6;
-  background: #4a3d31;
-}
-
 html[data-theme="dark"] .note-card-actions button.danger,
 html[data-theme="dark"] .note-editor button.danger {
   border-color: #7a4640;
@@ -5608,31 +5515,9 @@ html[data-theme="dark"] .note-editor button.danger {
   background: #5a312d;
 }
 
-html[data-theme="dark"] .note-card-actions button:hover,
-html[data-theme="dark"] .note-editor header button:hover,
-html[data-theme="dark"] .note-editor footer > button:hover {
-  background: #5b4b3d;
-}
-
 html[data-theme="dark"] .note-card-actions button.danger:hover,
 html[data-theme="dark"] .note-editor button.danger:hover {
   background: #6b3a34;
-}
-
-html[data-theme="dark"] .note-card-actions button:focus-visible,
-html[data-theme="dark"] .note-editor header button:focus-visible,
-html[data-theme="dark"] .note-editor footer > button:focus-visible {
-  outline-color: #f6c15a;
-}
-
-html[data-theme="dark"] .note-editor header button.primary {
-  border-color: #c59632;
-  color: #3b2f24;
-  background: #f6c15a;
-}
-
-html[data-theme="dark"] .note-editor header button.primary:hover {
-  background: #e8b348;
 }
 
 html[data-theme="dark"] .note-card > .note-color-picker {

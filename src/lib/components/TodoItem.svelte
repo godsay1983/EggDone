@@ -668,8 +668,8 @@
             <button type="button" disabled={scheduleSaving} onclick={openRecurrence}>{$translator("recurrence.title")}</button>
           </div>
           <div class="schedule-footer">
-            <button type="button" disabled={scheduleSaving} onclick={() => void setSchedule(null)}>{$translator("common.clear")}</button>
-            <button type="button" disabled={scheduleSaving || !canSaveSchedule} onclick={() => void setSchedule(customDate)}>{$translator("common.save")}</button>
+            <button class="action-button" type="button" disabled={scheduleSaving} onclick={() => void setSchedule(null)}>{$translator("common.clear")}</button>
+            <button class="action-button" type="button" aria-busy={scheduleSaving} disabled={scheduleSaving || !canSaveSchedule} data-tone="primary" onclick={() => void setSchedule(customDate)}>{$translator("common.save")}</button>
           </div>
           {#if scheduleError}<small>{scheduleError}</small>{/if}
         </div>
@@ -689,7 +689,7 @@
           <div class="note-footer">
             <small>{noteDraft.length}/1000</small>
             <div>
-              <button
+              <button class="action-button"
                 type="button"
                 disabled={noteSaving}
                 onclick={() => {
@@ -697,10 +697,10 @@
                   noteError = "";
                 }}>{$translator("common.cancel")}</button
               >
-              <button
+              <button class="action-button"
                 type="button"
                 disabled={noteSaving}
-                onclick={() => void saveNote()}>{$translator("common.save")}</button
+                data-tone="primary" aria-busy={noteSaving} onclick={() => void saveNote()}>{$translator("common.save")}</button
               >
             </div>
           </div>

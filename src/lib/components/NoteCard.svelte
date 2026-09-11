@@ -63,11 +63,11 @@
     <small>{formatDate(note.updated_at, { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }, $languageState.resolvedLocale)}</small>
   </button>
   <div class="note-card-actions">
-    <button type="button" title={note.pinned ? $translator("note.unpin") : $translator("note.pin")} onclick={() => void onPin(note, !note.pinned)}>
+    <button class="action-button" type="button" title={note.pinned ? $translator("note.unpin") : $translator("note.pin")} onclick={() => void onPin(note, !note.pinned)}>
       {note.pinned ? $translator("note.unpin") : $translator("note.pin")}
     </button>
-    <button type="button" aria-expanded={menuOpen} onclick={() => (menuOpen = !menuOpen)}>{$translator("note.changeColor")}</button>
-    <button class="danger" type="button" onclick={() => void onDelete(note)}>{$translator("common.delete")}</button>
+    <button class="action-button" type="button" aria-expanded={menuOpen} onclick={() => (menuOpen = !menuOpen)}>{$translator("note.changeColor")}</button>
+    <button class="action-button" data-tone="danger" type="button" onclick={() => void onDelete(note)}>{$translator("common.delete")}</button>
   </div>
   {#if menuOpen}
     <div class="note-color-picker" aria-label={$translator("note.color")}>

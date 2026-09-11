@@ -233,13 +233,13 @@
   ondrop={dropAttachments}
 >
   <header>
-    <button type="button" onclick={() => void onDone()}>{$translator("common.back")}</button>
+    <button class="action-button" type="button" aria-busy={saving} onclick={() => void onDone()}>{$translator("common.back")}</button>
     <span>{error ? error : saving ? $translator("note.saving") : draft ? $translator("note.autoSaveHint") : $translator("note.savedLocal")}</span>
     <input bind:this={imageInput} class="note-file-input" type="file" accept="image/jpeg,image/png,image/webp" multiple onchange={selectImages} />
     <input bind:this={attachmentInput} class="note-file-input" type="file" accept=".pdf,.txt,.md,.markdown,.docx,.xlsx,.pptx,.zip" multiple onchange={selectAttachments} />
     <div class="note-add-control">
       <button
-        class="attachment-trigger"
+        class="action-button attachment-trigger"
         type="button"
         aria-expanded={addMenuOpen}
         disabled={attachmentBusy}
@@ -247,12 +247,12 @@
       >{$translator("attachment.add")}</button>
       {#if addMenuOpen}
         <div class="note-add-menu">
-          <button type="button" onclick={() => { addMenuOpen = false; imageInput.click(); }}>{$translator("attachment.addImage")}</button>
-          <button type="button" onclick={() => { addMenuOpen = false; attachmentInput.click(); }}>{$translator("attachment.addFile")}</button>
+          <button class="action-button" type="button" onclick={() => { addMenuOpen = false; imageInput.click(); }}>{$translator("attachment.addImage")}</button>
+          <button class="action-button" type="button" onclick={() => { addMenuOpen = false; attachmentInput.click(); }}>{$translator("attachment.addFile")}</button>
         </div>
       {/if}
     </div>
-    <button class="primary" type="button" onclick={() => void onDone()}>{$translator("common.done")}</button>
+    <button class="action-button" data-tone="primary" type="button" aria-busy={saving} onclick={() => void onDone()}>{$translator("common.done")}</button>
   </header>
   <input
     bind:this={titleInput}
@@ -305,8 +305,8 @@
         ></button>
       {/each}
     </div>
-    <button type="button" onclick={() => void onPin(note, !note.pinned)}>{note.pinned ? $translator("note.unpin") : $translator("note.pin")}</button>
-    <button class="danger" type="button" onclick={() => void onDelete(note)}>{draft ? $translator("note.discard") : $translator("common.delete")}</button>
+    <button class="action-button" type="button" onclick={() => void onPin(note, !note.pinned)}>{note.pinned ? $translator("note.unpin") : $translator("note.pin")}</button>
+    <button class="action-button" data-tone="danger" type="button" onclick={() => void onDelete(note)}>{draft ? $translator("note.discard") : $translator("common.delete")}</button>
   </footer>
 </section>
 

@@ -1,0 +1,38 @@
+{
+  "light": {
+    "normal": {
+      "background": "#F3E8D2",
+      "text": "#5A4632"
+    },
+    "primary": {
+      "background": "#F6B93B",
+      "text": "#3B2F24"
+    },
+    "danger": {
+      "background": "#FBE5DF",
+      "text": "#8B2F27"
+    },
+    "disabled": {
+      "background": "#E7E4DE",
+      "text": "#625B51"
+    }
+  },
+  "dark": {
+    "normal": {
+      "background": "#4A3D31",
+      "text": "#FFF1D6"
+    },
+    "primary": {
+      "background": "#F6C15A",
+      "text": "#3B2F24"
+    },
+    "danger": {
+      "background": "#5A312D",
+      "text": "#FFD6CF"
+    },
+    "disabled": {
+      "background": "#3A3732",
+      "text": "#BCB4A6"
+    }
+  }
+}
