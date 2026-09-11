@@ -1,0 +1,277 @@
+{
+  "cases": [
+    {
+      "id": "failed upload",
+      "input": {
+        "state": "failed",
+        "remoteUploaded": false,
+        "hasOriginal": true,
+        "hasPreview": false,
+        "hasRemotePreview": true,
+        "isImage": true
+      },
+      "status": "upload_failed",
+      "retry": "upload"
+    },
+    {
+      "id": "failed download",
+      "input": {
+        "state": "failed",
+        "remoteUploaded": true,
+        "hasOriginal": false,
+        "hasPreview": true,
+        "hasRemotePreview": true,
+        "isImage": true
+      },
+      "status": "download_failed",
+      "retry": "original"
+    },
+    {
+      "id": "failed preview",
+      "input": {
+        "state": "failed",
+        "remoteUploaded": true,
+        "hasOriginal": false,
+        "hasPreview": false,
+        "hasRemotePreview": true,
+        "isImage": true
+      },
+      "status": "download_failed",
+      "retry": "preview"
+    },
+    {
+      "id": "no remote preview",
+      "input": {
+        "state": "failed",
+        "remoteUploaded": true,
+        "hasOriginal": false,
+        "hasPreview": false,
+        "hasRemotePreview": false,
+        "isImage": true
+      },
+      "status": "download_failed",
+      "retry": "original"
+    },
+    {
+      "id": "file download",
+      "input": {
+        "state": "failed",
+        "remoteUploaded": true,
+        "hasOriginal": false,
+        "hasPreview": false,
+        "hasRemotePreview": true,
+        "isImage": false
+      },
+      "status": "download_failed",
+      "retry": "original"
+    },
+    {
+      "id": "local queued",
+      "input": {
+        "state": "pending_upload",
+        "remoteUploaded": false,
+        "hasOriginal": true,
+        "hasPreview": false,
+        "hasRemotePreview": true,
+        "isImage": true
+      },
+      "status": "pending_upload",
+      "retry": "upload"
+    },
+    {
+      "id": "upload running",
+      "input": {
+        "state": "uploading",
+        "remoteUploaded": false,
+        "hasOriginal": false,
+        "hasPreview": false,
+        "hasRemotePreview": true,
+        "isImage": true
+      },
+      "status": "uploading",
+      "retry": "upload"
+    },
+    {
+      "id": "metadata pending",
+      "input": {
+        "state": "uploaded",
+        "remoteUploaded": true,
+        "hasOriginal": true,
+        "hasPreview": false,
+        "hasRemotePreview": true,
+        "isImage": true
+      },
+      "status": "metadata_pending",
+      "retry": "preview"
+    },
+    {
+      "id": "download running",
+      "input": {
+        "state": "downloading",
+        "remoteUploaded": true,
+        "hasOriginal": false,
+        "hasPreview": false,
+        "hasRemotePreview": true,
+        "isImage": true
+      },
+      "status": "downloading",
+      "retry": "preview"
+    },
+    {
+      "id": "preview cached",
+      "input": {
+        "state": "cached",
+        "remoteUploaded": true,
+        "hasOriginal": false,
+        "hasPreview": true,
+        "hasRemotePreview": true,
+        "isImage": true
+      },
+      "status": "preview_ready",
+      "retry": "original"
+    },
+    {
+      "id": "remote preview",
+      "input": {
+        "state": "remote_only",
+        "remoteUploaded": true,
+        "hasOriginal": false,
+        "hasPreview": true,
+        "hasRemotePreview": true,
+        "isImage": true
+      },
+      "status": "preview_ready",
+      "retry": "original"
+    },
+    {
+      "id": "synced preview",
+      "input": {
+        "state": "synced",
+        "remoteUploaded": true,
+        "hasOriginal": false,
+        "hasPreview": true,
+        "hasRemotePreview": true,
+        "isImage": true
+      },
+      "status": "preview_ready",
+      "retry": "original"
+    },
+    {
+      "id": "remote original missing",
+      "input": {
+        "state": "remote_only",
+        "remoteUploaded": true,
+        "hasOriginal": false,
+        "hasPreview": false,
+        "hasRemotePreview": true,
+        "isImage": false
+      },
+      "status": "download_needed",
+      "retry": "original"
+    },
+    {
+      "id": "cached original missing",
+      "input": {
+        "state": "cached",
+        "remoteUploaded": true,
+        "hasOriginal": false,
+        "hasPreview": false,
+        "hasRemotePreview": true,
+        "isImage": false
+      },
+      "status": "download_needed",
+      "retry": "original"
+    },
+    {
+      "id": "original cached",
+      "input": {
+        "state": "cached",
+        "remoteUploaded": true,
+        "hasOriginal": true,
+        "hasPreview": true,
+        "hasRemotePreview": true,
+        "isImage": true
+      },
+      "status": "available",
+      "retry": "original"
+    },
+    {
+      "id": "original synced",
+      "input": {
+        "state": "synced",
+        "remoteUploaded": true,
+        "hasOriginal": true,
+        "hasPreview": false,
+        "hasRemotePreview": true,
+        "isImage": false
+      },
+      "status": "available",
+      "retry": "original"
+    },
+    {
+      "id": "unknown state",
+      "input": {
+        "state": "future_state",
+        "remoteUploaded": true,
+        "hasOriginal": true,
+        "hasPreview": false,
+        "hasRemotePreview": true,
+        "isImage": true
+      },
+      "status": "unknown",
+      "retry": "preview"
+    },
+    {
+      "id": "unconfirmed remote",
+      "input": {
+        "state": "synced",
+        "remoteUploaded": false,
+        "hasOriginal": true,
+        "hasPreview": false,
+        "hasRemotePreview": true,
+        "isImage": true
+      },
+      "status": "unknown",
+      "retry": "upload"
+    },
+    {
+      "id": "failure overrides cache",
+      "input": {
+        "state": "failed",
+        "remoteUploaded": true,
+        "hasOriginal": true,
+        "hasPreview": true,
+        "hasRemotePreview": true,
+        "isImage": true
+      },
+      "status": "download_failed",
+      "retry": "original"
+    }
+  ],
+  "reasons": [
+    {
+      "error": "HTTP 403 AccessDenied",
+      "reason": "permission"
+    },
+    {
+      "error": "SHA256 mismatch",
+      "reason": "integrity"
+    },
+    {
+      "error": "NoSuchKey",
+      "reason": "missing"
+    },
+    {
+      "error": "Network timeout",
+      "reason": "network"
+    },
+    {
+      "error": "private-url?secret=example",
+      "reason": "unknown"
+    },
+    {
+      "error": null,
+      "reason": "unknown"
+    }
+  ]
+}

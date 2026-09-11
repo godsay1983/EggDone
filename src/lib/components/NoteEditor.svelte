@@ -4,6 +4,7 @@
   import { formatFileSize } from "$lib/i18n/formatters";
   import { localizedErrorMessage } from "$lib/i18n/errors";
   import type { Note, NoteAttachment, NoteColor } from "$lib/types";
+  import { attachmentStatus, attachmentFailureHint } from "$lib/utils/attachmentPresentation";
 
   export let note: Note;
   export let draft = false;
@@ -158,20 +159,69 @@
     return $translator("note.filesCount", { count: fileAttachments.length });
   }
 
+  function attachmentPresentationInput(attachment: NoteAttachment) {
+    return {
+      state: attachment.transfer_state, remoteUploaded: attachment.remote_uploaded,
+      hasOriginal: attachment.local_original_path !== null, hasPreview: attachment.local_preview_path !== null,
+      hasRemotePreview: attachment.preview_sha256 !== null && attachment.preview_byte_size !== null,
+      isImage: attachment.kind === "image",
+    };
+  }
   function attachmentState(attachment: NoteAttachment) {
-    if (attachment.transfer_state === "failed") return $translator("attachment.failed");
-    if (attachment.transfer_state === "downloading") return $translator("attachment.downloading");
-    if (attachment.transfer_state === "cached") return $translator("attachment.cached");
-    if (attachment.transfer_state === "uploading") return $translator("attachment.uploading");
-    if (attachment.transfer_state === "pending_upload") return $translator("attachment.pendingUpload");
-    if (attachment.transfer_state === "remote_only") return $translator("attachment.needsDownload");
-    return $translator("attachment.synced");
+    return $translator(`attachment.state.${attachmentStatus(attachmentPresentationInput(attachment))}`);
+  }
+  function attachmentHint(attachment: NoteAttachment) {
+    const state = attachmentStatus(attachmentPresentationInput(attachment));
+    if (state === "available" || state === "uploading" || state === "downloading") return "";
+    const hint = $translator(`attachment.state.hint_${state}`);
+    return state === "upload_failed" || state === "download_failed"
+      ? $translator(`attachment.state.reason_${attachmentFailureHint(attachment.transfer_error)}`) + " " + hint : hint;
+  }
+  function attachmentRetryLabel(attachment: NoteAttachment) {
+    return $translator(attachment.remote_uploaded ? "attachment.state.retry_download" : "attachment.state.retry_upload");
   }
 
   function colorName(color: NoteColor) {
     return $translator(`note.color${color === "default" ? "Default" : color[0].toUpperCase() + color.slice(1)}` as TranslationKey);
   }
 </script>
+
+<style>
+  .attachment-state-hint {
+    margin: 4px 6px 8px;
+    font-size: 11px;
+    line-height: 1.5;
+    color: inherit;
+    overflow-wrap: anywhere;
+  }
+  .note-attachment-grid article > div {
+    flex-wrap: wrap;
+  }
+  .note-attachment-grid small {
+    flex-basis: 80px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .note-attachment-grid article > div button {
+    height: auto;
+    min-height: 22px;
+    white-space: normal;
+  }
+  .note-file-list article {
+    flex-wrap: wrap;
+  }
+  .note-file-info {
+    flex: 1 1 130px;
+  }
+  .note-file-info small {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .note-file-info .attachment-state-hint {
+    margin-left: 0;
+    margin-right: 0;
+  }
+</style>
 
 <svelte:window onkeydown={handleViewerKeydown} />
 
@@ -295,15 +345,16 @@
                     {/if}
                   </button>
                   <div>
-                    <small title={attachment.transfer_error ?? attachment.display_name}>{attachmentState(attachment)}</small>
+                    <small title={attachmentHint(attachment)}>{attachmentState(attachment)}</small>
                     {#if attachment.transfer_state === "failed"}
-                      <button type="button" disabled={attachmentBusy} onclick={() => void onRetryAttachment(attachment)}>{$translator("attachment.retry")}</button>
+                      <button type="button" disabled={attachmentBusy} onclick={() => void onRetryAttachment(attachment)}>{attachmentRetryLabel(attachment)}</button>
                     {:else}
                       <button class="attachment-order-button" type="button" title={$translator("attachment.moveForward")} aria-label={$translator("attachment.moveForward")} disabled={attachmentBusy || index <= 0} onclick={() => void onMoveAttachment(attachment, -1)}>←</button>
                       <button class="attachment-order-button" type="button" title={$translator("attachment.moveBackward")} aria-label={$translator("attachment.moveBackward")} disabled={attachmentBusy || index >= attachmentKindCount(attachment) - 1} onclick={() => void onMoveAttachment(attachment, 1)}>→</button>
                     {/if}
                     <button class="danger" type="button" disabled={attachmentBusy} onclick={() => void onDeleteAttachment(attachment)}>{$translator("common.delete")}</button>
                   </div>
+                  {#if attachmentHint(attachment)}<p class="attachment-state-hint">{attachmentHint(attachment)}</p>{/if}
                 </article>
               {/each}
             </div>
@@ -319,10 +370,11 @@
                   <span class="note-file-kind" aria-hidden="true">{fileKind(attachment)}</span>
                   <div class="note-file-info">
                     <strong title={attachment.display_name}>{attachment.display_name}</strong>
-                    <small title={attachment.transfer_error ?? attachment.display_name}>{formatFileSize(attachment.byte_size, $languageState.resolvedLocale)} · {attachmentState(attachment)}</small>
+                    <small title={attachmentHint(attachment)}>{formatFileSize(attachment.byte_size, $languageState.resolvedLocale)} · {attachmentState(attachment)}</small>
+                    {#if attachmentHint(attachment)}<p class="attachment-state-hint">{attachmentHint(attachment)}</p>{/if}
                   </div>
                   {#if attachment.transfer_state === "failed"}
-                    <button type="button" disabled={attachmentBusy} onclick={() => void onRetryAttachment(attachment)}>{$translator("attachment.retry")}</button>
+                    <button type="button" disabled={attachmentBusy} onclick={() => void onRetryAttachment(attachment)}>{attachmentRetryLabel(attachment)}</button>
                   {:else}
                     <button type="button" disabled={attachmentBusy} onclick={() => void openFile(attachment)}>{$translator("attachment.open")}</button>
                     <button type="button" disabled={attachmentBusy} onclick={() => void saveAttachment(attachment)}>{$translator("attachment.save")}</button>

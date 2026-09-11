@@ -23,6 +23,7 @@
   } from "$lib/stores/todoStore";
   import { notes, visibleNotes } from "$lib/stores/noteStore";
   import { noteAttachmentApi } from "$lib/api/noteAttachmentApi";
+  import { attachmentRetry } from "$lib/utils/attachmentPresentation";
   import {
     initializeAutoSync,
     scheduleAutoSync,
@@ -809,27 +810,36 @@
   }
 
   async function retryNoteAttachment(attachment: NoteAttachment) {
+    if (noteAttachmentBusy) return;
+    noteAttachmentBusy = true;
     noteAttachmentError = "";
     try {
-      if (attachment.remote_uploaded) {
-        await noteAttachmentApi.retry(attachment.uuid);
-        if (attachment.kind === "image" && attachment.local_preview_path === null) {
-          const url = await noteAttachmentApi.previewUrl(attachment);
+      const updated = await noteAttachmentApi.retry(attachment.uuid);
+      const retry = attachmentRetry({
+        state: updated.transfer_state, remoteUploaded: updated.remote_uploaded,
+        hasOriginal: updated.local_original_path !== null, hasPreview: updated.local_preview_path !== null,
+        hasRemotePreview: updated.preview_sha256 !== null && updated.preview_byte_size !== null,
+        isImage: updated.kind === "image",
+      });
+      if (retry !== "upload") {
+        if (retry === "preview") {
+          const url = await noteAttachmentApi.previewUrl(updated);
           const previous = noteAttachmentPreviewUrls[attachment.uuid];
           if (previous) URL.revokeObjectURL(previous);
           noteAttachmentPreviewUrls = { ...noteAttachmentPreviewUrls, [attachment.uuid]: url };
         } else {
-          const url = await noteAttachmentApi.originalUrl(attachment);
+          const url = await noteAttachmentApi.originalUrl(updated);
           URL.revokeObjectURL(url);
         }
       } else {
-        await noteAttachmentApi.retry(attachment.uuid);
         scheduleAutoSync();
       }
       await refreshNoteAttachments(attachment.note_uuid);
     } catch (reason) {
       noteAttachmentError = localizedErrorMessage(reason);
       await refreshNoteAttachments(attachment.note_uuid).catch(() => undefined);
+    } finally {
+      noteAttachmentBusy = false;
     }
   }
 
