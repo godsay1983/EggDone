@@ -6,6 +6,7 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { flip } from "svelte/animate";
   import { onMount, tick } from "svelte";
+  import { preserveScroll } from "$lib/utils/scrollContext";
   import packageMetadata from "../../../package.json";
 
   import { languageState, translator } from "$lib/i18n";
@@ -242,6 +243,12 @@
   let showSearch = false;
   let summaryMenuOpen = false;
   let searchQuery = "";
+  const searchContexts = {
+    tasks: { query: "", visible: false },
+    notes: { query: "", visible: false },
+  };
+  const listScrollPositions = new Map<string, number>();
+  let taskViewBeforeNotes: MainView = 'all';
   let showCompleted = true;
   let listView: MainView = "all";
   let smartView: SmartViewId | null = null;
@@ -328,7 +335,8 @@
       void loadAttachmentPreviews(visibleNotePreviewAttachments);
     }
   }
-  $: filteredTodos = filterTodos($todos.items, searchQuery, showCompleted, {
+  $: taskSearchQuery = listView === 'notes' ? searchContexts.tasks.query : searchQuery;
+  $: filteredTodos = filterTodos($todos.items, taskSearchQuery, showCompleted, {
     view: listView === "notes" ? "all" : listView,
     groupUuid: activeGroupUuid,
     smartView,
@@ -337,7 +345,7 @@
   $: smartChoices = SMART_VIEW_IDS.map((id) => ({
     id,
     label: $translator(`smart.${id}`),
-    count: filterTodos($todos.items, searchQuery, true, {
+    count: filterTodos($todos.items, taskSearchQuery, true, {
       groupUuid: activeGroupUuid, smartView: id, now: filterNow,
     }).length,
   }));
@@ -604,18 +612,22 @@
 
   async function setListView(view: MainView) {
     if (listView === 'notes' && view !== 'notes' && !(await closeNoteEditor())) return false;
-    if (view === "all" || view === "today" || view === "notes") {
+    if ((view === "all" || view === "today") && !(listView === 'notes' && view === taskViewBeforeNotes)) {
       clearSmartView();
     }
-    if (listView === "notes" && view !== "notes") {
-      searchQuery = "";
-      showSearch = false;
+    if (view === 'notes' && listView !== 'notes') taskViewBeforeNotes = listView;
+    if ((listView === "notes") !== (view === "notes")) {
+      const previous = listView === "notes" ? "notes" : "tasks";
+      const next = view === "notes" ? "notes" : "tasks";
+      searchContexts[previous] = { query: searchQuery, visible: showSearch };
+      searchQuery = searchContexts[next].query;
+      showSearch = searchContexts[next].visible;
     }
     listView = view;
-    if (view !== "quadrants") {
+    if (view !== "quadrants" && view !== 'notes') {
       selectedQuadrant = "all";
     }
-    if (view !== "calendar") {
+    if (view !== "calendar" && view !== 'notes') {
       selectedAgendaDate = null;
       agendaWeekStartAt = startOfAgendaWeek();
       agendaWeekVersion += 1;
@@ -2759,6 +2771,7 @@
     />
   {:else if listView === "notes"}
     <NoteList
+      scrollPositions={listScrollPositions}
       items={$visibleNotes}
       loading={$notes.loading}
       error={$notes.error}
@@ -2771,7 +2784,8 @@
       attachmentPreviewUrls={noteAttachmentPreviewUrls}
     />
   {:else}
-  <section class="todo-list" aria-live="polite">
+  <section class="todo-list" aria-live="polite"
+    use:preserveScroll={{ positions: listScrollPositions, key: 'tasks', ready: !$todos.loading }}>
     {#if $todos.loading}
       <div class="status">{$translator("empty.loading")}</div>
     {:else if $todos.error && $todos.items.length === 0}
