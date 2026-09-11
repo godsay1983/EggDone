@@ -6,7 +6,7 @@ import { readGeneralPreferences, migrateGeneralPreferences, patchGeneralPreferen
 export const GENERAL_PREFERENCE_KEYS = [
   'eggdone-theme', 'eggdone-language', 'eggdone-show-completed',
   'eggdone-default-list-view', 'eggdone-list-view', 'eggdone-selected-group',
-  'eggdone-smart-view', 'eggdone-focus-duration-minutes', 'eggdone-break-duration-minutes',
+  'eggdone-smart-view', 'eggdone-pinned-smart-views', 'eggdone-focus-duration-minutes', 'eggdone-break-duration-minutes',
 ];
 export const PREFERENCES_CHANGED_EVENT = 'eggdone-preferences-changed';
 let native: GeneralPreferences | null = null;
@@ -82,6 +82,15 @@ export function readPreference(key: string): string | null {
     report(key, 'read');
     return lastRead.get(key) ?? null;
   }
+}
+
+// Confirmed edits must distinguish an unreadable value from a genuinely absent preference.
+export function readPreferenceStrict(key: string): string | null {
+  if (isTauri() && GENERAL_PREFERENCE_KEYS.includes(key)) {
+    if (!native) throw Error('Preferences not initialized');
+    return native.values[key] ?? null;
+  }
+  return localStorage.getItem(key);
 }
 
 export function writePreference(key: string, value: string | null): boolean | Promise<boolean> {

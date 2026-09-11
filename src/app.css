@@ -616,6 +616,8 @@ footer {
   position: relative;
   z-index: 20;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
   padding: 17px 3px 9px;
   color: #716451;
   font-size: 12px;
@@ -628,10 +630,13 @@ footer {
   align-items: center;
   gap: 6px;
   flex: 0 0 auto;
+  margin-left: auto;
 }
 
 .view-switch {
   display: inline-flex;
+  flex-wrap: wrap;
+  max-width: 100%;
   align-items: center;
   gap: 2px;
   padding: 2px;
@@ -833,6 +838,13 @@ footer {
   font-size: 11px;
   font-weight: 600;
 }
+
+.smart-menu-row { display: flex; align-items: stretch; gap: 4px; min-width: 0; }
+.summary-menu .smart-menu-row .smart-menu-choice { flex: 1; min-width: 0; gap: 8px; }
+.summary-menu .smart-menu-row .smart-pin { flex: 0 0 36px; width: 36px; font-size: 20px; text-align: center; }
+.pinned-smart-views { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.pinned-smart-views button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.pinned-feedback { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px; font-size: 12px; }
 
 .summary-menu .smart-menu-choice {
   display: flex;

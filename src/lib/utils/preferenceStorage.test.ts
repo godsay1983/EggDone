@@ -11,6 +11,12 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 describe('preference storage failure boundaries', () => {
+  it('strict reads distinguish absent preferences from a denied store', async () => {
+    const api = await import('./preferenceStorage');
+    expect(api.readPreferenceStrict('eggdone-pinned-smart-views')).toBeNull();
+    failRead = true;
+    expect(() => api.readPreferenceStrict('eggdone-pinned-smart-views')).toThrow();
+  });
   it('keeps reads nonthrowing, reports failures and preserves known values', async () => {
     const api = await import('./preferenceStorage'); data.set('theme', 'dark');
     expect(api.readPreference('theme')).toBe('dark'); failRead = true;

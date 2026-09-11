@@ -7,7 +7,8 @@
   import { flip } from "svelte/animate";
   import { onMount, tick } from "svelte";
   import { preserveScroll } from "$lib/utils/scrollContext";
-  import { readPreference, writePreference, PREFERENCES_CHANGED_EVENT } from "$lib/utils/preferenceStorage";
+  import { readPreference, readPreferenceStrict, writePreference, PREFERENCES_CHANGED_EVENT } from "$lib/utils/preferenceStorage";
+  import { PinnedSmartViewStore } from "$lib/stores/pinnedSmartViews";
   import PreferenceStatus from './PreferenceStatus.svelte';
   import packageMetadata from "../../../package.json";
 
@@ -256,6 +257,22 @@
   let smartView: SmartViewId | null = null;
   let filterNow = new Date();
   const SMART_VIEW_KEY = "eggdone-smart-view";
+  const PINNED_VIEWS_KEY = 'eggdone-pinned-smart-views';
+  let pinnedIds: SmartViewId[] = [];
+  let pinsReady = false;
+  let pinsBusy = false;
+  let pinsFailure = '';
+  const pinnedViews = new PinnedSmartViewStore({
+    read: async () => readPreferenceStrict(PINNED_VIEWS_KEY),
+    write: async value => {
+      if (!(await writePreference(PINNED_VIEWS_KEY, value))) throw Error('Preference write failed');
+    },
+  }, () => {
+    pinnedIds = [...pinnedViews.ids];
+    pinsReady = pinnedViews.ready;
+    pinsBusy = pinnedViews.busy;
+    pinsFailure = pinnedViews.failure;
+  });
   let selectedNoteUuid: string | null = null;
   let noteNavigationBusy = false;
   let noteDraft: Note | null = null;
@@ -441,6 +458,7 @@
     window.addEventListener("storage", refreshFocusDurations);
     const refreshNativePreferences = () => {
       refreshFocusDurations();
+      void pinnedViews.load();
       const saved = readPreference('eggdone-theme');
       if (saved === 'light' || saved === 'dark') { theme = saved; applyTheme(theme); }
     };
@@ -460,6 +478,7 @@
     );
     selectedGroup = readPreference("eggdone-selected-group") ?? "all";
     smartView = normalizeSmartView(readPreference(SMART_VIEW_KEY));
+    void pinnedViews.load();
     if (smartView) listView = "all";
     theme =
       savedTheme === "light" || savedTheme === "dark"
@@ -2637,8 +2656,15 @@
       {#if summaryMenuOpen}
         <div class="summary-menu" role="menu" style:max-height={`${summaryMenuMaxHeight}px`}>
           {#if listView !== "notes"}
-            <span class="smart-menu-title">{$translator("smart.title")}</span>
+            <span class="smart-menu-title">{$translator("smart.title")} · {$translator("smart.pinned")} {pinnedIds.length}/2</span>
+            {#if pinsFailure}
+              <div class="pinned-feedback" role="status">
+                <span>{$translator(pinsFailure === 'load' ? 'smart.pin_load' : pinsFailure === 'limit' ? 'smart.pin_limit' : 'smart.pin_save')}</span>
+                <button type="button" role="menuitem" disabled={pinsBusy} onclick={() => pinnedViews.retry()}>{$translator("smart.retry")}</button>
+              </div>
+            {/if}
             {#each smartChoices as choice (choice.id)}
+              <div class="smart-menu-row" role="none">
               <button type="button" role="menuitemradio"
                 aria-checked={smartView === choice.id}
                 class:active={smartView === choice.id}
@@ -2646,6 +2672,13 @@
                 onclick={() => selectSmartView(choice.id)}>
                 <span>{choice.label}</span><span>{choice.count}</span>
               </button>
+              <button type="button" role="menuitemcheckbox" class="smart-pin"
+                aria-checked={pinnedIds.includes(choice.id)}
+                aria-label={`${$translator(pinnedIds.includes(choice.id) ? 'smart.unpin' : 'smart.pin')} ${choice.label}`}
+                title={$translator(!pinnedIds.includes(choice.id) && pinnedIds.length >= 2 ? 'smart.pin_limit' : pinnedIds.includes(choice.id) ? 'smart.unpin' : 'smart.pin')}
+                disabled={!pinsReady || pinsBusy || (!pinnedIds.includes(choice.id) && pinnedIds.length >= 2)}
+                onclick={() => pinnedViews.toggle(choice.id)}>{pinnedIds.includes(choice.id) ? '★' : '☆'}</button>
+              </div>
             {/each}
             <hr />
           {/if}
@@ -2753,6 +2786,14 @@
     </section>
   {/if}
 
+  {#if pinnedIds.length > 0 && listView !== 'notes'}
+    <nav class="pinned-smart-views" aria-label={$translator('smart.pinned')}>
+      {#each pinnedIds as id (id)}
+        <button type="button" class="action-button" data-tone={smartView === id ? 'primary' : 'normal'}
+          aria-pressed={smartView === id} onclick={() => selectSmartView(id)}>{$translator(`smart.${id}`)}</button>
+      {/each}
+    </nav>
+  {/if}
   {#if smartView && listView !== "notes"}
     <div class="smart-filter" role="status">
       <span>{$translator(`smart.${smartView}`)} · {renderedTodos.length}</span>

@@ -15,6 +15,7 @@ const KEYS: &[&str] = &[
     "eggdone-list-view",
     "eggdone-selected-group",
     "eggdone-smart-view",
+    "eggdone-pinned-smart-views",
     "eggdone-focus-duration-minutes",
     "eggdone-break-duration-minutes",
 ];
@@ -156,6 +157,32 @@ mod tests {
         assert_eq!(saved.revision, 3);
         assert!(patch(&db, "secret".into(), Some("not-allowed".into())).is_err());
         assert_eq!(read(&db).unwrap().unwrap().revision, 3);
+    }
+
+    #[test]
+    fn pinned_filters_upgrade_preserves_current_view_and_other_preferences() {
+        let db = database();
+        initialize(
+            &db,
+            BTreeMap::from([("eggdone-smart-view".into(), Some("overdue".into()))]),
+        )
+        .unwrap();
+        let pins = r#"{"version":1,"ids":["no_date","next7"]}"#;
+        patch(&db, "eggdone-pinned-smart-views".into(), Some(pins.into())).unwrap();
+        let saved = read(&db).unwrap().unwrap();
+        assert_eq!(
+            saved.values["eggdone-smart-view"].as_deref(),
+            Some("overdue")
+        );
+        assert_eq!(
+            saved.values["eggdone-pinned-smart-views"].as_deref(),
+            Some(pins)
+        );
+        patch(&db, "eggdone-pinned-smart-views".into(), None).unwrap();
+        assert_eq!(
+            read(&db).unwrap().unwrap().values["eggdone-smart-view"].as_deref(),
+            Some("overdue")
+        );
     }
 
     #[test]
