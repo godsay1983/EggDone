@@ -15,12 +15,14 @@
     runManualSync,
     syncRuntimeSnapshot,
     syncStatus,
+    syncSummary,
   } from "$lib/sync/autoSync";
   import {
     noteAttachmentApi,
     type NoteAttachmentCacheStats,
   } from "$lib/api/noteAttachmentApi";
   import { translator } from "$lib/i18n";
+  import { syncSummaryTone } from "$lib/sync/syncSummary";
   import { localizedErrorMessage } from "$lib/i18n/errors";
   import { formatFileSize, formatTime } from "$lib/i18n/formatters";
 
@@ -139,14 +141,9 @@
       accessKey = "";
       secretKey = "";
       configureAutoSync(settings);
-      const result = await runManualSync();
-      message = $translator("sync.resultSummary", {
-        message: localizedSyncMessage(result.message),
-        todos: result.todoCount,
-        notes: result.noteCount,
-      });
+      await runManualSync();
+      message = $translator(`sync.explain.${$syncSummary}`);
       await loadAttachmentCacheStats();
-      syncRuntimeSnapshot.set(await getSyncRuntimeState());
     } catch (reason) {
       message = "";
       error = errorMessage(reason);
@@ -290,11 +287,14 @@
 
   {#if settings?.enabled}
     <p
-      class:status-error={["offline", "conflict", "failed"].includes($syncStatus.kind)}
+      class:status-error={syncSummaryTone($syncSummary) === "warning"}
       class="sync-status"
       title={localizedSyncMessage($syncStatus.detail ?? $syncStatus.message)}
     >
-      {localizedSyncMessage($syncStatus.message)}
+      <span class="sync-summary-copy">
+        <strong>{$translator(`sync.summary.${$syncSummary}`)}</strong>
+        <span>{$translator(`sync.explain.${$syncSummary}`)}</span>
+      </span>
       {#if $syncStatus.updatedAt}
         <small>{formatTime($syncStatus.updatedAt)}</small>
       {/if}
@@ -310,6 +310,10 @@
         </button>
       </div>
       <dl>
+        <div class="sync-result-detail">
+          <dt>{$translator("sync.lastResult")}</dt>
+          <dd>{localizedSyncMessage($syncStatus.detail ?? $syncStatus.message)}</dd>
+        </div>
         <div>
           <dt>{$translator("sync.lastAttempt")}</dt>
           <dd>{$syncRuntimeSnapshot.lastAttemptAt ? formatTime($syncRuntimeSnapshot.lastAttemptAt) : $translator("sync.never")}</dd>
@@ -492,3 +496,22 @@
   {#if message}<p class="sync-message" role="status">{message}</p>{/if}
   {#if error}<p class="settings-error" role="alert">{error}</p>{/if}
 </section>
+
+<style>
+  .sync-summary-copy {
+    min-width: 0;
+    flex: 1;
+    overflow-wrap: anywhere;
+  }
+  .sync-summary-copy strong,
+  .sync-summary-copy > span {
+    display: block;
+  }
+  .sync-result-detail {
+    grid-column: 1 / -1;
+  }
+  .sync-result-detail dd {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+</style>

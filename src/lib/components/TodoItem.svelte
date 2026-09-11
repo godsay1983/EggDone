@@ -6,7 +6,7 @@
   import type { TranslationKey } from "$lib/i18n";
   import RecurrenceEditor from "./RecurrenceEditor.svelte";
   import { recurrenceRules } from "$lib/stores/recurrenceStore";
-  import { associatedRule } from "$lib/utils/recurrenceForm";
+  import { visibleRecurrenceRule } from "$lib/utils/recurrenceForm";
   import { recurrenceSummary } from "$lib/utils/recurrenceSummary";
   import type { TodoScheduleInput } from "$lib/api/todoApi";
   import type {
@@ -83,7 +83,7 @@
   let saving = false;
   let scheduleOpen = false;
   let recurrenceOpen = false;
-  $: customRule = associatedRule($recurrenceRules, todo.uuid, todo.repeat_series_uuid);
+  $: customRule = visibleRecurrenceRule($recurrenceRules, todo.uuid, todo.repeat_series_uuid, todo.repeat_rule);
   $: customSummary = customRule ? recurrenceSummary(customRule, key => $translator(("recurrence." + key) as TranslationKey)) :
     todo.repeat_rule === null && todo.repeat_series_uuid !== null ? $translator("recurrence.unknown") : "";
   let scheduleBaseline = "";

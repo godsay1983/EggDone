@@ -27,8 +27,9 @@
     initializeAutoSync,
     scheduleAutoSync,
     setAutoSyncForeground,
-    syncStatus,
+    syncSummary,
   } from "$lib/sync/autoSync";
+  import { syncSummaryTone } from "$lib/sync/syncSummary";
   import type {
     RepeatDeleteScope,
     RepeatEditScope,
@@ -1179,36 +1180,6 @@
     document
       .querySelector('meta[name="theme-color"]')
       ?.setAttribute("content", nextTheme === "dark" ? "#1d1b18" : "#f6c94c");
-  }
-
-  function footerSyncLabel(
-    kind: import("$lib/sync/autoSync").SyncStatusKind,
-  ) {
-    if (kind === "syncing") return $translator("sync.syncing");
-    if (kind === "pending") return $translator("sync.localChangesPending");
-    if (kind === "synced") {
-      const time = shortSyncTime($syncStatus.updatedAt);
-      return time ? `${$translator("sync.synced")} ${time}` : $translator("sync.synced");
-    }
-    if (kind === "offline") return $translator("sync.offline");
-    if (kind === "conflict") return $translator("sync.conflict");
-    if (kind === "failed") return $translator("sync.failed");
-    return $translator("sync.notSynced");
-  }
-
-  function shortSyncTime(value: number | null) {
-    if (!value) return "";
-    const date = new Date(value);
-    return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-  }
-
-  function footerSyncTitle(
-    kind: import("$lib/sync/autoSync").SyncStatusKind,
-  ) {
-    if (kind === "offline") return $translator("sync.offlineAdvice");
-    if (kind === "conflict") return $translator("sync.conflictAdvice");
-    if (kind === "failed") return $translator("sync.retryAdvice");
-    return footerSyncLabel(kind);
   }
 
   function openFocusPanel() {
@@ -3121,14 +3092,12 @@
   <footer>
     <span>{$translator("footer.encouragement")}</span>
     <button
-      class:syncing={$syncStatus.kind === "syncing"}
-      class:sync-ok={$syncStatus.kind === "synced"}
-      class:sync-problem={["offline", "conflict", "failed"].includes(
-        $syncStatus.kind,
-      )}
+      class:syncing={syncSummaryTone($syncSummary) === "active"}
+      class:sync-ok={syncSummaryTone($syncSummary) === "success"}
+      class:sync-problem={syncSummaryTone($syncSummary) === "warning"}
       class="footer-sync-status"
       type="button"
-      title={footerSyncTitle($syncStatus.kind)}
+      title={$translator(`sync.explain.${$syncSummary}`)}
       onclick={() => {
         showAbout = false;
         showDataManager = false;
@@ -3136,7 +3105,7 @@
       }}
     >
       <span aria-hidden="true"></span>
-      {footerSyncLabel($syncStatus.kind)}
+      {$translator(`sync.summary.${$syncSummary}`)}
     </button>
     <button
       type="button"

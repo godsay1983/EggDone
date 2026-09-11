@@ -1,5 +1,6 @@
-import { writable } from "svelte/store";
+import { derived, writable } from "svelte/store";
 import { RemotePollState } from "./remotePollState";
+import { syncSummaryState } from "./syncSummary";
 
 import {
   getRemoteSyncState,
@@ -26,6 +27,7 @@ export interface SyncStatus {
   message: string;
   detail?: string;
   updatedAt: number | null;
+  pendingAttachmentCount?: number;
 }
 
 const AUTO_SYNC_DELAY_MS = 4_000;
@@ -39,6 +41,18 @@ export const syncStatus = writable<SyncStatus>({
 });
 
 export const syncRuntimeSnapshot = writable<SyncRuntimeSnapshot | null>(null);
+const syncAvailability = writable<{ enabled: boolean; configured: boolean } | null>(null);
+export const syncSummary = derived([syncStatus, syncAvailability], ([status, availability]) =>
+  syncSummaryState({
+    enabled: availability?.enabled ?? true,
+    configured: availability?.configured ?? true,
+    busy: status.kind === "syncing",
+    kind: status.kind,
+    dirty: status.kind === "pending",
+    pendingUploads: status.pendingAttachmentCount ?? 0,
+    failedUploads: 0,
+  }),
+);
 
 let enabled = false;
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -63,7 +77,7 @@ export async function initializeAutoSync() {
       getSyncRuntimeState(),
     ]);
     configureAutoSync(settings);
-    applyRuntimeSnapshot(snapshot, settings.enabled);
+    applyRuntimeSnapshot(snapshot, settings.enabled && settings.credentialsConfigured);
   } catch (reason) {
     setFailureStatus(reason);
   }
@@ -73,6 +87,7 @@ export function configureAutoSync(settings: SyncSettings) {
   pollState.reset();
   clearDebounce();
   enabled = settings.enabled && settings.credentialsConfigured;
+  syncAvailability.set({ enabled: settings.enabled, configured: settings.credentialsConfigured });
   remoteStateInitialized = false;
   knownTodoRemoteEtag = null;
   knownNoteRemoteEtag = null;
@@ -141,6 +156,7 @@ function applyRuntimeSnapshot(snapshot: SyncRuntimeSnapshot, syncEnabled: boolea
       kind: "pending",
       message: "有修改未同步",
       updatedAt: snapshot.dirtySince,
+      pendingAttachmentCount: snapshot.pendingAttachmentCount,
     });
     return;
   }
@@ -149,6 +165,7 @@ function applyRuntimeSnapshot(snapshot: SyncRuntimeSnapshot, syncEnabled: boolea
       kind: "synced",
       message: "同步完成",
       updatedAt: snapshot.lastSuccessAt,
+      pendingAttachmentCount: snapshot.pendingAttachmentCount,
     });
   } else if (["offline", "conflict", "failed"].includes(snapshot.lastResult)) {
     const kind = snapshot.lastResult as "offline" | "conflict" | "failed";
@@ -213,24 +230,28 @@ async function performSyncWithRetry(): Promise<ManualSyncResult> {
       if (!pollState.isGenerationCurrent(generation)) throw new Error("RECURRENCE_CONFIG_CHANGED");
       if (result.recurrenceRemoteToken !== undefined) pollState.acknowledgeRules(generation, result.recurrenceRemoteToken);
       const cleanupNotice = result.message.includes("远端附件");
+      let snapshot: SyncRuntimeSnapshot | null = null;
+      try {
+        snapshot = await refreshSyncRuntimeState();
+      } catch {
+        // Use the sync receipt if refreshing diagnostics fails.
+      }
+      if (!pollState.isGenerationCurrent(generation)) throw new Error("RECURRENCE_CONFIG_CHANGED");
+      const dirty = pendingAfterRun || (snapshot?.dirtyDomains.length ?? 0) > 0;
       syncStatus.set({
-        kind: "synced",
+        kind: dirty ? "pending" : "synced",
         message: cleanupNotice
           ? result.message
           : result.conflictRetried
             ? `冲突已合并：任务 ${result.todoCount}，便签 ${result.noteCount}，附件 ${result.noteAttachmentCount}`
             : `同步完成：任务 ${result.todoCount}，便签 ${result.noteCount}，附件 ${result.noteAttachmentCount}`,
         updatedAt: Date.now(),
+        pendingAttachmentCount: snapshot?.pendingAttachmentCount ?? result.pendingAttachmentCount,
       });
       knownTodoRemoteEtag = result.todoRemoteEtag;
       knownNoteRemoteEtag = result.noteRemoteEtag;
       knownNoteAttachmentRemoteEtag = result.noteAttachmentRemoteEtag;
       remoteStateInitialized = true;
-      try {
-        await refreshSyncRuntimeState();
-      } catch {
-        // The completed sync remains valid if the diagnostics refresh fails.
-      }
       return result;
     } catch (reason) {
       if (!pollState.isGenerationCurrent(generation)) throw reason;

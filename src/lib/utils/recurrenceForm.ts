@@ -88,3 +88,11 @@ export function ruleEditable(rule: RecurrenceRule | null, uuid: string, series: 
   if (completed || legacy !== null) return false;
   return rule === null ? series === null : rule.current_todo_uuid === uuid && rule.deleted_at === null && !rule.exhausted;
 }
+
+// Match Harmony's task badge policy without changing historical lookup for rule editing.
+export function visibleRecurrenceRule(rules: RecurrenceRule[], uuid: string, series: string | null, legacy: string | null): RecurrenceRule | null {
+  if (legacy !== null) return null;
+  const rule = associatedRule(rules, uuid, series);
+  if (rule !== null && series === null && (rule.deleted_at !== null || rule.exhausted)) return null;
+  return rule;
+}

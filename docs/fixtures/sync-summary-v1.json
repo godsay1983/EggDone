@@ -1,0 +1,268 @@
+[
+  {
+    "id": "clean",
+    "input": {
+      "enabled": true,
+      "configured": true,
+      "busy": false,
+      "kind": "synced",
+      "dirty": false,
+      "pendingUploads": 0,
+      "failedUploads": 0
+    },
+    "state": "synced",
+    "tone": "success"
+  },
+  {
+    "id": "disabled",
+    "input": {
+      "enabled": false,
+      "configured": true,
+      "busy": false,
+      "kind": "failed",
+      "dirty": true,
+      "pendingUploads": 0,
+      "failedUploads": 2
+    },
+    "state": "local",
+    "tone": "neutral"
+  },
+  {
+    "id": "missing-credentials",
+    "input": {
+      "enabled": true,
+      "configured": false,
+      "busy": false,
+      "kind": "synced",
+      "dirty": false,
+      "pendingUploads": 0,
+      "failedUploads": 0
+    },
+    "state": "unconfigured",
+    "tone": "warning"
+  },
+  {
+    "id": "never",
+    "input": {
+      "enabled": true,
+      "configured": true,
+      "busy": false,
+      "kind": "idle",
+      "dirty": false,
+      "pendingUploads": 0,
+      "failedUploads": 0
+    },
+    "state": "idle",
+    "tone": "neutral"
+  },
+  {
+    "id": "unknown-result",
+    "input": {
+      "enabled": true,
+      "configured": true,
+      "busy": false,
+      "kind": "unknown",
+      "dirty": false,
+      "pendingUploads": 0,
+      "failedUploads": 0
+    },
+    "state": "idle",
+    "tone": "neutral"
+  },
+  {
+    "id": "in-flight",
+    "input": {
+      "enabled": true,
+      "configured": true,
+      "busy": true,
+      "kind": "failed",
+      "dirty": true,
+      "pendingUploads": 0,
+      "failedUploads": 1
+    },
+    "state": "syncing",
+    "tone": "active"
+  },
+  {
+    "id": "syncing-kind",
+    "input": {
+      "enabled": true,
+      "configured": true,
+      "busy": false,
+      "kind": "syncing",
+      "dirty": false,
+      "pendingUploads": 2,
+      "failedUploads": 0
+    },
+    "state": "syncing",
+    "tone": "active"
+  },
+  {
+    "id": "offline-over-dirty",
+    "input": {
+      "enabled": true,
+      "configured": true,
+      "busy": false,
+      "kind": "offline",
+      "dirty": true,
+      "pendingUploads": 3,
+      "failedUploads": 0
+    },
+    "state": "offline",
+    "tone": "warning"
+  },
+  {
+    "id": "conflict-over-uploads",
+    "input": {
+      "enabled": true,
+      "configured": true,
+      "busy": false,
+      "kind": "conflict",
+      "dirty": false,
+      "pendingUploads": 0,
+      "failedUploads": 2
+    },
+    "state": "conflict",
+    "tone": "warning"
+  },
+  {
+    "id": "failure-over-dirty",
+    "input": {
+      "enabled": true,
+      "configured": true,
+      "busy": false,
+      "kind": "failed",
+      "dirty": true,
+      "pendingUploads": 0,
+      "failedUploads": 0
+    },
+    "state": "failed",
+    "tone": "warning"
+  },
+  {
+    "id": "failed-upload",
+    "input": {
+      "enabled": true,
+      "configured": true,
+      "busy": false,
+      "kind": "failed",
+      "dirty": false,
+      "pendingUploads": 0,
+      "failedUploads": 2
+    },
+    "state": "upload_failed",
+    "tone": "warning"
+  },
+  {
+    "id": "old-success-failed-upload",
+    "input": {
+      "enabled": true,
+      "configured": true,
+      "busy": false,
+      "kind": "synced",
+      "dirty": false,
+      "pendingUploads": 0,
+      "failedUploads": 1
+    },
+    "state": "upload_failed",
+    "tone": "warning"
+  },
+  {
+    "id": "dirty-over-success",
+    "input": {
+      "enabled": true,
+      "configured": true,
+      "busy": false,
+      "kind": "synced",
+      "dirty": true,
+      "pendingUploads": 0,
+      "failedUploads": 0
+    },
+    "state": "pending",
+    "tone": "warning"
+  },
+  {
+    "id": "pending-kind",
+    "input": {
+      "enabled": true,
+      "configured": true,
+      "busy": false,
+      "kind": "pending",
+      "dirty": false,
+      "pendingUploads": 0,
+      "failedUploads": 0
+    },
+    "state": "pending",
+    "tone": "warning"
+  },
+  {
+    "id": "dirty-and-upload",
+    "input": {
+      "enabled": true,
+      "configured": true,
+      "busy": false,
+      "kind": "synced",
+      "dirty": true,
+      "pendingUploads": 3,
+      "failedUploads": 0
+    },
+    "state": "pending",
+    "tone": "warning"
+  },
+  {
+    "id": "pending-upload-over-success",
+    "input": {
+      "enabled": true,
+      "configured": true,
+      "busy": false,
+      "kind": "synced",
+      "dirty": false,
+      "pendingUploads": 2,
+      "failedUploads": 0
+    },
+    "state": "upload_pending",
+    "tone": "warning"
+  },
+  {
+    "id": "idle-pending-upload",
+    "input": {
+      "enabled": true,
+      "configured": true,
+      "busy": false,
+      "kind": "idle",
+      "dirty": false,
+      "pendingUploads": 1,
+      "failedUploads": 0
+    },
+    "state": "upload_pending",
+    "tone": "warning"
+  },
+  {
+    "id": "failure-with-upload-pending",
+    "input": {
+      "enabled": true,
+      "configured": true,
+      "busy": false,
+      "kind": "failed",
+      "dirty": false,
+      "pendingUploads": 3,
+      "failedUploads": 0
+    },
+    "state": "failed",
+    "tone": "warning"
+  },
+  {
+    "id": "availability-before-busy",
+    "input": {
+      "enabled": false,
+      "configured": true,
+      "busy": true,
+      "kind": "synced",
+      "dirty": false,
+      "pendingUploads": 0,
+      "failedUploads": 0
+    },
+    "state": "local",
+    "tone": "neutral"
+  }
+]
