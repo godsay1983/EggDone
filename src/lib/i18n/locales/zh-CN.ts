@@ -151,6 +151,7 @@ export const zhCN = {
   "common.loading": "加载中",
   "common.manage": "管理",
   "common.more": "更多",
+  "common.collapse": "收起",
   "common.next": "下一步",
   "common.noData": "暂无数据",
   "common.open": "打开",

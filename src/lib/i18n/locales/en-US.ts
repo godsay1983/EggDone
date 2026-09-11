@@ -154,6 +154,7 @@ export const enUS = {
   "common.loading": "Loading",
   "common.manage": "Manage",
   "common.more": "More",
+  "common.collapse": "Collapse",
   "common.next": "Next",
   "common.noData": "No data",
   "common.open": "Open",

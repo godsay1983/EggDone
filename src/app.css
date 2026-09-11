@@ -913,10 +913,13 @@ html[data-theme="dark"] .summary-menu hr { border-color: #665742; }
 }
 
 .note-card-heading strong {
+  display: -webkit-box;
+  min-width: 0;
   overflow: hidden;
   font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .note-card-heading span {
@@ -936,6 +939,7 @@ html[data-theme="dark"] .summary-menu hr { border-color: #665742; }
   font-size: 11px;
   line-height: 1.55;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
 }
@@ -1054,6 +1058,16 @@ html[data-theme="dark"] .summary-menu hr { border-color: #665742; }
   color: #786b58;
   font-size: 9px;
   font-style: normal;
+}
+
+.note-card-more {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 8px 8px;
+}
+
+.note-card-more [aria-expanded="true"] {
+  box-shadow: inset 0 0 0 1px currentColor;
 }
 
 .note-card-actions {
@@ -2036,6 +2050,7 @@ html[data-theme="dark"] .summary-menu hr { border-color: #665742; }
 
 .todo-item {
   gap: 9px;
+  align-items: flex-start;
   margin-bottom: 8px;
   padding: 11px 8px 11px 10px;
   border: 1px solid #f0e9dc;
@@ -2131,6 +2146,31 @@ html[data-theme="dark"] .summary-menu hr { border-color: #665742; }
   margin-top: 5px;
 }
 
+.todo-meta > * {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.todo-meta > button,
+.todo-meta > .todo-group-badge {
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.todo-group-badge > span:last-child {
+  min-width: 0;
+}
+
+.todo-item > .checkbox,
+.todo-item > .batch-select,
+.todo-item > .drag-handle {
+  margin-top: 4px;
+}
+
 .todo-group-badge {
   display: inline-flex;
   align-items: center;
@@ -2146,6 +2186,8 @@ html[data-theme="dark"] .summary-menu hr { border-color: #665742; }
 
 .todo-group-badge .group-dot {
   flex: 0 0 auto;
+  align-self: flex-start;
+  margin-top: 3px;
 }
 
 .due-badge {
@@ -2609,12 +2651,12 @@ body:has(.todo-item.dragging) * {
 }
 
 .more-button {
-  width: 26px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   flex: 0 0 auto;
   border-radius: 8px;
-  color: #c5b9a7;
-  opacity: 0;
+  color: var(--action-text);
+  opacity: 1;
   transition:
     color 120ms ease,
     opacity 120ms ease;
@@ -4865,7 +4907,6 @@ html[data-theme="dark"] .checkbox.checked {
 }
 
 html[data-theme="dark"] .move-button,
-html[data-theme="dark"] .more-button,
 html[data-theme="dark"] .schedule-button,
 html[data-theme="dark"] .pin-button,
 html[data-theme="dark"] .delete-button {

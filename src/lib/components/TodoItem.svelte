@@ -530,7 +530,7 @@
               title={`${$translator("todo.group")}: ${currentGroup.name}`}
             >
               <span class="group-dot" aria-hidden="true"></span>
-              {currentGroup.name}
+              <span>{currentGroup.name}</span>
             </span>
           {/if}
           {#if todo.pinned}
@@ -875,6 +875,3 @@
 {#if recurrenceOpen}
   <RecurrenceEditor {todo} onClose={() => recurrenceOpen = false} />
 {/if}
-<style>
-  .custom-repeat-badge { max-width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-</style>
