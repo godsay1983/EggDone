@@ -18,7 +18,7 @@ EggDone 是一个轻量级、跨平台、托盘常驻的 Todo 桌面应用。应
 
 ## 鸿蒙移动版
 
-双端后续优化见[实现方案](docs/EXPERIENCE_EVOLUTION_IMPLEMENTATION_PLAN.md)与[roadmap](docs/EXPERIENCE_EVOLUTION_ROADMAP.md)。首项E1a为鸿蒙统一任务/重复草稿，桌面本轮仅同步文档，不改变数据协议或编辑行为；之后分阶段处理双端体验收敛、任务与便签关联、恢复与统一搜索。
+双端后续优化见[实现方案](docs/EXPERIENCE_EVOLUTION_IMPLEMENTATION_PLAN.md)与[roadmap](docs/EXPERIENCE_EVOLUTION_ROADMAP.md)。E1a鸿蒙统一任务/重复草稿已提交，E1b规则表单与计划预览已开发、用户已确认测试通过；桌面本轮仅同步文档，不改变数据协议或编辑行为。之后分阶段处理双端体验收敛、任务与便签关联、恢复与统一搜索。
 
 EggDone 同时提供**纯血鸿蒙（HarmonyOS NEXT）**移动版本，支持手机和平板，数据可与桌面端通过 S3 / MinIO 同步互通。
 
