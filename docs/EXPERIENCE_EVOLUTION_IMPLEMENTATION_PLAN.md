@@ -2,7 +2,7 @@
 
 更新：2026-09-12。状态：按配套 roadmap 分阶段执行。
 
-最新实现至 E6c：双端固定常用智能筛选入口、数量上限、独立偏好及失败重试已实现，详见[实现与验收](PINNED_SMART_VIEWS.md)。按用户要求本地提交，不升版或发布；E6b1～E6b3及E6c用户验收分别保留，提交后继续E6d，E7未开始。下方旧阶段状态为历史记录。
+最新进度E6d：E6c已本地提交（桌面ee67a27、鸿蒙a303b98）。补充磁盘重启回归，复跑系统状态、偏好故障及窗口布局测试，见[验证矩阵与操作步骤](PREFERENCES_REGRESSION_MATRIX.md)。本轮仅测试和文档，增量未提交；不升版、推送或发布。E6b1～E6b3及E6c用户验收保留，E6d完整系统/设备验收待确认，E7未开始。下方旧阶段状态为历史记录。
 
 最新实现至E6b3（2026-09-12）：双端系统状态独立查询、未知/实际启用摘要、用户重试及返回刷新，见[SYSTEM_CAPABILITY_STATUS.md](SYSTEM_CAPABILITY_STATUS.md)。E6b2通用偏好及视图持久化已提交，见[PREFERENCE_PERSISTENCE.md](PREFERENCE_PERSISTENCE.md)；所有未确认的原生验收继续保留，E6c/E7未开始。下文旧阶段状态作为过程记录。
 

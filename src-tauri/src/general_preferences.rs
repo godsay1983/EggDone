@@ -144,6 +144,69 @@ mod tests {
     }
 
     #[test]
+    fn all_preferences_survive_reopen_and_stale_migration_without_touching_identity() {
+        let path =
+            std::env::temp_dir().join(format!("eggdone-general-{}.sqlite", uuid::Uuid::new_v4()));
+        let expected: BTreeMap<String, Option<String>> = BTreeMap::from([
+            ("eggdone-theme".into(), Some("dark".into())),
+            ("eggdone-language".into(), Some("en-US".into())),
+            ("eggdone-show-completed".into(), Some("false".into())),
+            ("eggdone-default-list-view".into(), Some("remember".into())),
+            ("eggdone-list-view".into(), Some("calendar".into())),
+            ("eggdone-selected-group".into(), Some("work".into())),
+            ("eggdone-smart-view".into(), Some("no_date".into())),
+            (
+                "eggdone-pinned-smart-views".into(),
+                Some(r#"{"version":1,"ids":["no_date","next7"]}"#.into()),
+            ),
+            ("eggdone-focus-duration-minutes".into(), Some("45".into())),
+            ("eggdone-break-duration-minutes".into(), Some("15".into())),
+        ]);
+        let identity;
+        {
+            let mut db = Connection::open(&path).unwrap();
+            crate::db::migrate(&mut db).unwrap();
+            identity = crate::db::device_id(&db).unwrap();
+            initialize(&db, BTreeMap::new()).unwrap();
+            for (key, value) in &expected {
+                patch(&db, key.clone(), value.clone()).unwrap();
+            }
+        }
+        {
+            let mut db = Connection::open(&path).unwrap();
+            crate::db::migrate(&mut db).unwrap();
+            let saved = initialize(
+                &db,
+                BTreeMap::from([("eggdone-theme".into(), Some("light".into()))]),
+            )
+            .unwrap();
+            assert_eq!(saved.values, expected);
+            assert_eq!(saved.revision, 11);
+            assert_eq!(crate::db::device_id(&db).unwrap(), identity);
+            db.execute_batch("PRAGMA query_only=ON").unwrap();
+            assert!(patch(&db, "eggdone-pinned-smart-views".into(), None).is_err());
+        }
+        {
+            let db = Connection::open(&path).unwrap();
+            assert_eq!(read(&db).unwrap().unwrap().values, expected);
+            patch(&db, "eggdone-language".into(), Some("zh-CN".into())).unwrap();
+            patch(&db, "eggdone-pinned-smart-views".into(), None).unwrap();
+        }
+        {
+            let db = Connection::open(&path).unwrap();
+            let saved = read(&db).unwrap().unwrap();
+            assert_eq!(saved.values["eggdone-pinned-smart-views"], None);
+            assert_eq!(
+                saved.values["eggdone-smart-view"].as_deref(),
+                Some("no_date")
+            );
+            assert_eq!(saved.values["eggdone-language"].as_deref(), Some("zh-CN"));
+            assert_eq!(saved.revision, 13);
+        }
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
     fn migration_is_one_time_and_patch_preserves_other_windows() {
         let db = database();
         assert!(read(&db).unwrap().is_none());
