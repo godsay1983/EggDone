@@ -135,8 +135,10 @@ E6d已本地提交：桌面8c42ba9、鸿蒙1af2bf3。本轮按用户要求继续
 ## E7：任务便签关联
 
 - [x] L1 共享协议、51组fixtures、双端迁移与持久化内核；已提交桌面5e06653、鸿蒙c43bba0。
-- [x] L2 原子创建/关联/解绑/本机删除协调，自动化与手机平板模拟器原生测试通过，见[TASK_NOTE_LINK_ATOMIC_OPERATIONS.md](TASK_NOTE_LINK_ATOMIC_OPERATIONS.md)。当前增量未提交；尚无关联入口或同步，原生证据与待验收项单独记录。
-- [ ] L3 同步、备份和真实离线/冲突。
+- [x] L2 原子创建/关联/解绑/本机删除协调，已提交桌面22ca101、鸿蒙e1f1c18，见[TASK_NOTE_LINK_ATOMIC_OPERATIONS.md](TASK_NOTE_LINK_ATOMIC_OPERATIONS.md)。
+- [x] L3a 原子同步快照、旧回执保护、删除协调与配置世代失效，自动化/原生模拟器验证通过，见[TASK_NOTE_LINK_SYNC_SNAPSHOT.md](TASK_NOTE_LINK_SYNC_SNAPSHOT.md)。本轮增量未提交。
+- [ ] L3b 生产网络会话、实体优先上传、独立探测/状态及有界冲突重试。
+- [ ] L3c 备份版本、预览与原子恢复；L3d 真实跨端离线/冲突验收。
 - [ ] L4 双端入口、返回上下文与异常状态。
 - [ ] L5 原生设备、升级、双端兼容版本与发布资料。
 - 沿用 [TASK_NOTE_LINK_ROADMAP.md](TASK_NOTE_LINK_ROADMAP.md)，本表只汇总，不另造协议或重复勾选。

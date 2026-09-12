@@ -37,6 +37,7 @@ mod task_note_link_operation_tests;
 pub mod task_note_link_operations;
 pub mod task_note_link_protocol;
 pub mod task_note_link_store;
+pub mod task_note_link_sync;
 #[cfg(test)]
 mod task_note_link_tests;
 mod tray;
