@@ -81,6 +81,8 @@
   import DataManager from "./DataManager.svelte";
   import TrashDialog from "./TrashDialog.svelte";
   import NoteHistoryDialog from "./NoteHistoryDialog.svelte";
+  import ContentSearchDialog from "./ContentSearchDialog.svelte";
+  import { contentSearchApi, type SearchItem, type SearchTarget } from "$lib/api/contentSearchApi";
   import SettingsPanel from "./SettingsPanel.svelte";
   import TodoItem from "./TodoItem.svelte";
   import { refreshRecurrenceRules } from "$lib/stores/recurrenceStore";
@@ -169,6 +171,7 @@
   let captureReadAgain = false;
 
   async function readCapture() {
+    if (contentSearchSession || contentSearchOpening) return;
     if (captureRequest) return;
     if (captureLoading) { captureReadAgain = true; return; }
     captureLoading = true;
@@ -227,12 +230,57 @@
   let showAbout = false;
   let showDataManager = false;
   let showTrash = false;
+  let contentSearchSession = false;
+  let contentSearchActive = false;
+  let contentSearchOpening = false;
+  let searchAttachmentUuid = "";
+  async function openContentSearch() {
+    if (contentSearchSession || contentSearchOpening || noteNavigationBusy || noteAttachmentBusy || historyOpening || historyUuid ||
+      linkedRequest || linkManager || linkedTaskEditing || linkNavigating || noteDraft || captureRequest || captureLoading) return;
+    const sourceUuid = selectedNoteUuid;
+    contentSearchOpening = true; noteNavigationBusy = true;
+    try {
+      await flushAllNoteChanges();
+      if (notes.hasPendingSave() || $notes.error || selectedNoteUuid !== sourceUuid) throw Error("SEARCH_SAVE_FAILED");
+      summaryMenuOpen = false; contentSearchSession = true; contentSearchActive = true;
+    } catch { noteAttachmentError = $translator("contentSearch.saveFailed"); }
+    finally { contentSearchOpening = false; noteNavigationBusy = false; }
+  }
+  async function openSearchResult(item: SearchItem): Promise<SearchTarget | null> {
+    if (!contentSearchActive || linkNavigating || noteNavigationBusy || noteAttachmentBusy || historyOpening || historyUuid ||
+      linkManager || linkedRequest || linkedTaskEditing) throw Error("SEARCH_BUSY");
+    linkNavigating = true;
+    try {
+      await flushAllNoteChanges();
+      if (notes.hasPendingSave() || $notes.error) throw Error("SEARCH_SAVE_FAILED");
+      const target = await contentSearchApi.resolve(item.kind, item.uuid);
+      if (target.kind === "todo" && target.archived) return target;
+      const noteUuid = target.kind === "note" ? target.uuid : target.kind === "attachment" ? target.parent_uuid : null;
+      if (noteUuid) {
+        await notes.load();
+        if ($notes.error) throw Error("SEARCH_DATABASE_FAILED");
+        if (!$notes.items.some(note => note.uuid === noteUuid)) throw Error("SEARCH_UNAVAILABLE");
+        await refreshNoteAttachments(noteUuid, false);
+        if (target.kind === "attachment" && !(noteAttachmentsByNote[noteUuid] ?? []).some(asset => asset.uuid === target.uuid)) throw Error("SEARCH_UNAVAILABLE");
+      } else {
+        await todos.refresh();
+        if ($todos.error) throw Error("SEARCH_DATABASE_FAILED");
+        if (!$todos.items.some(todo => todo.uuid === target.uuid)) throw Error("SEARCH_UNAVAILABLE");
+      }
+      linkHistory = [...linkHistory, { noteUuid: selectedNoteUuid, todoUuid: linkedTodoUuid, search: true, attachmentUuid: searchAttachmentUuid }];
+      selectedNoteUuid = noteUuid; linkedTodoUuid = noteUuid ? null : target.uuid;
+      searchAttachmentUuid = target.kind === "attachment" ? target.uuid : "";
+      linkedTaskEditing = false; linkNotice = ""; contentSearchActive = false;
+      return null;
+    } finally { linkNavigating = false; }
+  }
   let historyUuid: string | null = null;
   let historyOpening = false;
   let historyOpenError = false;
   let historyEditorRevision = 0;
   let historyRefreshed = false;
   async function openNoteHistory() {
+    if (contentSearchActive || contentSearchOpening) return;
     if (historyOpening || historyUuid || noteNavigationBusy || noteAttachmentBusy || linkNavigating || linkedRequest || linkManager || !selectedNote || noteDraft) return;
     const uuid = selectedNote.uuid;
     historyOpening = true; historyRefreshed = false; historyOpenError = false;
@@ -262,11 +310,14 @@
     if (refreshFailed) {
       // Never return to inputs that still contain text from before the committed restore.
       selectedNoteUuid = null; linkHistory = []; linkNotice = "";
+      linkedTodoUuid = null; searchAttachmentUuid = "";
+      if (contentSearchSession) contentSearchActive = true;
     } else if (historyRefreshed) historyEditorRevision++;
     historyUuid = null;
   }
   let trashOpening = false;
   async function openTrash() {
+    if (contentSearchActive || contentSearchOpening) return;
     if (showTrash || trashOpening || noteNavigationBusy || noteAttachmentBusy) return;
     trashOpening = true;
     try { await flushAllNoteChanges(); summaryMenuOpen = false; showTrash = true; }
@@ -345,7 +396,7 @@
   let linkManager: { scope: LinkScope; uuid: string; title: string } | null = null;
   const linkReader = createLinkManager();
   const noteEditorScrollPositions = new Map<string, number>();
-  let linkHistory: Array<{ noteUuid: string | null; todoUuid: string | null }> = [];
+  let linkHistory: Array<{ noteUuid: string | null; todoUuid: string | null; search?: boolean; attachmentUuid?: string }> = [];
   let linkedTodoUuid: string | null = null;
   let linkedTaskEditing = false;
   let linkNavigating = false;
@@ -353,6 +404,7 @@
   $: if (linkedTodoUuid && !linkedTodo) linkedTaskEditing = false;
 
   async function openRelatedContent(item: TaskNoteLinkView, scope: LinkScope) {
+    if (contentSearchActive || contentSearchOpening) throw Error("LINK_BUSY");
     if (historyOpening || historyUuid) throw Error("LINK_BUSY");
     if (linkNavigating || noteNavigationBusy || noteAttachmentBusy || linkedTaskEditing) throw Error("LINK_BUSY");
     linkNavigating = true;
@@ -370,7 +422,8 @@
         if ($todos.error) throw Error("LINK_READ_FAILED");
         if (!$todos.items.some(todo => todo.uuid === current.link.todo_uuid)) throw Error("LINK_UNAVAILABLE");
       }
-      linkHistory = [...linkHistory, { noteUuid: selectedNoteUuid, todoUuid: linkedTodoUuid }];
+      linkHistory = [...linkHistory, { noteUuid: selectedNoteUuid, todoUuid: linkedTodoUuid, attachmentUuid: searchAttachmentUuid }];
+      searchAttachmentUuid = "";
       linkManager = null;
       selectedNoteUuid = scope === "todo" ? current.link.note_uuid : null;
       linkedTodoUuid = scope === "note" ? current.link.todo_uuid : null;
@@ -387,6 +440,8 @@
       const previous = linkHistory[linkHistory.length - 1];
       selectedNoteUuid = previous.noteUuid;
       linkedTodoUuid = previous.todoUuid;
+      searchAttachmentUuid = previous.attachmentUuid ?? "";
+      if (previous.search && contentSearchSession) contentSearchActive = true;
       linkHistory = linkHistory.slice(0, -1);
       linkedTaskEditing = false;
       linkNotice = "";
@@ -396,6 +451,7 @@
   }
   async function focusFromLinkedContent(todo: Todo) {
     while (linkHistory.length) { if (!(await backFromLinkedContent())) return; }
+    contentSearchSession = false; contentSearchActive = false;
     openFocusForTodo(todo);
   }
   function manageTaskLinks(todo: Todo) {
@@ -520,7 +576,7 @@
     const requestKey = visibleNotePreviewAttachments
       .map((attachment) => `${attachment.uuid}:${attachment.local_preview_path ?? ""}:${attachment.transfer_state}`)
       .join("|");
-    if (requestKey && requestKey !== visibleNotePreviewRequestKey) {
+    if (!contentSearchSession && !contentSearchOpening && requestKey && requestKey !== visibleNotePreviewRequestKey) {
       visibleNotePreviewRequestKey = requestKey;
       void loadAttachmentPreviews(visibleNotePreviewAttachments);
     }
@@ -1088,6 +1144,7 @@
   }
 
   function updateNote(note: Note, nextTitle: string, content: string) {
+    if (contentSearchActive || contentSearchOpening) return;
     if (historyOpening || historyUuid) return;
     historyOpenError = false;
     if (note.uuid === NOTE_DRAFT_UUID && noteDraft) {
@@ -1099,6 +1156,7 @@
   }
 
   async function closeNoteEditor(): Promise<boolean> {
+    if (contentSearchActive || contentSearchOpening) return false;
     if (historyOpening || historyUuid) return false;
     if (linkHistory.length) return backFromLinkedContent();
     if (noteNavigationBusy || noteAttachmentBusy || linkedRequest || linkManager) return false;
@@ -1845,6 +1903,7 @@
   }
 
   function handlePanelKeydown(event: KeyboardEvent) {
+    if (contentSearchActive || contentSearchOpening) return;
     if (historyOpening || historyUuid) return;
     if (captureRequest) return;
     if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLocaleLowerCase() === "n") {
@@ -1903,6 +1962,7 @@
       showAbout ||
       showDataManager ||
       showTrash ||
+      contentSearchActive || contentSearchOpening ||
       showSettings ||
       managingGroup ||
       creatingGroup ||
@@ -2916,6 +2976,7 @@
             </button>
           {/if}
           <button type="button" role="menuitem" disabled={trashOpening || noteAttachmentBusy} onclick={() => void openTrash()}>{$translator("trash.title")}</button>
+          <button type="button" role="menuitem" disabled={contentSearchOpening || noteAttachmentBusy} onclick={() => void openContentSearch()}>{$translator("contentSearch.title")}</button>
         </div>
       {/if}
     </div>
@@ -3018,7 +3079,10 @@
     {/if}
     {#key selectedNote.uuid + ':' + historyEditorRevision}
     <NoteEditor
-      locked={historyOpening || historyUuid !== null}
+      locked={historyOpening || historyUuid !== null || contentSearchOpening || contentSearchActive}
+      onSearch={contentSearchSession ? null : () => void openContentSearch()}
+      focusAttachmentUuid={searchAttachmentUuid}
+      onClearAttachmentFocus={() => searchAttachmentUuid = ""}
       onHistory={() => void openNoteHistory()}
       note={selectedNote}
       draft={selectedNote.uuid === NOTE_DRAFT_UUID}
@@ -3480,6 +3544,10 @@
 
 {#if showTrash}
   <TrashDialog onClose={() => showTrash = false} afterCommit={refreshAfterTrash} />
+{/if}
+{#if contentSearchSession}
+  <ContentSearchDialog active={contentSearchActive} onOpen={openSearchResult}
+    onClose={() => { contentSearchSession = false; contentSearchActive = false; void readCapture(); }} />
 {/if}
 {#if historyUuid}
   <NoteHistoryDialog uuid={historyUuid} beforeRestore={assertHistoryReady}

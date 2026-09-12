@@ -11,13 +11,15 @@ const methods = ast.statements.filter(n => ts.isFunctionDeclaration(n) && names.
 assert.equal(methods.length, names.length);
 const body = `
  let historyOpening=false,historyUuid=null,historyEditorRevision=0,historyRefreshed=false,historyOpenError=false;
+ let contentSearchActive=false,contentSearchOpening=false,contentSearchSession=false,searchAttachmentUuid='',linkedTodoUuid=null;
  let selectedNote={uuid:'n',title:'current'},selectedNoteUuid='n',noteDraft=null;
  let noteNavigationBusy=false,noteAttachmentBusy=false,linkNavigating=false,linkedRequest=null,linkManager=null;
  let linkHistory=[{noteUuid:'source',todoUuid:null}],linkNotice='',noteAttachmentError=null;
  const $notes={items:[selectedNote],error:null},$translator=k=>k;
  ${methods.map(n => n.getText(ast)).join('\n')}
  return {openNoteHistory,assertHistoryReady,refreshHistoryEditor,afterHistoryRestore,closeNoteHistory,updateNote,closeNoteEditor,
-  state:()=>({historyOpening,historyUuid,selectedNoteUuid,historyEditorRevision,linkHistory,historyOpenError}),
+  state:()=>({historyOpening,historyUuid,selectedNoteUuid,historyEditorRevision,linkHistory,historyOpenError,contentSearchActive,searchAttachmentUuid}),
+  fromSearch:()=>{contentSearchSession=true;searchAttachmentUuid='asset';},
   failRead:()=>{$notes.error='failed';},clearRead:()=>{$notes.error=null;},
   remove:()=>{$notes.items=[];},switchSource:()=>{selectedNoteUuid='other';}};`;
 const compiled = ts.transpileModule(body, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
@@ -47,6 +49,10 @@ function fixture() {
  await assert.rejects(refresh.h.afterHistoryRestore(true),/REFRESH_FAILED/);
  refresh.h.closeNoteHistory(true);assert.equal(refresh.h.state().selectedNoteUuid,null);
  assert.equal(refresh.calls.includes('save'),false);
+ const search=fixture();search.h.fromSearch();await search.h.openNoteHistory();search.h.failRead();
+ await assert.rejects(search.h.afterHistoryRestore(true),/REFRESH_FAILED/);
+ search.h.closeNoteHistory(true);assert.equal(search.h.state().contentSearchActive,true);
+ assert.equal(search.h.state().searchAttachmentUuid,'');assert.equal(search.h.state().linkHistory.length,0);
  const retry=fixture();await retry.h.openNoteHistory();retry.h.failRead();
  await assert.rejects(retry.h.afterHistoryRestore(true));retry.h.clearRead();await retry.h.refreshHistoryEditor();
  retry.h.closeNoteHistory(false);assert.equal(retry.h.state().historyEditorRevision,1);
@@ -58,7 +64,7 @@ function fixture() {
  assert.equal(switched.h.state().historyUuid,null);
  const deleted=fixture();await deleted.h.openNoteHistory();deleted.h.remove();
  await assert.rejects(deleted.h.afterHistoryRestore(true),/REFRESH_FAILED/);
- assert.match(source,/locked=\{historyOpening \|\| historyUuid !== null\}/);
+ assert.match(source,/locked=\{historyOpening \|\| historyUuid !== null \|\| contentSearchOpening \|\| contentSearchActive\}/);
  assert.match(source,/#key selectedNote.uuid \+ ':' \+ historyEditorRevision/);
  console.log('History editor lifecycle: flush, input freeze, source/pending guards, refresh, no-op, failed-refresh close/retry passed');
 })().catch(error=>{console.error(error);process.exitCode=1;});

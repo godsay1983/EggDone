@@ -35,6 +35,7 @@ const fixture = `<script lang="ts">
  const todos=Object.assign(writable({items:[task],error:null}),{refresh:noop});
  let selectedNoteUuid='source', linkedTodoUuid=null,linkHistory=[],linkManager=null,linkedRequest=null,linkNotice='';
  let linkNavigating=false,noteNavigationBusy=false,noteAttachmentBusy=false,linkedTaskEditing=false;
+ let contentSearchActive=false,contentSearchOpening=false,contentSearchSession=false,searchAttachmentUuid='',historyOpening=false,historyUuid=null;
  let revision=0;window.refreshLinks=()=>revision++;
  const linkReader=createLinkManager();const scrollPositions=new Map();
  const refreshNoteAttachments=noop;

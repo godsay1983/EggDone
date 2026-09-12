@@ -69,6 +69,7 @@ const harness = `<script lang="ts">
  import NoteHistoryDialog from '$lib/components/NoteHistoryDialog.svelte';
  const notes=createNoteStore(undefined,()=>{},600);const scheduleAutoSync=()=>{};
  let historyOpening=false,historyUuid=null,historyEditorRevision=0,historyRefreshed=false,historyOpenError=false;
+ let contentSearchActive=false,contentSearchOpening=false,contentSearchSession=false,searchAttachmentUuid='',linkedTodoUuid=null;
  let selectedNoteUuid='n',noteDraft=null,noteNavigationBusy=false,noteAttachmentBusy=false,linkNavigating=false,linkedRequest=null,linkManager=null;
  let linkHistory=[],linkNotice='',noteAttachmentError=null,noteDraftSaveTimer=null,noteDraftCreatePromise=null,noteDraftCreated=null;
  const NOTE_DRAFT_UUID='draft',noop=async()=>{};

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import NoteTaskLinks from "./NoteTaskLinks.svelte";
   import type { TaskNoteLinkView } from "$lib/types/taskNoteLink";
   import { preserveScroll } from "$lib/utils/scrollContext";
@@ -19,6 +19,9 @@
   export let draft = false;
   export let locked = false;
   export let onHistory: () => void = () => {};
+  export let onSearch: (() => void) | null = null;
+  export let focusAttachmentUuid = "";
+  export let onClearAttachmentFocus: () => void = () => {};
   export let saving = false;
   export let error: string | null = null;
   export let saveFailed = false;
@@ -53,6 +56,24 @@
   let fileActionError = "";
   let attachmentManagerOpen = false;
   let addMenuOpen = false;
+  let locatedAttachmentUuid = "";
+  $: if (focusAttachmentUuid !== locatedAttachmentUuid) {
+    locatedAttachmentUuid = focusAttachmentUuid;
+    if (focusAttachmentUuid) attachmentManagerOpen = true;
+  }
+  function locateAttachment(node: HTMLElement, selected: boolean) {
+    let mounted = true;
+    async function locate(value: boolean) {
+      await tick();
+      if (mounted && value) { node.focus({ preventScroll: true }); node.scrollIntoView({ block: "nearest" }); }
+    }
+    void locate(selected);
+    return { update: (value: boolean) => { void locate(value); }, destroy: () => { mounted = false; } };
+  }
+  function closeAttachmentManager() {
+    attachmentManagerOpen = false;
+    onClearAttachmentFocus();
+  }
 
   $: imageAttachments = attachments.filter((attachment) => attachment.kind === "image");
   $: fileAttachments = attachments.filter((attachment) => attachment.kind === "file");
@@ -171,7 +192,7 @@
     } else if (attachmentManagerOpen && event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
-      attachmentManagerOpen = false;
+      closeAttachmentManager();
     } else if (addMenuOpen && event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
@@ -215,6 +236,8 @@
 </script>
 
 <style>
+  .search-target { outline: 2px solid #ad7800; outline-offset: 2px; scroll-margin: 12px; }
+  :global(html[data-theme="dark"]) .search-target { outline-color: #f3c75a; }
   .note-color-picker button {
     flex: 0 0 19px;
     border: 1px solid var(--note-border);
@@ -346,6 +369,7 @@
       {/each}
     </div>
     <button class="action-button" type="button" disabled={draft || attachmentBusy} onclick={onHistory}>{$translator("history.title")}</button>
+    {#if onSearch}<button class="action-button" type="button" disabled={draft || attachmentBusy} onclick={onSearch}>{$translator("contentSearch.title")}</button>{/if}
     <button class="action-button" type="button" onclick={() => void onPin(note, !note.pinned)}>{note.pinned ? $translator("note.unpin") : $translator("note.pin")}</button>
     <button class="action-button" data-tone="danger" type="button" onclick={() => void onDelete(note)}>{draft ? $translator("note.discard") : $translator("common.delete")}</button>
   </footer>
@@ -360,7 +384,7 @@
     tabindex="-1"
     onkeydown={handleViewerKeydown}
     onclick={(event) => {
-      if (event.target === event.currentTarget) attachmentManagerOpen = false;
+      if (event.target === event.currentTarget) closeAttachmentManager();
     }}
   >
     <div data-note-color={note.color}>
@@ -368,7 +392,7 @@
         <span><strong>{$translator("attachment.manage")}</strong><small>{attachmentSummary()}</small></span>
         <button type="button" disabled={attachmentBusy} onclick={() => imageInput.click()}>{$translator("attachment.addImage")}</button>
         <button type="button" disabled={attachmentBusy} onclick={() => attachmentInput.click()}>{$translator("attachment.addFile")}</button>
-        <button class="manager-close" type="button" aria-label={$translator("attachment.closeManager")} onclick={() => (attachmentManagerOpen = false)}>×</button>
+        <button class="manager-close" type="button" aria-label={$translator("attachment.closeManager")} onclick={closeAttachmentManager}>×</button>
       </header>
       <div class="note-attachment-manager-scroll">
         {#if imageAttachments.length > 0}
@@ -377,7 +401,8 @@
             <div class="note-attachment-grid" aria-label={$translator("attachment.images")}>
               {#each imageAttachments as attachment (attachment.uuid)}
                 {@const index = attachmentKindIndex(attachment)}
-                <article class:failed={attachment.transfer_state === "failed"}>
+                <article class:failed={attachment.transfer_state === "failed"} class:search-target={attachment.uuid === focusAttachmentUuid}
+                  tabindex="-1" data-attachment-id={attachment.uuid} use:locateAttachment={attachment.uuid === focusAttachmentUuid}>
                   <button class="note-attachment-preview" type="button" onclick={() => void openAttachment(attachment)}>
                     {#if attachmentPreviewUrls[attachment.uuid]}
                       <img src={attachmentPreviewUrls[attachment.uuid]} alt={attachment.display_name} />
@@ -407,7 +432,8 @@
             <div class="note-file-list" aria-label={$translator("note.attachments")}>
               {#each fileAttachments as attachment (attachment.uuid)}
                 {@const index = attachmentKindIndex(attachment)}
-                <article class:failed={attachment.transfer_state === "failed"}>
+                <article class:failed={attachment.transfer_state === "failed"} class:search-target={attachment.uuid === focusAttachmentUuid}
+                  tabindex="-1" data-attachment-id={attachment.uuid} use:locateAttachment={attachment.uuid === focusAttachmentUuid}>
                   <span class="note-file-kind" aria-hidden="true">{fileKind(attachment)}</span>
                   <div class="note-file-info">
                     <strong title={attachment.display_name}>{attachment.display_name}</strong>
