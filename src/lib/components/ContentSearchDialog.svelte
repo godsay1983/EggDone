@@ -130,7 +130,10 @@
   h3 span { margin-left: 6px; }
   form { display: flex; flex-wrap: wrap; gap: 8px; } input { flex: 1 1 160px; min-width: 0; width: 100%; box-sizing: border-box; font: inherit; padding: 8px 12px; border: 1px solid #86765c; border-radius: 8px; color: inherit; background: transparent; }
   .content { min-height: 0; flex: 1; overflow: auto; overflow-wrap: anywhere; } .body { white-space: pre-wrap; }
-  select { max-width: 100%; padding: 8px; font: inherit; color: inherit; background: inherit; border: 1px solid #86765c; border-radius: 8px; }
+  select { max-width: 100%; padding: 8px; font: inherit; color: var(--action-text); background: var(--action-bg); border: 1px solid var(--action-border); border-radius: 8px; color-scheme: light; }
+  option { color: var(--action-text); background-color: var(--action-bg); }
+  option:checked { color: var(--action-primary-text); background-color: var(--action-primary-bg); }
+  :global(html[data-theme="dark"]) select { color-scheme: dark; }
   .group { padding: 12px 0; border-bottom: 1px solid #86765c; } .group:last-child { border: 0; }
   ul { list-style: none; margin: 0; padding: 0; } li { margin: 8px 0; }
   .result { width: 100%; display: flex; flex-direction: column; align-items: stretch; text-align: left; gap: 4px; white-space: normal; overflow-wrap: anywhere; padding: 12px; border-radius: 8px; }

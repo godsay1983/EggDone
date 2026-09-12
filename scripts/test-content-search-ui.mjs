@@ -116,6 +116,27 @@ try {
  for(const lang of ['zh-CN','en-US'])for(const theme of ['light','dark'])for(const size of [{width:320,height:430},{width:480,height:720},{width:1100,height:800}])for(const scale of [1,1.5]){
   console.log('Checking search',lang,theme,size.width,scale);await page.setViewportSize(size);await begin(lang,theme,scale);
   assert.equal(await page.locator('.result').count(),41);
+  const category = page.getByRole('combobox');
+  for (const [value, count] of [['note',20],['all',41]]) {
+    await category.selectOption(value);
+    assert.equal(await page.locator('.result').count(),count);
+    const colors = await category.locator('option').evaluateAll(options => options.map(option => {
+      const style = getComputedStyle(option);
+      return { selected: option.selected, foreground: style.color, background: style.backgroundColor };
+    }));
+    for (const item of colors) {
+      const lum = color => {
+        const rgb = color.match(/[\d.]+/g).map(Number);
+        assert.ok(rgb.length === 3 || rgb[3] === 1, `Opaque option color required: ${color}`);
+        const channels = rgb.slice(0,3).map(v => v / 255).map(v => v <= 0.04045 ? v/12.92 : ((v+0.055)/1.055)**2.4);
+        return channels[0]*0.2126+channels[1]*0.7152+channels[2]*0.0722;
+      };
+      const [high,low] = [lum(item.foreground),lum(item.background)].sort((a,b)=>b-a);
+      assert.ok((high+0.05)/(low+0.05)>=4.5, JSON.stringify({theme,value,...item}));
+    }
+    assert.notEqual(colors.find(c=>c.selected).background,colors.find(c=>!c.selected).background);
+  }
+  assert.equal(await category.evaluate(el=>getComputedStyle(el).colorScheme),theme);
   assert.ok(await page.locator('dialog[open]').evaluate(d=>{const r=d.getBoundingClientRect();return r.left>=-1&&r.right<=innerWidth+1&&r.top>=-1&&r.bottom<=innerHeight+1&&d.scrollWidth<=d.clientWidth+1;}));
   await page.locator('[data-scope="todo"] .result').first().click();await page.getByText(lang==='zh-CN'?'已归档任务 · 只读':'Archived task · Read only',{exact:true}).waitFor();
   assert.equal(await page.locator('dialog[open] textarea').count(),0);assert.equal(await page.locator('dialog[open] img').count(),0);
