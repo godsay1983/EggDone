@@ -10,7 +10,7 @@ use crate::{
     db::{device_id, now_millis, Database},
     i18n::{AppLocale, I18nState},
     note_asset_store::{validate_safe_file_metadata, NoteAssetStore, NoteAttachmentCacheStats},
-    note_attachment_sync, note_attachments, note_sync,
+    note_attachment_sync, note_attachments,
     notes::{self, Note},
     reminders,
     s3_sync::{
@@ -1301,13 +1301,9 @@ pub async fn sync_now(
         sync_runtime_state::begin_attempt(&connection)?;
         prepared
     };
-    let outcome = sync_now_inner(
-        app.clone(),
-        database.clone(),
-        runtime.clone(),
-        asset_store,
-        &prepared,
-    )
+    let outcome = sync_now_inner(&database, &runtime, &asset_store, &prepared, || {
+        let _ = app.emit_to("main", "notes-changed", ());
+    })
     .await;
     // A partial merge is still visible locally and may have changed reminder scheduling.
     tray::update_task_badge(&app);
@@ -1335,60 +1331,18 @@ pub async fn sync_now(
 }
 
 async fn sync_now_inner(
-    app: AppHandle,
-    database: State<'_, Database>,
-    runtime: State<'_, SyncRuntime>,
-    asset_store: State<'_, NoteAssetStore>,
+    database: &Database,
+    runtime: &SyncRuntime,
+    asset_store: &NoteAssetStore,
     prepared: &s3_sync::PreparedManualSync,
+    notify_notes: impl Fn() + Send,
 ) -> Result<ManualSyncResult, String> {
-    let todo = crate::recurrence_sync_session::sync_todos(&database, prepared.clone()).await?;
+    let entities = crate::task_note_link_session::run(&database, prepared).await?;
+    let todo = entities.todo;
     let todo_count = todo.count;
-    let todo_conflict_retried = todo.conflict_retried;
+    let entity_conflict_retried = entities.conflict_retried;
+    let note_count = entities.note_count;
     ensure_sync_target(&database, prepared)?;
-
-    let mut note_remote = s3_sync::download_note_remote(&prepared)
-        .await
-        .map_err(|error| format!("便签同步失败：{error}"))?;
-    let mut note_conflict_retried = false;
-    let note_count = loop {
-        let (merged, revision) = {
-            let mut connection = lock_database(&database)?;
-            prepared.require_current(&connection)?;
-            let document = match &note_remote.document {
-                Some(document) => {
-                    note_sync::merge_remote_document(&mut connection, document, now_millis())?
-                }
-                None => note_sync::build_document(&connection, now_millis())?,
-            };
-            (
-                document,
-                sync_runtime_state::domain_revision(&connection, SyncDomain::Notes)?,
-            )
-        };
-        ensure_sync_target(&database, prepared)?;
-        match s3_sync::upload_note_document(&prepared, &merged, &note_remote)
-            .await
-            .map_err(|error| format!("便签同步失败：{error}"))?
-        {
-            UploadOutcome::Success => {
-                let connection = lock_database(&database)?;
-                prepared.require_current(&connection)?;
-                sync_runtime_state::mark_domain_synced(&connection, SyncDomain::Notes, revision)?;
-                let _ = app.emit_to("main", "notes-changed", ());
-                break merged.notes.len();
-            }
-            UploadOutcome::Conflict if !note_conflict_retried => {
-                ensure_sync_target(&database, prepared)?;
-                note_conflict_retried = true;
-                note_remote = s3_sync::download_note_remote(&prepared)
-                    .await
-                    .map_err(|error| format!("便签同步失败：{error}"))?;
-            }
-            UploadOutcome::Conflict => {
-                return Err("便签远端文件持续发生变化，已停止上传并保留本地数据".to_string());
-            }
-        }
-    };
     let pending_attachments = {
         let connection = lock_database(&database)?;
         prepared.require_current(&connection)?;
@@ -1540,19 +1494,19 @@ async fn sync_now_inner(
         now_millis(),
     )
     .await;
-    let _ = app.emit_to("main", "notes-changed", ());
+    notify_notes();
 
     ensure_sync_target(&database, prepared)?;
     let state = s3_sync::get_remote_state(&prepared, &database).await.ok();
     ensure_sync_target(&database, prepared)?;
-    let conflict_retried =
-        todo_conflict_retried || note_conflict_retried || attachment_conflict_retried;
+    let conflict_retried = entity_conflict_retried || attachment_conflict_retried;
     let sync_message = if conflict_retried {
         "检测到远端更新，重新合并后同步完成".to_string()
     } else {
         "任务、便签和附件同步完成".to_string()
     };
     Ok(ManualSyncResult {
+        link_remote_token: entities.link_token,
         recurrence_remote_token: todo.recurrence_token,
         message: cleanup_summary.append_to(sync_message),
         todo_count,
@@ -1565,6 +1519,10 @@ async fn sync_now_inner(
         note_attachment_remote_etag: state.and_then(|value| value.note_attachment_etag),
     })
 }
+
+#[cfg(test)]
+#[path = "sync_core_tests.rs"]
+mod sync_core_tests;
 
 #[derive(Default)]
 struct RemoteAssetCleanupSummary {
@@ -1588,7 +1546,7 @@ impl RemoteAssetCleanupSummary {
 }
 
 async fn cleanup_remote_note_assets(
-    database: &State<'_, Database>,
+    database: &Database,
     runtime: &SyncRuntime,
     prepared: &s3_sync::PreparedManualSync,
     document: &note_attachment_sync::NoteAttachmentSyncDocument,
@@ -1654,7 +1612,7 @@ async fn cleanup_remote_note_assets(
 }
 
 fn ensure_sync_target(
-    database: &State<'_, Database>,
+    database: &Database,
     prepared: &s3_sync::PreparedManualSync,
 ) -> Result<(), String> {
     let connection = lock_database(database)?;
@@ -1673,8 +1631,8 @@ fn emit_notes_changed_after_success<T>(app: &AppHandle, result: &Result<T, Strin
     }
 }
 
-fn lock_database<'a>(
-    database: &'a State<'_, Database>,
+pub(crate) fn lock_database<'a>(
+    database: &'a Database,
 ) -> Result<std::sync::MutexGuard<'a, Connection>, String> {
     database
         .connection
@@ -2392,7 +2350,7 @@ fn reorder_todos_in_connection(
     list_todos_from_connection(connection)
 }
 
-fn soft_delete_todo_in_connection(
+pub(crate) fn soft_delete_todo_in_connection(
     connection: &mut Connection,
     id: i64,
     repeat_scope: Option<&str>,
@@ -2491,6 +2449,13 @@ fn soft_delete_todo_in_connection(
                 params![stamp, updated_by, todo_id],
             )
             .map_err(database_error)?;
+        crate::task_note_link_store::tombstone_entity(
+            connection,
+            &todo.uuid,
+            false,
+            stamp,
+            &updated_by,
+        )?;
     }
 
     if changed == 0 {
@@ -2550,10 +2515,22 @@ fn restore_todo_in_connection(connection: &mut Connection, id: i64) -> Result<To
     Ok(restored)
 }
 
-fn clear_completed_todos_in_connection(connection: &Connection) -> Result<usize, String> {
+pub(crate) fn clear_completed_todos_in_connection(
+    connection: &Connection,
+) -> Result<usize, String> {
+    let tx = connection.unchecked_transaction().map_err(database_error)?;
     let now = now_millis();
-    let updated_by = device_id(connection).map_err(database_error)?;
-    connection
+    let updated_by = device_id(&tx).map_err(database_error)?;
+    let ids = {
+        let mut query = tx.prepare("SELECT uuid FROM todos WHERE completed=1 AND deleted_at IS NULL AND archived_at IS NULL").map_err(database_error)?;
+        let rows = query
+            .query_map([], |r| r.get::<_, String>(0))
+            .map_err(database_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(database_error)?;
+        rows
+    };
+    let changed = tx
         .execute(
             "
             UPDATE todos
@@ -2562,7 +2539,12 @@ fn clear_completed_todos_in_connection(connection: &Connection) -> Result<usize,
             ",
             params![now, updated_by],
         )
-        .map_err(database_error)
+        .map_err(database_error)?;
+    for uuid in ids {
+        crate::task_note_link_store::tombstone_entity(&tx, &uuid, false, now, &updated_by)?;
+    }
+    tx.commit().map_err(database_error)?;
+    Ok(changed)
 }
 
 fn archive_completed_todos_in_connection(connection: &Connection) -> Result<usize, String> {
@@ -2841,7 +2823,7 @@ fn normalize_todo_priority(priority: i64) -> Result<i64, String> {
     }
 }
 
-fn normalize_due_date(due_date: Option<String>) -> Result<Option<String>, String> {
+pub(crate) fn normalize_due_date(due_date: Option<String>) -> Result<Option<String>, String> {
     let Some(value) = due_date else {
         return Ok(None);
     };

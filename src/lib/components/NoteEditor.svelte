@@ -1,16 +1,33 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
+  import NoteTaskLinks from "./NoteTaskLinks.svelte";
+  import type { TaskNoteLinkView } from "$lib/types/taskNoteLink";
+  import { preserveScroll } from "$lib/utils/scrollContext";
   import { languageState, translator, type TranslationKey } from "$lib/i18n";
   import { formatFileSize } from "$lib/i18n/formatters";
   import { localizedErrorMessage } from "$lib/i18n/errors";
   import type { Note, NoteAttachment, NoteColor } from "$lib/types";
+  import { attachmentStatus, attachmentFailureHint } from "$lib/utils/attachmentPresentation";
 
   export let note: Note;
+  export let linkRevision: unknown = 0;
+  export let linkNotice = "";
+  export let onCreateLinked: () => void = () => {};
+  export let onManageLinks: () => void = () => {};
+  export let onOpenLink: (item: TaskNoteLinkView) => Promise<void> = async () => {};
+  export let scrollPositions = new Map<string, number>();
   export let draft = false;
+  export let locked = false;
+  export let onHistory: () => void = () => {};
+  export let onSearch: (() => void) | null = null;
+  export let focusAttachmentUuid = "";
+  export let onClearAttachmentFocus: () => void = () => {};
   export let saving = false;
   export let error: string | null = null;
+  export let saveFailed = false;
   export let onChange: (note: Note, title: string, content: string) => void;
-  export let onDone: () => Promise<void>;
+  export let onDone: () => Promise<void | boolean>;
+  export let onRetrySave: () => Promise<void> = async () => {};
   export let onPin: (note: Note, pinned: boolean) => Promise<void>;
   export let onColor: (note: Note, color: NoteColor) => Promise<void>;
   export let onDelete: (note: Note) => Promise<void>;
@@ -35,9 +52,28 @@
   let viewerUrl = "";
   let viewerLoading = false;
   let viewerError = "";
+  let viewerRequest = 0;
   let fileActionError = "";
   let attachmentManagerOpen = false;
   let addMenuOpen = false;
+  let locatedAttachmentUuid = "";
+  $: if (focusAttachmentUuid !== locatedAttachmentUuid) {
+    locatedAttachmentUuid = focusAttachmentUuid;
+    if (focusAttachmentUuid) attachmentManagerOpen = true;
+  }
+  function locateAttachment(node: HTMLElement, selected: boolean) {
+    let mounted = true;
+    async function locate(value: boolean) {
+      await tick();
+      if (mounted && value) { node.focus({ preventScroll: true }); node.scrollIntoView({ block: "nearest" }); }
+    }
+    void locate(selected);
+    return { update: (value: boolean) => { void locate(value); }, destroy: () => { mounted = false; } };
+  }
+  function closeAttachmentManager() {
+    attachmentManagerOpen = false;
+    onClearAttachmentFocus();
+  }
 
   $: imageAttachments = attachments.filter((attachment) => attachment.kind === "image");
   $: fileAttachments = attachments.filter((attachment) => attachment.kind === "file");
@@ -45,9 +81,11 @@
   onMount(() => {
     titleInput.focus();
     titleInput.select();
+    return closeViewer;
   });
 
   function changed() {
+    if (locked) return;
     onChange(note, title, content);
   }
 
@@ -121,20 +159,26 @@
   }
 
   async function openAttachment(attachment: NoteAttachment) {
+    closeViewer();
+    const request = ++viewerRequest;
     viewerLoading = true;
     viewerError = "";
     viewerAttachment = attachment;
     try {
-      viewerUrl = await onOpenAttachment(attachment);
+      const url = await onOpenAttachment(attachment);
+      if (request !== viewerRequest) { URL.revokeObjectURL(url); return; }
+      viewerUrl = url;
     } catch (reason) {
-      viewerError = localizedErrorMessage(reason);
+      if (request === viewerRequest) viewerError = localizedErrorMessage(reason);
     } finally {
-      viewerLoading = false;
+      if (request === viewerRequest) viewerLoading = false;
     }
   }
 
   function closeViewer() {
+    viewerRequest++;
     if (viewerUrl) URL.revokeObjectURL(viewerUrl);
+    viewerLoading = false;
     viewerUrl = "";
     viewerError = "";
     viewerAttachment = null;
@@ -142,11 +186,17 @@
 
   function handleViewerKeydown(event: KeyboardEvent) {
     if (viewerAttachment && event.key === "Escape") {
+      event.preventDefault();
       event.stopPropagation();
       closeViewer();
     } else if (attachmentManagerOpen && event.key === "Escape") {
+      event.preventDefault();
       event.stopPropagation();
-      attachmentManagerOpen = false;
+      closeAttachmentManager();
+    } else if (addMenuOpen && event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      addMenuOpen = false;
     }
   }
 
@@ -158,14 +208,26 @@
     return $translator("note.filesCount", { count: fileAttachments.length });
   }
 
+  function attachmentPresentationInput(attachment: NoteAttachment) {
+    return {
+      state: attachment.transfer_state, remoteUploaded: attachment.remote_uploaded,
+      hasOriginal: attachment.local_original_path !== null, hasPreview: attachment.local_preview_path !== null,
+      hasRemotePreview: attachment.preview_sha256 !== null && attachment.preview_byte_size !== null,
+      isImage: attachment.kind === "image",
+    };
+  }
   function attachmentState(attachment: NoteAttachment) {
-    if (attachment.transfer_state === "failed") return $translator("attachment.failed");
-    if (attachment.transfer_state === "downloading") return $translator("attachment.downloading");
-    if (attachment.transfer_state === "cached") return $translator("attachment.cached");
-    if (attachment.transfer_state === "uploading") return $translator("attachment.uploading");
-    if (attachment.transfer_state === "pending_upload") return $translator("attachment.pendingUpload");
-    if (attachment.transfer_state === "remote_only") return $translator("attachment.needsDownload");
-    return $translator("attachment.synced");
+    return $translator(`attachment.state.${attachmentStatus(attachmentPresentationInput(attachment))}`);
+  }
+  function attachmentHint(attachment: NoteAttachment) {
+    const state = attachmentStatus(attachmentPresentationInput(attachment));
+    if (state === "available" || state === "uploading" || state === "downloading") return "";
+    const hint = $translator(`attachment.state.hint_${state}`);
+    return state === "upload_failed" || state === "download_failed"
+      ? $translator(`attachment.state.reason_${attachmentFailureHint(attachment.transfer_error)}`) + " " + hint : hint;
+  }
+  function attachmentRetryLabel(attachment: NoteAttachment) {
+    return $translator(attachment.remote_uploaded ? "attachment.state.retry_download" : "attachment.state.retry_upload");
   }
 
   function colorName(color: NoteColor) {
@@ -173,23 +235,69 @@
   }
 </script>
 
-<svelte:window onkeydown={handleViewerKeydown} />
+<style>
+  .search-target { outline: 2px solid #ad7800; outline-offset: 2px; scroll-margin: 12px; }
+  :global(html[data-theme="dark"]) .search-target { outline-color: #f3c75a; }
+  .note-color-picker button {
+    flex: 0 0 19px;
+    border: 1px solid var(--note-border);
+    background: var(--note-bg);
+  }
+  .attachment-state-hint {
+    margin: 4px 6px 8px;
+    font-size: 11px;
+    line-height: 1.5;
+    color: inherit;
+    overflow-wrap: anywhere;
+  }
+  .note-attachment-grid article > div {
+    flex-wrap: wrap;
+  }
+  .note-attachment-grid small {
+    flex-basis: 80px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .note-attachment-grid article > div button {
+    height: auto;
+    min-height: 22px;
+    white-space: normal;
+  }
+  .note-file-list article {
+    flex-wrap: wrap;
+  }
+  .note-file-info {
+    flex: 1 1 130px;
+  }
+  .note-file-info small {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .note-file-info .attachment-state-hint {
+    margin-left: 0;
+    margin-right: 0;
+  }
+</style>
+
+<svelte:window onkeydowncapture={handleViewerKeydown} />
 
 <section
   class="note-editor"
+  inert={locked}
   data-note-color={note.color}
   aria-label={$translator("note.edit")}
   ondragover={(event) => event.preventDefault()}
   ondrop={dropAttachments}
 >
   <header>
-    <button type="button" onclick={() => void onDone()}>{$translator("common.back")}</button>
+    <button class="action-button" type="button" aria-busy={saving} onclick={() => void onDone()}>{$translator("common.back")}</button>
     <span>{error ? error : saving ? $translator("note.saving") : draft ? $translator("note.autoSaveHint") : $translator("note.savedLocal")}</span>
+    {#if saveFailed}<button class="action-button" type="button" disabled={saving || attachmentBusy} onclick={() => void onRetrySave()}>{$translator("common.retry")}</button>{/if}
     <input bind:this={imageInput} class="note-file-input" type="file" accept="image/jpeg,image/png,image/webp" multiple onchange={selectImages} />
     <input bind:this={attachmentInput} class="note-file-input" type="file" accept=".pdf,.txt,.md,.markdown,.docx,.xlsx,.pptx,.zip" multiple onchange={selectAttachments} />
     <div class="note-add-control">
       <button
-        class="attachment-trigger"
+        class="action-button attachment-trigger"
         type="button"
         aria-expanded={addMenuOpen}
         disabled={attachmentBusy}
@@ -197,12 +305,14 @@
       >{$translator("attachment.add")}</button>
       {#if addMenuOpen}
         <div class="note-add-menu">
-          <button type="button" onclick={() => { addMenuOpen = false; imageInput.click(); }}>{$translator("attachment.addImage")}</button>
-          <button type="button" onclick={() => { addMenuOpen = false; attachmentInput.click(); }}>{$translator("attachment.addFile")}</button>
+          <button class="action-button" type="button" onclick={() => { addMenuOpen = false; imageInput.click(); }}>{$translator("attachment.addImage")}</button>
+          <button class="action-button" type="button" onclick={() => { addMenuOpen = false; attachmentInput.click(); }}>{$translator("attachment.addFile")}</button>
+          <button class="action-button" type="button" disabled={draft || saving} onclick={() => { addMenuOpen = false; onCreateLinked(); }}>{$translator("links.create")}</button>
+          <button class="action-button" type="button" disabled={draft || saving} onclick={() => { addMenuOpen = false; onManageLinks(); }}>{$translator("links.manage")}</button>
         </div>
       {/if}
     </div>
-    <button class="primary" type="button" onclick={() => void onDone()}>{$translator("common.done")}</button>
+    <button class="action-button" data-tone="primary" type="button" aria-busy={saving} onclick={() => void onDone()}>{$translator("common.done")}</button>
   </header>
   <input
     bind:this={titleInput}
@@ -214,6 +324,7 @@
     oninput={changed}
   />
   <textarea
+    use:preserveScroll={{ positions: scrollPositions, key: note.uuid }}
     bind:value={content}
     maxlength="20000"
     placeholder={$translator("note.contentPlaceholder")}
@@ -222,6 +333,8 @@
     oninput={changed}
     onpaste={pasteImages}
   ></textarea>
+  {#if linkNotice}<p class="attachment-state-hint" role="status">{linkNotice}</p>{/if}
+  <NoteTaskLinks uuid={draft ? "" : note.uuid} revision={linkRevision} onOpen={onOpenLink} />
   {#if attachments.length > 0}
     <section class="note-attachment-summary" aria-label={$translator("note.attachments")}>
       <button class="note-attachment-summary-heading" type="button" onclick={() => (attachmentManagerOpen = true)}>
@@ -255,8 +368,10 @@
         ></button>
       {/each}
     </div>
-    <button type="button" onclick={() => void onPin(note, !note.pinned)}>{note.pinned ? $translator("note.unpin") : $translator("note.pin")}</button>
-    <button class="danger" type="button" onclick={() => void onDelete(note)}>{draft ? $translator("note.discard") : $translator("common.delete")}</button>
+    <button class="action-button" type="button" disabled={draft || attachmentBusy} onclick={onHistory}>{$translator("history.title")}</button>
+    {#if onSearch}<button class="action-button" type="button" disabled={draft || attachmentBusy} onclick={onSearch}>{$translator("contentSearch.title")}</button>{/if}
+    <button class="action-button" type="button" onclick={() => void onPin(note, !note.pinned)}>{note.pinned ? $translator("note.unpin") : $translator("note.pin")}</button>
+    <button class="action-button" data-tone="danger" type="button" onclick={() => void onDelete(note)}>{draft ? $translator("note.discard") : $translator("common.delete")}</button>
   </footer>
 </section>
 
@@ -269,7 +384,7 @@
     tabindex="-1"
     onkeydown={handleViewerKeydown}
     onclick={(event) => {
-      if (event.target === event.currentTarget) attachmentManagerOpen = false;
+      if (event.target === event.currentTarget) closeAttachmentManager();
     }}
   >
     <div data-note-color={note.color}>
@@ -277,7 +392,7 @@
         <span><strong>{$translator("attachment.manage")}</strong><small>{attachmentSummary()}</small></span>
         <button type="button" disabled={attachmentBusy} onclick={() => imageInput.click()}>{$translator("attachment.addImage")}</button>
         <button type="button" disabled={attachmentBusy} onclick={() => attachmentInput.click()}>{$translator("attachment.addFile")}</button>
-        <button class="manager-close" type="button" aria-label={$translator("attachment.closeManager")} onclick={() => (attachmentManagerOpen = false)}>×</button>
+        <button class="manager-close" type="button" aria-label={$translator("attachment.closeManager")} onclick={closeAttachmentManager}>×</button>
       </header>
       <div class="note-attachment-manager-scroll">
         {#if imageAttachments.length > 0}
@@ -286,24 +401,26 @@
             <div class="note-attachment-grid" aria-label={$translator("attachment.images")}>
               {#each imageAttachments as attachment (attachment.uuid)}
                 {@const index = attachmentKindIndex(attachment)}
-                <article class:failed={attachment.transfer_state === "failed"}>
+                <article class:failed={attachment.transfer_state === "failed"} class:search-target={attachment.uuid === focusAttachmentUuid}
+                  tabindex="-1" data-attachment-id={attachment.uuid} use:locateAttachment={attachment.uuid === focusAttachmentUuid}>
                   <button class="note-attachment-preview" type="button" onclick={() => void openAttachment(attachment)}>
                     {#if attachmentPreviewUrls[attachment.uuid]}
                       <img src={attachmentPreviewUrls[attachment.uuid]} alt={attachment.display_name} />
                     {:else}
-                      <span>{attachment.transfer_state === "remote_only" ? $translator("attachment.needsPreview") : $translator("attachment.preparing")}</span>
+                      <span>{$translator("attachment.viewImage")}</span>
                     {/if}
                   </button>
                   <div>
-                    <small title={attachment.transfer_error ?? attachment.display_name}>{attachmentState(attachment)}</small>
+                    <small title={attachmentHint(attachment)}>{attachmentState(attachment)}</small>
                     {#if attachment.transfer_state === "failed"}
-                      <button type="button" disabled={attachmentBusy} onclick={() => void onRetryAttachment(attachment)}>{$translator("attachment.retry")}</button>
+                      <button type="button" disabled={attachmentBusy} onclick={() => void onRetryAttachment(attachment)}>{attachmentRetryLabel(attachment)}</button>
                     {:else}
                       <button class="attachment-order-button" type="button" title={$translator("attachment.moveForward")} aria-label={$translator("attachment.moveForward")} disabled={attachmentBusy || index <= 0} onclick={() => void onMoveAttachment(attachment, -1)}>←</button>
                       <button class="attachment-order-button" type="button" title={$translator("attachment.moveBackward")} aria-label={$translator("attachment.moveBackward")} disabled={attachmentBusy || index >= attachmentKindCount(attachment) - 1} onclick={() => void onMoveAttachment(attachment, 1)}>→</button>
                     {/if}
                     <button class="danger" type="button" disabled={attachmentBusy} onclick={() => void onDeleteAttachment(attachment)}>{$translator("common.delete")}</button>
                   </div>
+                  {#if attachmentHint(attachment)}<p class="attachment-state-hint">{attachmentHint(attachment)}</p>{/if}
                 </article>
               {/each}
             </div>
@@ -315,14 +432,16 @@
             <div class="note-file-list" aria-label={$translator("note.attachments")}>
               {#each fileAttachments as attachment (attachment.uuid)}
                 {@const index = attachmentKindIndex(attachment)}
-                <article class:failed={attachment.transfer_state === "failed"}>
+                <article class:failed={attachment.transfer_state === "failed"} class:search-target={attachment.uuid === focusAttachmentUuid}
+                  tabindex="-1" data-attachment-id={attachment.uuid} use:locateAttachment={attachment.uuid === focusAttachmentUuid}>
                   <span class="note-file-kind" aria-hidden="true">{fileKind(attachment)}</span>
                   <div class="note-file-info">
                     <strong title={attachment.display_name}>{attachment.display_name}</strong>
-                    <small title={attachment.transfer_error ?? attachment.display_name}>{formatFileSize(attachment.byte_size, $languageState.resolvedLocale)} · {attachmentState(attachment)}</small>
+                    <small title={attachmentHint(attachment)}>{formatFileSize(attachment.byte_size, $languageState.resolvedLocale)} · {attachmentState(attachment)}</small>
+                    {#if attachmentHint(attachment)}<p class="attachment-state-hint">{attachmentHint(attachment)}</p>{/if}
                   </div>
                   {#if attachment.transfer_state === "failed"}
-                    <button type="button" disabled={attachmentBusy} onclick={() => void onRetryAttachment(attachment)}>{$translator("attachment.retry")}</button>
+                    <button type="button" disabled={attachmentBusy} onclick={() => void onRetryAttachment(attachment)}>{attachmentRetryLabel(attachment)}</button>
                   {:else}
                     <button type="button" disabled={attachmentBusy} onclick={() => void openFile(attachment)}>{$translator("attachment.open")}</button>
                     <button type="button" disabled={attachmentBusy} onclick={() => void saveAttachment(attachment)}>{$translator("attachment.save")}</button>

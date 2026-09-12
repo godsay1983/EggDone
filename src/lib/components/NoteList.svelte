@@ -2,6 +2,7 @@
   import { translator } from "$lib/i18n";
   import type { Note, NoteAttachment, NoteColor } from "$lib/types";
   import NoteCard from "./NoteCard.svelte";
+  import { preserveScroll } from "$lib/utils/scrollContext";
 
   export let items: Note[];
   export let loading = false;
@@ -13,9 +14,11 @@
   export let onDelete: (note: Note) => Promise<void>;
   export let attachmentsByNote: Record<string, NoteAttachment[]> = {};
   export let attachmentPreviewUrls: Record<string, string> = {};
+  export let scrollPositions = new Map<string, number>();
 </script>
 
-<section class="note-list" aria-live="polite">
+<section class="note-list" aria-live="polite"
+  use:preserveScroll={{ positions: scrollPositions, key: 'notes', ready: !loading }}>
   {#if loading}
     <div class="status">{$translator("note.loading")}</div>
   {:else if error && items.length === 0}

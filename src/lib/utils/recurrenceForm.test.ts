@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { formSchedule, initialRuleForm, ruleEditable, associatedRule, type RuleForm } from "./recurrenceForm";
+import { formSchedule, initialRuleForm, ruleEditable, associatedRule, visibleRecurrenceRule, type RuleForm } from "./recurrenceForm";
 import { recurrenceSummary, recurrenceErrorKey } from "./recurrenceSummary";
 import { translate, type TranslationKey } from "$lib/i18n";
 import type { RecurrenceRule } from "$lib/types/recurrence";
@@ -45,5 +45,36 @@ describe("shared recurrence editor form", () => {
     }
     expect(recurrenceErrorKey("RECURRENCE_EDIT_CONFLICT")).toBe("conflict");
     expect(recurrenceErrorKey("RECURRENCE_TIMEZONE_UNSUPPORTED")).toBe("timezoneError");
+  });
+  it.each([
+    { deleted_at: 99, exhausted: false },
+    { deleted_at: null, exhausted: true },
+  ])("hides detached historical rule without deleting it: %j", (state) => {
+    const stopped = { ...rule, ...state };
+    const before = JSON.stringify(stopped);
+    expect(visibleRecurrenceRule([stopped], "current", null, null)).toBeNull();
+    expect(visibleRecurrenceRule([stopped], "first", null, null)).toBeNull();
+    expect(associatedRule([stopped], "current", null)).toBe(stopped);
+    expect(JSON.stringify(stopped)).toBe(before);
+  });
+  it.each([
+    { deleted_at: 99, exhausted: false },
+    { deleted_at: null, exhausted: true },
+  ])("retains historical badge while series is still linked: %j", (state) => {
+    const stopped = { ...rule, ...state };
+    expect(visibleRecurrenceRule([stopped], "current", "first", null)).toBe(stopped);
+  });
+  it("keeps active replacement visible and ignores history for standard repeats", () => {
+    const stopped = { ...rule, uuid: "old", updated_at: 99, deleted_at: 99 };
+    expect(visibleRecurrenceRule([stopped, rule], "current", null, null)).toBe(rule);
+    expect(visibleRecurrenceRule([stopped, rule], "current", "first", "daily")).toBeNull();
+    expect(visibleRecurrenceRule([], "current", "unknown", null)).toBeNull();
+    expect(visibleRecurrenceRule([], "ordinary", null, null)).toBeNull();
+  });
+  it("task badges and schedule controls use the visible summary, not historical lookup", () => {
+    const source = readFileSync("src/lib/components/TodoItem.svelte", "utf8");
+    expect(source).toContain("visibleRecurrenceRule($recurrenceRules, todo.uuid, todo.repeat_series_uuid, todo.repeat_rule)");
+    expect(source).toContain('disabled={scheduleSaving || Boolean(customSummary)}');
+    expect(source).toContain('todo.repeat_rule === null && todo.repeat_series_uuid !== null ? $translator("recurrence.unknown") : ""');
   });
 });

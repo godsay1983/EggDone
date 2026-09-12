@@ -1,0 +1,42 @@
+[
+  {
+    "todo": "active",
+    "note": "active",
+    "repeating": false
+  },
+  {
+    "todo": "completed",
+    "note": "active",
+    "repeating": false
+  },
+  {
+    "todo": "archived",
+    "note": "active",
+    "repeating": true
+  },
+  {
+    "todo": "deleted",
+    "note": "active",
+    "repeating": true
+  },
+  {
+    "todo": "missing",
+    "note": "active",
+    "repeating": false
+  },
+  {
+    "todo": "active",
+    "note": "deleted",
+    "repeating": false
+  },
+  {
+    "todo": "active",
+    "note": "missing",
+    "repeating": false
+  },
+  {
+    "todo": "missing",
+    "note": "missing",
+    "repeating": false
+  }
+]

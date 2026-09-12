@@ -22,7 +22,7 @@ use crate::{
     tray::PanelState,
 };
 
-const FORMAT_VERSION: u32 = 2;
+const FORMAT_VERSION: u32 = 3;
 const BACKUP_FORMAT_VERSION: u32 = 1;
 const BACKUP_MAX_ENTRY_COUNT: usize = 10_000;
 const BACKUP_MAX_TOTAL_BYTES: u64 = 512 * 1024 * 1024;
@@ -92,6 +92,12 @@ struct TodoExport {
         deserialize_with = "crate::recurrence_backup::deserialize"
     )]
     recurrence: Option<crate::recurrence_backup::RuleBackup>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::task_note_link_backup::deserialize"
+    )]
+    task_note_links: Option<crate::task_note_link_protocol::LinkDocument>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -131,6 +137,9 @@ pub struct ImportPreview {
     note_unchanged: usize,
     attachment_total: usize,
     recurrence_total: usize,
+    link_total: usize,
+    link_deleted: usize,
+    link_metadata_included: bool,
     attachment_added: usize,
     attachment_updated: usize,
     attachment_unchanged: usize,
@@ -193,6 +202,7 @@ pub fn export_todos(
             .attachments,
         attachment_files_included: false,
         recurrence: Some(crate::recurrence_backup::export(&connection)?),
+        task_note_links: Some(crate::task_note_link_store::snapshot(&connection)?.document),
     };
     let json = serde_json::to_string_pretty(&export)
         .map_err(|error| format!("生成导出文件失败：{error}"))?;
@@ -231,6 +241,7 @@ pub fn export_full_backup(
         note_attachments: attachment_document.attachments.clone(),
         attachment_files_included: true,
         recurrence: Some(crate::recurrence_backup::export(&connection)?),
+        task_note_links: Some(crate::task_note_link_store::snapshot(&connection)?.document),
     };
     drop(connection);
 
@@ -1056,7 +1067,7 @@ fn validate_complete_import(import: &TodoExport) -> Result<(), String> {
 fn validate_import_mode(import: &TodoExport, expect_attachment_files: bool) -> Result<(), String> {
     match (import.format_version, &import.recurrence) {
         (1, None) => {}
-        (2, Some(backup)) => {
+        (2 | 3, Some(backup)) => {
             crate::recurrence_backup::validate(backup)?;
             if backup
                 .instances
@@ -1067,6 +1078,13 @@ fn validate_import_mode(import: &TodoExport, expect_attachment_files: bool) -> R
             }
         }
         _ => return Err("INVALID_RECURRENCE_BACKUP_VERSION".into()),
+    }
+    match (import.format_version, &import.task_note_links) {
+        (1 | 2, None) => {}
+        (3, Some(links)) => {
+            crate::task_note_link_protocol::encode_document(links)?;
+        }
+        _ => return Err("INVALID_TASK_NOTE_LINK_BACKUP_VERSION".into()),
     }
     if import.format_version > FORMAT_VERSION {
         return Err(format!(
@@ -1291,6 +1309,11 @@ fn build_preview(
         note_updated,
         note_unchanged,
         attachment_total: import.note_attachments.len(),
+        link_total: import.task_note_links.as_ref().map_or(0, |d| d.links.len()),
+        link_deleted: import.task_note_links.as_ref().map_or(0, |d| {
+            d.links.iter().filter(|l| l.deleted_at.is_some()).count()
+        }),
+        link_metadata_included: import.task_note_links.is_some(),
         recurrence_total: import
             .recurrence
             .as_ref()
@@ -1365,7 +1388,7 @@ fn merge_import(connection: &mut Connection, import: TodoExport) -> Result<Impor
 }
 
 fn merge_import_in_transaction(
-    connection: &Connection,
+    connection: &rusqlite::Transaction<'_>,
     import: TodoExport,
 ) -> Result<ImportResult, String> {
     let note_changes = count_note_changes(connection, &import.notes)?;
@@ -1400,6 +1423,11 @@ fn merge_import_in_transaction(
     } else {
         crate::recurrence_backup::check_links(connection)?;
     }
+    crate::task_note_link_backup::restore(
+        connection,
+        import.task_note_links.as_ref(),
+        now_millis(),
+    )?;
     Ok(result)
 }
 
@@ -1766,6 +1794,10 @@ fn database_error(error: rusqlite::Error) -> String {
 mod recurrence_backup_tests;
 
 #[cfg(test)]
+#[path = "task_note_link_backup_tests.rs"]
+mod task_note_link_backup_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::db::{configure_connection, migrate};
@@ -1910,6 +1942,7 @@ mod tests {
                 .attachments,
             attachment_files_included: false,
             recurrence: None,
+            task_note_links: None,
         };
         let json = serde_json::to_string(&export).unwrap();
         let exported: TodoExport = serde_json::from_str(&json).unwrap();
@@ -1990,6 +2023,7 @@ mod tests {
             note_attachments: vec![],
             attachment_files_included: false,
             recurrence: None,
+            task_note_links: None,
         };
         assert!(validate_import(&future).is_err());
 
@@ -2002,6 +2036,7 @@ mod tests {
             note_attachments: vec![],
             attachment_files_included: false,
             recurrence: None,
+            task_note_links: None,
         };
         assert!(validate_import(&duplicated).is_err());
 
@@ -2014,6 +2049,7 @@ mod tests {
             note_attachments: vec![],
             attachment_files_included: true,
             recurrence: None,
+            task_note_links: None,
         };
         assert!(validate_import(&falsely_complete).is_err());
     }
@@ -2077,11 +2113,15 @@ mod tests {
                 note_attachments: vec![],
                 attachment_files_included: false,
                 recurrence: None,
+                task_note_links: None,
             },
         )
         .unwrap();
 
         assert_eq!(result.note_updated, 1);
+        let history = crate::note_history::list(&connection, uuid).unwrap();
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].title, "local");
         assert_eq!(
             note_sync::build_document(&connection, 11).unwrap().notes,
             vec![imported]
@@ -2148,6 +2188,7 @@ mod tests {
             note_attachments: vec![exported_attachment],
             attachment_files_included: true,
             recurrence: None,
+            task_note_links: None,
         };
         let data = serde_json::to_vec(&export).unwrap();
         let asset_path = directory.join("original");

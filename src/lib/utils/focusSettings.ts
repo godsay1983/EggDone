@@ -1,3 +1,4 @@
+import { readPreference, writePreference } from './preferenceStorage';
 export type FocusPhase = "focus" | "break";
 
 export type FocusDurations = Record<FocusPhase, number>;
@@ -43,31 +44,31 @@ export function getFocusDurations(): FocusDurations {
   };
 }
 
-export function saveFocusDurationMinutes(minutes: number) {
+export async function saveFocusDurationMinutes(minutes: number) {
   const normalized = normalizeDurationMinutes(
     minutes,
     DEFAULT_FOCUS_MINUTES,
     FOCUS_DURATION_OPTIONS,
   );
-  localStorage.setItem(FOCUS_DURATION_KEY, String(normalized));
+  if (!(await writePreference(FOCUS_DURATION_KEY, String(normalized)))) return getFocusDurationMinutes();
   notifyFocusSettingsChanged();
   return normalized;
 }
 
-export function saveBreakDurationMinutes(minutes: number) {
+export async function saveBreakDurationMinutes(minutes: number) {
   const normalized = normalizeDurationMinutes(
     minutes,
     DEFAULT_BREAK_MINUTES,
     BREAK_DURATION_OPTIONS,
   );
-  localStorage.setItem(BREAK_DURATION_KEY, String(normalized));
+  if (!(await writePreference(BREAK_DURATION_KEY, String(normalized)))) return getBreakDurationMinutes();
   notifyFocusSettingsChanged();
   return normalized;
 }
 
 export function getFocusTarget(): FocusTarget | null {
-  const uuid = localStorage.getItem(FOCUS_TARGET_UUID_KEY);
-  const title = localStorage.getItem(FOCUS_TARGET_TITLE_KEY);
+  const uuid = readPreference(FOCUS_TARGET_UUID_KEY);
+  const title = readPreference(FOCUS_TARGET_TITLE_KEY);
   if (!uuid || !title) return null;
   return { uuid, title };
 }
@@ -98,7 +99,7 @@ function readDurationMinutes(
   options: readonly number[],
 ) {
   return normalizeDurationMinutes(
-    Number(localStorage.getItem(key)),
+    Number(readPreference(key)),
     fallback,
     options,
   );

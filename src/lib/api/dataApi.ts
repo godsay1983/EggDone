@@ -14,6 +14,9 @@ export interface ImportPreview {
   note_unchanged: number;
   attachment_total: number;
   recurrence_total: number;
+  link_total: number;
+  link_deleted: number;
+  link_metadata_included: boolean;
   attachment_added: number;
   attachment_updated: number;
   attachment_unchanged: number;

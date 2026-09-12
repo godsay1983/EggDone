@@ -4,11 +4,11 @@ import { setLanguageMode } from "$lib/i18n";
 import { ensureErrorCode, localizedErrorMessage } from "./errors";
 
 describe("localizedErrorMessage", () => {
-  it("renders stable error codes in the selected language", () => {
+  it("renders stable error codes in the selected language", async () => {
     const coded = ensureErrorCode("timeout", "SYNC_NETWORK");
-    setLanguageMode("en-US");
+    await setLanguageMode("en-US");
     expect(localizedErrorMessage(coded)).toContain("sync service");
-    setLanguageMode("zh-CN");
+    await setLanguageMode("zh-CN");
     expect(localizedErrorMessage(coded)).toContain("同步服务");
   });
 

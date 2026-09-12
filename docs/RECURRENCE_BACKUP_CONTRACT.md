@@ -1,5 +1,7 @@
 # 重复规则备份与恢复契约
 
+最新兼容说明（2026-09-12）：E7/L3c 新导出已升级为数据 v3，并增加必需的 task_note_links，详见[TASK_NOTE_LINK_BACKUP_CONTRACT.md](TASK_NOTE_LINK_BACKUP_CONTRACT.md)。本文件保留 E3B/v2 历史契约；其中 recurrence 结构、验证和恢复规则继续适用于 v3。当前实现同时读取有效 v1/v2/v3；ZIP manifest 仍为 v1。下文“新导出 v2”等表述仅指 E3B 当时版本。
+
 日期：2026-09-06。状态：E3B 双端实现；原生文件选择器、设备恢复及真实 S3 验收仍需人工验证。自定义重复编辑 UI 不在本阶段开放。
 
 ## 1. 格式与兼容

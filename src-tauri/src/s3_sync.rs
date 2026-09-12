@@ -78,6 +78,24 @@ pub struct PreparedManualSync {
 }
 
 impl PreparedManualSync {
+    pub(crate) fn epoch(&self) -> &str {
+        &self.target_epoch
+    }
+
+    pub(crate) fn link_transport(
+        &self,
+    ) -> Result<crate::task_note_link_transport::TaskNoteLinkTransport, String> {
+        let rule_key = crate::recurrence_protocol::recurrence_object_key(&self.object_key, &[])?;
+        crate::task_note_link_transport::TaskNoteLinkTransport::new(
+            &self.bucket,
+            &self.object_key,
+            &[
+                self.note_object_key.clone(),
+                self.note_attachment_object_key.clone(),
+                rule_key,
+            ],
+        )
+    }
     pub(crate) fn require_current(&self, connection: &Connection) -> Result<(), String> {
         if self.target_is_current(connection)? {
             Ok(())
@@ -132,6 +150,7 @@ pub struct RemoteNoteAttachmentSyncObject {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoteSyncState {
+    pub link_token: String,
     pub recurrence_token: String,
     pub todo_object_exists: bool,
     pub todo_etag: Option<String>,
@@ -144,6 +163,8 @@ pub struct RemoteSyncState {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ManualSyncResult {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub link_remote_token: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub recurrence_remote_token: Option<String>,
     pub message: String,
@@ -440,7 +461,10 @@ pub async fn get_remote_state(
             get_object_state(prepared, &prepared.note_attachment_object_key).await?;
         guard()?;
         let recurrence_token = prepared.recurrence_transport()?.probe().await?;
+        guard()?;
+        let link_token = prepared.link_transport()?.probe().await?;
         Ok(RemoteSyncState {
+            link_token,
             recurrence_token,
             todo_object_exists,
             todo_etag,

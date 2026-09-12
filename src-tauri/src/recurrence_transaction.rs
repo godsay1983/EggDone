@@ -274,6 +274,13 @@ pub(crate) fn advance_in_transaction(
             )
             .map_err(db_error)?;
             current.evidence.deleted_at = Some(now);
+            crate::task_note_link_store::tombstone_entity(
+                tx,
+                request.current_todo_uuid,
+                false,
+                now,
+                request.device_id,
+            )?;
         }
         _ => (),
     }

@@ -1,0 +1,75 @@
+:root {
+  --action-bg: #F3E8D2;
+  --action-text: #5A4632;
+  --action-border: #D9C5A5;
+  --action-primary-bg: #F6B93B;
+  --action-primary-text: #3B2F24;
+  --action-danger-bg: #FBE5DF;
+  --action-danger-text: #8B2F27;
+  --action-danger-border: #E6B9B0;
+  --action-disabled-bg: #E7E4DE;
+  --action-disabled-text: #625B51;
+  --action-focus: #8D6B22;
+}
+html[data-theme="dark"] {
+  --action-bg: #4A3D31;
+  --action-text: #FFF1D6;
+  --action-border: #6C5947;
+  --action-primary-bg: #F6C15A;
+  --action-primary-text: #3B2F24;
+  --action-danger-bg: #5A312D;
+  --action-danger-text: #FFD6CF;
+  --action-danger-border: #7A4640;
+  --action-disabled-bg: #3A3732;
+  --action-disabled-text: #BCB4A6;
+  --action-focus: #F6C15A;
+}
+.action-button {
+  min-width: 32px;
+  min-height: 32px;
+  max-width: 100%;
+  height: auto;
+  padding: 6px 10px;
+  border: 1px solid var(--action-border);
+  border-radius: 8px;
+  color: var(--action-text);
+  background: var(--action-bg);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.action-button[data-tone="primary"] {
+  color: var(--action-primary-text);
+  background: var(--action-primary-bg);
+  border-color: var(--action-primary-bg);
+}
+.action-button[data-tone="danger"] {
+  color: var(--action-danger-text);
+  background: var(--action-danger-bg);
+  border-color: var(--action-danger-border);
+}
+.action-button:hover:not(:disabled) {
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+.action-button:focus-visible {
+  outline: 2px solid var(--action-focus);
+  outline-offset: 2px;
+}
+.action-button:disabled {
+  color: var(--action-disabled-text);
+  background: var(--action-disabled-bg);
+  border-color: var(--action-disabled-bg);
+  opacity: 1;
+  cursor: not-allowed;
+}
+.action-button[aria-busy="true"] {
+  cursor: progress;
+  border-style: dashed;
+}
+@media (pointer: coarse) {
+  .action-button { min-width: 44px; min-height: 44px; }
+}

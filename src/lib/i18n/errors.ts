@@ -37,6 +37,7 @@ export function localizedErrorMessage(reason: unknown): string {
   if (parsed.code === "DATA_EXCHANGE_FAILED") {
     if (/RECURRENCE_SYNC_BUSY|同步正在进行/.test(parsed.detail)) return translate(locale, "data.restoreBusy");
     if (/RECURRENCE_OCCURRENCE_MISSING/.test(parsed.detail)) return translate(locale, "data.restorePurged");
+    if (/TASK_NOTE_LINK/.test(parsed.detail)) return translate(locale, "data.restoreLinksFailed");
     if (/RECURRENCE/.test(parsed.detail)) return translate(locale, "data.restoreRuleConflict");
   }
   const [titleKey, actionKey] = MESSAGE_KEYS[parsed.code];

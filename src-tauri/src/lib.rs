@@ -1,12 +1,21 @@
 mod capture;
 mod commands;
+mod content_search;
+mod content_search_commands;
+#[cfg(test)]
+mod content_search_tests;
 mod data_exchange;
 mod db;
 mod error_codes;
+mod general_preferences;
 mod i18n;
 mod note_asset_store;
 mod note_attachment_sync;
 mod note_attachments;
+mod note_history;
+mod note_history_commands;
+#[cfg(test)]
+mod note_history_tests;
 mod note_sync;
 mod notes;
 mod panel_position;
@@ -31,6 +40,23 @@ mod shortcut_preferences;
 mod sync;
 mod sync_runtime_state;
 mod sync_target;
+mod task_note_link_backup;
+mod task_note_link_commands;
+#[cfg(test)]
+mod task_note_link_operation_tests;
+pub mod task_note_link_operations;
+pub mod task_note_link_protocol;
+mod task_note_link_session;
+pub mod task_note_link_store;
+pub mod task_note_link_sync;
+#[cfg(test)]
+mod task_note_link_tests;
+mod task_note_link_transport;
+mod task_note_link_views;
+mod trash;
+mod trash_commands;
+#[cfg(test)]
+mod trash_tests;
 mod tray;
 #[cfg(target_os = "linux")]
 mod tray_ksni;
@@ -131,10 +157,17 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            task_note_link_commands::list_task_note_links,
+            task_note_link_commands::get_task_note_link,
+            task_note_link_commands::create_linked_todo,
+            task_note_link_commands::change_task_note_link,
             shortcut_preferences::get_shortcut_preference,
             shortcut_preferences::save_shortcut_preference,
             window_preferences::get_window_preferences,
             window_preferences::save_window_preferences,
+            general_preferences::get_general_preferences,
+            general_preferences::initialize_general_preferences,
+            general_preferences::patch_general_preference,
             recurrence_commands::recurrence_editor_context,
             recurrence_commands::save_recurrence_rule,
             recurrence_commands::stop_recurrence_rule,
@@ -145,6 +178,8 @@ pub fn run() {
             commands::list_todos,
             commands::list_groups,
             commands::list_notes,
+            content_search_commands::search_content,
+            content_search_commands::resolve_search_target,
             commands::create_todo,
             commands::create_captured_todo,
             commands::create_group,
@@ -154,6 +189,12 @@ pub fn run() {
             commands::set_note_color,
             commands::delete_note,
             commands::restore_note,
+            trash_commands::list_trash,
+            note_history_commands::list_note_history,
+            note_history_commands::preview_note_history,
+            note_history_commands::restore_note_history,
+            trash_commands::preview_trash,
+            trash_commands::restore_trash,
             commands::list_note_attachments,
             commands::reorder_note_attachments,
             commands::create_note_image_attachment,

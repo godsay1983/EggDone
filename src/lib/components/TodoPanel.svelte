@@ -1,11 +1,23 @@
 <script lang="ts">
   import { invoke, isTauri } from "@tauri-apps/api/core";
   import CaptureDialog from "./CaptureDialog.svelte";
+  import LinkedTodoDialog from "./LinkedTodoDialog.svelte";
+  import LinkManagerDialog from "./LinkManagerDialog.svelte";
+  import LinkWorkspace from "./LinkWorkspace.svelte";
+  import { createLinkManager } from "$lib/stores/linkManagerStore";
+  import type { TaskNoteLinkView } from "$lib/types/taskNoteLink";
+  import type { LinkScope } from "$lib/types/taskNoteLink";
+  import { createTaskNoteLinkStore } from "$lib/stores/taskNoteLinkStore";
+  import type { LinkedTodoDraft } from "$lib/types/taskNoteLink";
   import { normalizeCapture, captureContent, captureTitle, type CaptureDraft, type CaptureInput } from "$lib/utils/capture";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { flip } from "svelte/animate";
   import { onMount, tick } from "svelte";
+  import { preserveScroll } from "$lib/utils/scrollContext";
+  import { readPreference, readPreferenceStrict, writePreference, PREFERENCES_CHANGED_EVENT } from "$lib/utils/preferenceStorage";
+  import { PinnedSmartViewStore } from "$lib/stores/pinnedSmartViews";
+  import PreferenceStatus from './PreferenceStatus.svelte';
   import packageMetadata from "../../../package.json";
 
   import { languageState, translator } from "$lib/i18n";
@@ -23,12 +35,14 @@
   } from "$lib/stores/todoStore";
   import { notes, visibleNotes } from "$lib/stores/noteStore";
   import { noteAttachmentApi } from "$lib/api/noteAttachmentApi";
+  import { attachmentRetry } from "$lib/utils/attachmentPresentation";
   import {
     initializeAutoSync,
     scheduleAutoSync,
     setAutoSyncForeground,
-    syncStatus,
+    syncSummary,
   } from "$lib/sync/autoSync";
+  import { syncSummaryTone } from "$lib/sync/syncSummary";
   import type {
     RepeatDeleteScope,
     RepeatEditScope,
@@ -65,6 +79,10 @@
     type DefaultListViewMode,
   } from "$lib/utils/viewPreferences";
   import DataManager from "./DataManager.svelte";
+  import TrashDialog from "./TrashDialog.svelte";
+  import NoteHistoryDialog from "./NoteHistoryDialog.svelte";
+  import ContentSearchDialog from "./ContentSearchDialog.svelte";
+  import { contentSearchApi, type SearchItem, type SearchTarget } from "$lib/api/contentSearchApi";
   import SettingsPanel from "./SettingsPanel.svelte";
   import TodoItem from "./TodoItem.svelte";
   import { refreshRecurrenceRules } from "$lib/stores/recurrenceStore";
@@ -153,6 +171,7 @@
   let captureReadAgain = false;
 
   async function readCapture() {
+    if (contentSearchSession || contentSearchOpening) return;
     if (captureRequest) return;
     if (captureLoading) { captureReadAgain = true; return; }
     captureLoading = true;
@@ -210,6 +229,108 @@
   let adding = false;
   let showAbout = false;
   let showDataManager = false;
+  let showTrash = false;
+  let contentSearchSession = false;
+  let contentSearchActive = false;
+  let contentSearchOpening = false;
+  let searchAttachmentUuid = "";
+  async function openContentSearch() {
+    if (contentSearchSession || contentSearchOpening || noteNavigationBusy || noteAttachmentBusy || historyOpening || historyUuid ||
+      linkedRequest || linkManager || linkedTaskEditing || linkNavigating || noteDraft || captureRequest || captureLoading) return;
+    const sourceUuid = selectedNoteUuid;
+    contentSearchOpening = true; noteNavigationBusy = true;
+    try {
+      await flushAllNoteChanges();
+      if (notes.hasPendingSave() || $notes.error || selectedNoteUuid !== sourceUuid) throw Error("SEARCH_SAVE_FAILED");
+      summaryMenuOpen = false; contentSearchSession = true; contentSearchActive = true;
+    } catch { noteAttachmentError = $translator("contentSearch.saveFailed"); }
+    finally { contentSearchOpening = false; noteNavigationBusy = false; }
+  }
+  async function openSearchResult(item: SearchItem): Promise<SearchTarget | null> {
+    if (!contentSearchActive || linkNavigating || noteNavigationBusy || noteAttachmentBusy || historyOpening || historyUuid ||
+      linkManager || linkedRequest || linkedTaskEditing) throw Error("SEARCH_BUSY");
+    linkNavigating = true;
+    try {
+      await flushAllNoteChanges();
+      if (notes.hasPendingSave() || $notes.error) throw Error("SEARCH_SAVE_FAILED");
+      const target = await contentSearchApi.resolve(item.kind, item.uuid);
+      if (target.kind === "todo" && target.archived) return target;
+      const noteUuid = target.kind === "note" ? target.uuid : target.kind === "attachment" ? target.parent_uuid : null;
+      if (noteUuid) {
+        await notes.load();
+        if ($notes.error) throw Error("SEARCH_DATABASE_FAILED");
+        if (!$notes.items.some(note => note.uuid === noteUuid)) throw Error("SEARCH_UNAVAILABLE");
+        await refreshNoteAttachments(noteUuid, false);
+        if (target.kind === "attachment" && !(noteAttachmentsByNote[noteUuid] ?? []).some(asset => asset.uuid === target.uuid)) throw Error("SEARCH_UNAVAILABLE");
+      } else {
+        await todos.refresh();
+        if ($todos.error) throw Error("SEARCH_DATABASE_FAILED");
+        if (!$todos.items.some(todo => todo.uuid === target.uuid)) throw Error("SEARCH_UNAVAILABLE");
+      }
+      linkHistory = [...linkHistory, { noteUuid: selectedNoteUuid, todoUuid: linkedTodoUuid, search: true, attachmentUuid: searchAttachmentUuid }];
+      selectedNoteUuid = noteUuid; linkedTodoUuid = noteUuid ? null : target.uuid;
+      searchAttachmentUuid = target.kind === "attachment" ? target.uuid : "";
+      linkedTaskEditing = false; linkNotice = ""; contentSearchActive = false;
+      return null;
+    } finally { linkNavigating = false; }
+  }
+  let historyUuid: string | null = null;
+  let historyOpening = false;
+  let historyOpenError = false;
+  let historyEditorRevision = 0;
+  let historyRefreshed = false;
+  async function openNoteHistory() {
+    if (contentSearchActive || contentSearchOpening) return;
+    if (historyOpening || historyUuid || noteNavigationBusy || noteAttachmentBusy || linkNavigating || linkedRequest || linkManager || !selectedNote || noteDraft) return;
+    const uuid = selectedNote.uuid;
+    historyOpening = true; historyRefreshed = false; historyOpenError = false;
+    try {
+      await flushAllNoteChanges();
+      if (notes.hasPendingSave() || $notes.error || selectedNoteUuid !== uuid) throw Error("NOTE_HISTORY_BUSY");
+      historyUuid = uuid;
+    } catch { historyOpenError = true; }
+    finally { historyOpening = false; }
+  }
+  function assertHistoryReady() {
+    if (!historyUuid || selectedNoteUuid !== historyUuid || notes.hasPendingSave() || noteDraft || noteAttachmentBusy) {
+      throw Error("NOTE_HISTORY_BUSY");
+    }
+  }
+  async function refreshHistoryEditor() {
+    await notes.refresh();
+    if ($notes.error || !$notes.items.some(note => note.uuid === historyUuid)) throw Error("NOTE_HISTORY_REFRESH_FAILED");
+    historyRefreshed = true;
+  }
+  async function afterHistoryRestore(changed: boolean) {
+    historyRefreshed = false;
+    if (changed) scheduleAutoSync();
+    await refreshHistoryEditor();
+  }
+  function closeNoteHistory(refreshFailed: boolean) {
+    if (refreshFailed) {
+      // Never return to inputs that still contain text from before the committed restore.
+      selectedNoteUuid = null; linkHistory = []; linkNotice = "";
+      linkedTodoUuid = null; searchAttachmentUuid = "";
+      if (contentSearchSession) contentSearchActive = true;
+    } else if (historyRefreshed) historyEditorRevision++;
+    historyUuid = null;
+  }
+  let trashOpening = false;
+  async function openTrash() {
+    if (contentSearchActive || contentSearchOpening) return;
+    if (showTrash || trashOpening || noteNavigationBusy || noteAttachmentBusy) return;
+    trashOpening = true;
+    try { await flushAllNoteChanges(); summaryMenuOpen = false; showTrash = true; }
+    catch { noteAttachmentError = $translator("trash.saveFailed"); }
+    finally { trashOpening = false; }
+  }
+  async function refreshAfterTrash() {
+    scheduleAutoSync();
+    await Promise.all([todos.refresh(), notes.refresh()]);
+    linkedRevision++;
+    if ($todos.error || $notes.error) throw Error("TRASH_REFRESH_FAILED");
+    await loadAllNoteAttachments();
+  }
   let showSettings = false;
   let showFocus = false;
   let focusDurations: FocusDurations = getFocusDurations();
@@ -240,13 +361,149 @@
   let showSearch = false;
   let summaryMenuOpen = false;
   let searchQuery = "";
+  const searchContexts = {
+    tasks: { query: "", visible: false },
+    notes: { query: "", visible: false },
+  };
+  const listScrollPositions = new Map<string, number>();
+  let taskViewBeforeNotes: MainView = 'all';
   let showCompleted = true;
   let listView: MainView = "all";
   let smartView: SmartViewId | null = null;
   let filterNow = new Date();
   const SMART_VIEW_KEY = "eggdone-smart-view";
+  const PINNED_VIEWS_KEY = 'eggdone-pinned-smart-views';
+  let pinnedIds: SmartViewId[] = [];
+  let pinsReady = false;
+  let pinsBusy = false;
+  let pinsFailure = '';
+  const pinnedViews = new PinnedSmartViewStore({
+    read: async () => readPreferenceStrict(PINNED_VIEWS_KEY),
+    write: async value => {
+      if (!(await writePreference(PINNED_VIEWS_KEY, value))) throw Error('Preference write failed');
+    },
+  }, () => {
+    pinnedIds = [...pinnedViews.ids];
+    pinsReady = pinnedViews.ready;
+    pinsBusy = pinnedViews.busy;
+    pinsFailure = pinnedViews.failure;
+  });
   let selectedNoteUuid: string | null = null;
+  const noteLinkStore = createTaskNoteLinkStore();
+  let linkedRequest: { uuid: string; title: string } | null = null;
+  let linkedRevision = 0;
+  let linkNotice = "";
+  let linkManager: { scope: LinkScope; uuid: string; title: string } | null = null;
+  const linkReader = createLinkManager();
+  const noteEditorScrollPositions = new Map<string, number>();
+  let linkHistory: Array<{ noteUuid: string | null; todoUuid: string | null; search?: boolean; attachmentUuid?: string }> = [];
+  let linkedTodoUuid: string | null = null;
+  let linkedTaskEditing = false;
+  let linkNavigating = false;
+  $: linkedTodo = $todos.items.find(item => item.uuid === linkedTodoUuid) ?? null;
+  $: if (linkedTodoUuid && !linkedTodo) linkedTaskEditing = false;
+
+  async function openRelatedContent(item: TaskNoteLinkView, scope: LinkScope) {
+    if (contentSearchActive || contentSearchOpening) throw Error("LINK_BUSY");
+    if (historyOpening || historyUuid) throw Error("LINK_BUSY");
+    if (linkNavigating || noteNavigationBusy || noteAttachmentBusy || linkedTaskEditing) throw Error("LINK_BUSY");
+    linkNavigating = true;
+    try {
+      await flushAllNoteChanges();
+      const source = scope === "todo" ? item.link.todo_uuid : item.link.note_uuid;
+      const current = await linkReader.resolve(scope, source, item.link.uuid);
+      if (scope === "todo") {
+        await notes.load();
+        if ($notes.error) throw Error("LINK_READ_FAILED");
+        if (!$notes.items.some(note => note.uuid === current.link.note_uuid)) throw Error("LINK_UNAVAILABLE");
+        await refreshNoteAttachments(current.link.note_uuid);
+      } else {
+        await todos.refresh();
+        if ($todos.error) throw Error("LINK_READ_FAILED");
+        if (!$todos.items.some(todo => todo.uuid === current.link.todo_uuid)) throw Error("LINK_UNAVAILABLE");
+      }
+      linkHistory = [...linkHistory, { noteUuid: selectedNoteUuid, todoUuid: linkedTodoUuid, attachmentUuid: searchAttachmentUuid }];
+      searchAttachmentUuid = "";
+      linkManager = null;
+      selectedNoteUuid = scope === "todo" ? current.link.note_uuid : null;
+      linkedTodoUuid = scope === "note" ? current.link.todo_uuid : null;
+      linkedTaskEditing = false;
+      linkNotice = "";
+    } finally { linkNavigating = false; }
+  }
+  async function backFromLinkedContent(): Promise<boolean> {
+    if (historyOpening || historyUuid) return false;
+    if (!linkHistory.length || linkNavigating || linkedTaskEditing || noteAttachmentBusy || linkManager || linkedRequest) return false;
+    linkNavigating = true;
+    try {
+      await flushAllNoteChanges();
+      const previous = linkHistory[linkHistory.length - 1];
+      selectedNoteUuid = previous.noteUuid;
+      linkedTodoUuid = previous.todoUuid;
+      searchAttachmentUuid = previous.attachmentUuid ?? "";
+      if (previous.search && contentSearchSession) contentSearchActive = true;
+      linkHistory = linkHistory.slice(0, -1);
+      linkedTaskEditing = false;
+      linkNotice = "";
+      return true;
+    } catch { return false; }
+    finally { linkNavigating = false; }
+  }
+  async function focusFromLinkedContent(todo: Todo) {
+    while (linkHistory.length) { if (!(await backFromLinkedContent())) return; }
+    contentSearchSession = false; contentSearchActive = false;
+    openFocusForTodo(todo);
+  }
+  function manageTaskLinks(todo: Todo) {
+    if (linkedRequest || linkManager || noteNavigationBusy) return;
+    linkManager = { scope: "todo", uuid: todo.uuid, title: todo.title };
+  }
+  async function manageNoteLinks() {
+    if (linkedRequest || linkManager || noteNavigationBusy || noteAttachmentBusy || !selectedNote || noteDraft) return;
+    noteNavigationBusy = true; linkNotice = "";
+    try {
+      await flushAllNoteChanges();
+      if (selectedNote) linkManager = { scope: "note", uuid: selectedNote.uuid, title: selectedNote.title };
+    } catch { linkNotice = $translator("links.sourceFailed"); }
+    finally { noteNavigationBusy = false; }
+  }
+  async function saveLinkSource() {
+    if (!linkManager) throw Error("source changed");
+    if (linkManager.scope === "note") {
+      if (selectedNoteUuid !== linkManager.uuid) throw Error("source changed");
+      await flushAllNoteChanges();
+    }
+  }
+  async function refreshLinkChange() {
+    linkedRevision++;
+    scheduleAutoSync();
+  }
+  async function openLinkedTask() {
+    if (noteNavigationBusy || noteAttachmentBusy || !selectedNoteUuid) return;
+    noteNavigationBusy = true;
+    linkNotice = "";
+    try {
+      await flushAllNoteChanges();
+      if (selectedNote && !noteDraft) linkedRequest = { uuid: selectedNote.uuid, title: selectedNote.title.slice(0, 100) };
+    } catch { linkNotice = $translator("links.sourceFailed"); }
+    finally { noteNavigationBusy = false; }
+  }
+  async function saveLinkedTask(draft: LinkedTodoDraft) {
+    const result = await noteLinkStore.create(draft, async () => {
+      if (selectedNoteUuid !== draft.note_uuid || !linkedRequest) throw Error("source changed");
+      await flushAllNoteChanges();
+    }, async () => {
+      linkedRequest = null;
+      linkedRevision++;
+      scheduleAutoSync();
+      await todos.refresh();
+      if ($todos.error) throw Error("refresh failed");
+    });
+    linkNotice = $translator(result.refreshFailed ? "links.refreshFailed" : "links.created");
+  }
+  let noteNavigationBusy = false;
   let noteDraft: Note | null = null;
+  let noteDraftCreated: Note | null = null;
   let noteDraftSaveTimer: ReturnType<typeof setTimeout> | null = null;
   let noteDraftCreatePromise: Promise<Note | null> | null = null;
   let deletedNote: Note | null = null;
@@ -319,12 +576,13 @@
     const requestKey = visibleNotePreviewAttachments
       .map((attachment) => `${attachment.uuid}:${attachment.local_preview_path ?? ""}:${attachment.transfer_state}`)
       .join("|");
-    if (requestKey && requestKey !== visibleNotePreviewRequestKey) {
+    if (!contentSearchSession && !contentSearchOpening && requestKey && requestKey !== visibleNotePreviewRequestKey) {
       visibleNotePreviewRequestKey = requestKey;
       void loadAttachmentPreviews(visibleNotePreviewAttachments);
     }
   }
-  $: filteredTodos = filterTodos($todos.items, searchQuery, showCompleted, {
+  $: taskSearchQuery = listView === 'notes' ? searchContexts.tasks.query : searchQuery;
+  $: filteredTodos = filterTodos($todos.items, taskSearchQuery, showCompleted, {
     view: listView === "notes" ? "all" : listView,
     groupUuid: activeGroupUuid,
     smartView,
@@ -333,7 +591,7 @@
   $: smartChoices = SMART_VIEW_IDS.map((id) => ({
     id,
     label: $translator(`smart.${id}`),
-    count: filterTodos($todos.items, searchQuery, true, {
+    count: filterTodos($todos.items, taskSearchQuery, true, {
       groupUuid: activeGroupUuid, smartView: id, now: filterNow,
     }).length,
   }));
@@ -397,6 +655,11 @@
     let lastItems: Todo[] | null = null;
     const unsubscribeRules = todos.subscribe(state => {
       if (state.items !== lastItems) { lastItems = state.items; void refreshRecurrenceRules(); }
+      if (!state.loading && !state.error && selectedGroup !== 'all' && selectedGroup !== 'ungrouped' &&
+        !state.groups.some(group => group.uuid === selectedGroup)) {
+        selectedGroup = 'all';
+        void writePreference('eggdone-selected-group', 'all');
+      }
     });
     let filterTimezoneOffset = new Date().getTimezoneOffset();
     const refreshFilterTime = () => {
@@ -420,21 +683,29 @@
     const focusInterval = window.setInterval(updateFocusTimer, 1000);
     window.addEventListener(FOCUS_SETTINGS_CHANGED_EVENT, refreshFocusDurations);
     window.addEventListener("storage", refreshFocusDurations);
+    const refreshNativePreferences = () => {
+      refreshFocusDurations();
+      void pinnedViews.load();
+      const saved = readPreference('eggdone-theme');
+      if (saved === 'light' || saved === 'dark') { theme = saved; applyTheme(theme); }
+    };
+    window.addEventListener(PREFERENCES_CHANGED_EVENT, refreshNativePreferences);
     groupResizeObserver.observe(groupScrollElement);
     groupMutationObserver.observe(groupScrollElement, { childList: true });
     updateGroupScrollState();
-    const savedTheme = localStorage.getItem("eggdone-theme");
+    const savedTheme = readPreference("eggdone-theme");
     showCompleted =
-      localStorage.getItem("eggdone-show-completed") !== "false";
+      readPreference("eggdone-show-completed") !== "false";
     defaultListViewMode = normalizeDefaultListViewMode(
-      localStorage.getItem(DEFAULT_LIST_VIEW_KEY),
+      readPreference(DEFAULT_LIST_VIEW_KEY),
     );
     listView = initialListView(
       defaultListViewMode,
-      localStorage.getItem(LAST_LIST_VIEW_KEY),
+      readPreference(LAST_LIST_VIEW_KEY),
     );
-    selectedGroup = localStorage.getItem("eggdone-selected-group") ?? "all";
-    smartView = normalizeSmartView(localStorage.getItem(SMART_VIEW_KEY));
+    selectedGroup = readPreference("eggdone-selected-group") ?? "all";
+    smartView = normalizeSmartView(readPreference(SMART_VIEW_KEY));
+    void pinnedViews.load();
     if (smartView) listView = "all";
     theme =
       savedTheme === "light" || savedTheme === "dark"
@@ -554,15 +825,17 @@
         refreshFocusDurations,
       );
       window.removeEventListener("storage", refreshFocusDurations);
+      window.removeEventListener(PREFERENCES_CHANGED_EVENT, refreshNativePreferences);
       groupResizeObserver.disconnect();
       groupMutationObserver.disconnect();
       removeDragListeners();
     };
   });
 
-  function toggleTheme() {
-    theme = theme === "light" ? "dark" : "light";
-    localStorage.setItem("eggdone-theme", theme);
+  async function toggleTheme() {
+    const next = theme === "light" ? "dark" : "light";
+    if (!(await writePreference("eggdone-theme", next))) return;
+    theme = next;
     applyTheme(theme);
   }
 
@@ -593,47 +866,52 @@
   function toggleCompletedVisibility() {
     showCompleted = !showCompleted;
     summaryMenuOpen = false;
-    localStorage.setItem("eggdone-show-completed", String(showCompleted));
+    writePreference("eggdone-show-completed", String(showCompleted));
     clearBatchSelection();
     cancelDrag();
   }
 
-  function setListView(view: MainView) {
-    if (view === "all" || view === "today" || view === "notes") {
+  async function setListView(view: MainView) {
+    if (listView === 'notes' && view !== 'notes' && !(await closeNoteEditor())) return false;
+    if ((view === "all" || view === "today") && !(listView === 'notes' && view === taskViewBeforeNotes)) {
       clearSmartView();
     }
-    if (listView === "notes" && view !== "notes") {
-      void closeNoteEditor();
-      searchQuery = "";
-      showSearch = false;
+    if (view === 'notes' && listView !== 'notes') taskViewBeforeNotes = listView;
+    if ((listView === "notes") !== (view === "notes")) {
+      const previous = listView === "notes" ? "notes" : "tasks";
+      const next = view === "notes" ? "notes" : "tasks";
+      searchContexts[previous] = { query: searchQuery, visible: showSearch };
+      searchQuery = searchContexts[next].query;
+      showSearch = searchContexts[next].visible;
     }
     listView = view;
-    if (view !== "quadrants") {
+    if (view !== "quadrants" && view !== 'notes') {
       selectedQuadrant = "all";
     }
-    if (view !== "calendar") {
+    if (view !== "calendar" && view !== 'notes') {
       selectedAgendaDate = null;
       agendaWeekStartAt = startOfAgendaWeek();
       agendaWeekVersion += 1;
       agendaDatePickerOpen = false;
     }
     summaryMenuOpen = false;
-    if (view !== "notes") localStorage.setItem(LAST_LIST_VIEW_KEY, view);
+    if (view !== "notes") writePreference(LAST_LIST_VIEW_KEY, view);
     selectedTodoId = null;
     clearBatchSelection();
     cancelDrag();
+    return true;
   }
 
-  function selectSmartView(id: SmartViewId) {
-    setListView("all");
+  async function selectSmartView(id: SmartViewId) {
+    if (!(await setListView("all"))) return;
     smartView = id;
     filterNow = new Date();
-    localStorage.setItem(SMART_VIEW_KEY, id);
+    writePreference(SMART_VIEW_KEY, id);
   }
 
   function clearSmartView() {
     smartView = null;
-    localStorage.removeItem(SMART_VIEW_KEY);
+    writePreference(SMART_VIEW_KEY, null);
     clearBatchSelection();
     cancelDrag();
   }
@@ -654,7 +932,8 @@
   }
 
   async function createNote() {
-    await flushAllNoteChanges();
+    if (noteNavigationBusy || noteAttachmentBusy) return;
+    if (!(await closeNoteEditor())) return;
     const now = Date.now();
     noteDraft = {
       id: 0,
@@ -671,8 +950,8 @@
     selectedNoteUuid = null;
   }
 
-  function openNote(note: Note) {
-    discardNoteDraft();
+  async function openNote(note: Note) {
+    if (selectedNoteUuid === note.uuid || !(await closeNoteEditor())) return;
     selectedNoteUuid = note.uuid;
     void refreshNoteAttachments(note.uuid);
   }
@@ -808,27 +1087,36 @@
   }
 
   async function retryNoteAttachment(attachment: NoteAttachment) {
+    if (noteAttachmentBusy) return;
+    noteAttachmentBusy = true;
     noteAttachmentError = "";
     try {
-      if (attachment.remote_uploaded) {
-        await noteAttachmentApi.retry(attachment.uuid);
-        if (attachment.kind === "image" && attachment.local_preview_path === null) {
-          const url = await noteAttachmentApi.previewUrl(attachment);
+      const updated = await noteAttachmentApi.retry(attachment.uuid);
+      const retry = attachmentRetry({
+        state: updated.transfer_state, remoteUploaded: updated.remote_uploaded,
+        hasOriginal: updated.local_original_path !== null, hasPreview: updated.local_preview_path !== null,
+        hasRemotePreview: updated.preview_sha256 !== null && updated.preview_byte_size !== null,
+        isImage: updated.kind === "image",
+      });
+      if (retry !== "upload") {
+        if (retry === "preview") {
+          const url = await noteAttachmentApi.previewUrl(updated);
           const previous = noteAttachmentPreviewUrls[attachment.uuid];
           if (previous) URL.revokeObjectURL(previous);
           noteAttachmentPreviewUrls = { ...noteAttachmentPreviewUrls, [attachment.uuid]: url };
         } else {
-          const url = await noteAttachmentApi.originalUrl(attachment);
+          const url = await noteAttachmentApi.originalUrl(updated);
           URL.revokeObjectURL(url);
         }
       } else {
-        await noteAttachmentApi.retry(attachment.uuid);
         scheduleAutoSync();
       }
       await refreshNoteAttachments(attachment.note_uuid);
     } catch (reason) {
       noteAttachmentError = localizedErrorMessage(reason);
       await refreshNoteAttachments(attachment.note_uuid).catch(() => undefined);
+    } finally {
+      noteAttachmentBusy = false;
     }
   }
 
@@ -856,6 +1144,9 @@
   }
 
   function updateNote(note: Note, nextTitle: string, content: string) {
+    if (contentSearchActive || contentSearchOpening) return;
+    if (historyOpening || historyUuid) return;
+    historyOpenError = false;
     if (note.uuid === NOTE_DRAFT_UUID && noteDraft) {
       noteDraft = { ...noteDraft, title: nextTitle, content };
       scheduleNoteDraftSave();
@@ -864,16 +1155,24 @@
     notes.scheduleUpdate(note, nextTitle, content);
   }
 
-  async function closeNoteEditor() {
-    if (noteDraft && !hasNoteDraftContent(noteDraft)) {
-      notes.cancelPending();
+  async function closeNoteEditor(): Promise<boolean> {
+    if (contentSearchActive || contentSearchOpening) return false;
+    if (historyOpening || historyUuid) return false;
+    if (linkHistory.length) return backFromLinkedContent();
+    if (noteNavigationBusy || noteAttachmentBusy || linkedRequest || linkManager) return false;
+    noteNavigationBusy = true;
+    try {
+      await flushAllNoteChanges();
       discardNoteDraft();
       selectedNoteUuid = null;
-      return;
+      historyOpenError = false;
+      linkNotice = "";
+      return true;
+    } catch {
+      return false;
+    } finally {
+      noteNavigationBusy = false;
     }
-    await flushAllNoteChanges();
-    discardNoteDraft();
-    selectedNoteUuid = null;
   }
 
   async function pinNote(note: Note, pinned: boolean) {
@@ -894,6 +1193,15 @@
     await notes.setColor(note, color);
   }
 
+  async function requestNoteDeletion(note: Note) {
+    try {
+      await deleteNote(note);
+    } catch {
+      // The note store retains the draft and exposes the failure in the editor/list.
+      // Consume it at the UI boundary, not inside the persistence operation.
+    }
+  }
+
   async function deleteNote(note: Note) {
     if (note.uuid === NOTE_DRAFT_UUID) {
       if (noteDraftCreatePromise) {
@@ -901,11 +1209,12 @@
         if (created) await deleteNote(created);
         return;
       }
+      if (noteDraftCreated) await deleteNote(noteDraftCreated);
       discardNoteDraft();
       selectedNoteUuid = null;
       return;
     }
-    notes.cancelPending();
+    await flushAllNoteChanges();
     deletedNote = await notes.remove(note);
     selectedNoteUuid = null;
     if (noteUndoTimer) clearTimeout(noteUndoTimer);
@@ -919,7 +1228,7 @@
   function scheduleNoteDraftSave() {
     if (noteDraftSaveTimer) clearTimeout(noteDraftSaveTimer);
     noteDraftSaveTimer = null;
-    if (!noteDraft || !hasNoteDraftContent(noteDraft)) return;
+    if (!noteDraft || (!noteDraftCreated && !hasNoteDraftContent(noteDraft))) return;
     noteDraftSaveTimer = setTimeout(() => {
       noteDraftSaveTimer = null;
       void persistNoteDraft().catch(() => undefined);
@@ -928,7 +1237,7 @@
 
   async function persistNoteDraft(): Promise<Note | null> {
     if (noteDraftCreatePromise) return noteDraftCreatePromise;
-    if (!noteDraft || !hasNoteDraftContent(noteDraft)) return null;
+    if (!noteDraft || (!noteDraftCreated && !hasNoteDraftContent(noteDraft))) return null;
 
     const task = createNoteFromDraft(noteDraft);
     noteDraftCreatePromise = task;
@@ -940,28 +1249,35 @@
   }
 
   async function createNoteFromDraft(initialDraft: Note): Promise<Note> {
-    let created = await notes.add(
+    let created = noteDraftCreated ?? await notes.add(
       initialDraft.title,
       initialDraft.content,
       initialDraft.color,
     );
-    const latestDraft = noteDraft ?? initialDraft;
-
-    if (
-      latestDraft.title !== created.title ||
-      latestDraft.content !== created.content
-    ) {
-      notes.scheduleUpdate(created, latestDraft.title, latestDraft.content);
-      created = (await notes.flushPending()) ?? created;
-    }
-    if (latestDraft.color !== created.color) {
-      created = await notes.setColor(created, latestDraft.color);
-    }
-    if (latestDraft.pinned !== created.pinned) {
-      created = await notes.setPinned(created, latestDraft.pinned);
+    // Cache the created identity until every draft field has been persisted.
+    noteDraftCreated = created;
+    while (noteDraft) {
+      const latestDraft = noteDraft;
+      if (notes.hasPendingSave() || latestDraft.title !== created.title || latestDraft.content !== created.content) {
+        notes.scheduleUpdate(created, latestDraft.title, latestDraft.content);
+        created = (await notes.flushPending()) ?? created;
+        noteDraftCreated = created;
+      }
+      if (latestDraft.color !== created.color) {
+        created = await notes.setColor(created, latestDraft.color);
+        noteDraftCreated = created;
+      }
+      if (latestDraft.pinned !== created.pinned) {
+        created = await notes.setPinned(created, latestDraft.pinned);
+        noteDraftCreated = created;
+      }
+      noteDraftCreated = created;
+      if (noteDraft === latestDraft) break;
     }
 
     noteDraft = null;
+    noteDraftCreated = null;
+    notes.clearSaveError();
     selectedNoteUuid = created.uuid;
     return created;
   }
@@ -973,7 +1289,7 @@
     }
     if (noteDraftCreatePromise) {
       await noteDraftCreatePromise;
-    } else if (noteDraft && hasNoteDraftContent(noteDraft)) {
+    } else if (noteDraft && (noteDraftCreated || hasNoteDraftContent(noteDraft))) {
       await persistNoteDraft();
     }
     await notes.flushPending();
@@ -983,6 +1299,7 @@
     if (noteDraftSaveTimer) clearTimeout(noteDraftSaveTimer);
     noteDraftSaveTimer = null;
     noteDraft = null;
+    noteDraftCreated = null;
   }
 
   async function undoNoteDelete() {
@@ -994,9 +1311,9 @@
     await notes.restore(note);
   }
 
-  function setDefaultListViewMode(mode: DefaultListViewMode) {
+  async function setDefaultListViewMode(mode: DefaultListViewMode) {
+    if (!(await writePreference(DEFAULT_LIST_VIEW_KEY, mode))) return;
     defaultListViewMode = mode;
-    localStorage.setItem(DEFAULT_LIST_VIEW_KEY, mode);
     if (mode !== "remember") {
       setListView(mode);
     }
@@ -1004,7 +1321,7 @@
 
   function setSelectedGroup(group: string) {
     selectedGroup = group;
-    localStorage.setItem("eggdone-selected-group", group);
+    writePreference("eggdone-selected-group", group);
     managingGroup = false;
     confirmingGroupDelete = false;
     selectedTodoId = null;
@@ -1107,14 +1424,14 @@
   }
 
   async function focusTodoByUuid(uuid: string) {
+    if (!(await setListView("all"))) return;
     showAbout = false;
     showDataManager = false;
     showSettings = false;
     showSearch = false;
     searchQuery = "";
     showCompleted = true;
-    localStorage.setItem("eggdone-show-completed", "true");
-    setListView("all");
+    writePreference("eggdone-show-completed", "true");
     setSelectedGroup("all");
 
     await tick();
@@ -1179,36 +1496,6 @@
     document
       .querySelector('meta[name="theme-color"]')
       ?.setAttribute("content", nextTheme === "dark" ? "#1d1b18" : "#f6c94c");
-  }
-
-  function footerSyncLabel(
-    kind: import("$lib/sync/autoSync").SyncStatusKind,
-  ) {
-    if (kind === "syncing") return $translator("sync.syncing");
-    if (kind === "pending") return $translator("sync.localChangesPending");
-    if (kind === "synced") {
-      const time = shortSyncTime($syncStatus.updatedAt);
-      return time ? `${$translator("sync.synced")} ${time}` : $translator("sync.synced");
-    }
-    if (kind === "offline") return $translator("sync.offline");
-    if (kind === "conflict") return $translator("sync.conflict");
-    if (kind === "failed") return $translator("sync.failed");
-    return $translator("sync.notSynced");
-  }
-
-  function shortSyncTime(value: number | null) {
-    if (!value) return "";
-    const date = new Date(value);
-    return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-  }
-
-  function footerSyncTitle(
-    kind: import("$lib/sync/autoSync").SyncStatusKind,
-  ) {
-    if (kind === "offline") return $translator("sync.offlineAdvice");
-    if (kind === "conflict") return $translator("sync.conflictAdvice");
-    if (kind === "failed") return $translator("sync.retryAdvice");
-    return footerSyncLabel(kind);
   }
 
   function openFocusPanel() {
@@ -1616,6 +1903,8 @@
   }
 
   function handlePanelKeydown(event: KeyboardEvent) {
+    if (contentSearchActive || contentSearchOpening) return;
+    if (historyOpening || historyUuid) return;
     if (captureRequest) return;
     if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLocaleLowerCase() === "n") {
       event.preventDefault();
@@ -1626,7 +1915,7 @@
     if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === "f") {
       event.preventDefault();
       if (selectedNote) {
-        void closeNoteEditor().then(() => toggleSearch());
+        void closeNoteEditor().then((closed) => { if (closed) void toggleSearch(); });
       } else {
         void toggleSearch();
       }
@@ -1634,7 +1923,7 @@
     }
     if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === "s" && selectedNote) {
       event.preventDefault();
-      void flushAllNoteChanges();
+      void flushAllNoteChanges().catch(() => undefined);
       return;
     }
     if (shouldIgnoreKeyboardNavigation(event)) return;
@@ -1672,6 +1961,8 @@
     if (
       showAbout ||
       showDataManager ||
+      showTrash ||
+      contentSearchActive || contentSearchOpening ||
       showSettings ||
       managingGroup ||
       creatingGroup ||
@@ -2183,6 +2474,7 @@
 />
 
 <main class="panel-shell">
+  <PreferenceStatus />
   <header class="panel-header">
     <div class="brand">
       <img class="mascot" src="/eggdone-icon.png" alt="" aria-hidden="true" />
@@ -2612,8 +2904,15 @@
       {#if summaryMenuOpen}
         <div class="summary-menu" role="menu" style:max-height={`${summaryMenuMaxHeight}px`}>
           {#if listView !== "notes"}
-            <span class="smart-menu-title">{$translator("smart.title")}</span>
+            <span class="smart-menu-title">{$translator("smart.title")} · {$translator("smart.pinned")} {pinnedIds.length}/2</span>
+            {#if pinsFailure}
+              <div class="pinned-feedback" role="status">
+                <span>{$translator(pinsFailure === 'load' ? 'smart.pin_load' : pinsFailure === 'limit' ? 'smart.pin_limit' : 'smart.pin_save')}</span>
+                <button type="button" role="menuitem" disabled={pinsBusy} onclick={() => pinnedViews.retry()}>{$translator("smart.retry")}</button>
+              </div>
+            {/if}
             {#each smartChoices as choice (choice.id)}
+              <div class="smart-menu-row" role="none">
               <button type="button" role="menuitemradio"
                 aria-checked={smartView === choice.id}
                 class:active={smartView === choice.id}
@@ -2621,6 +2920,13 @@
                 onclick={() => selectSmartView(choice.id)}>
                 <span>{choice.label}</span><span>{choice.count}</span>
               </button>
+              <button type="button" role="menuitemcheckbox" class="smart-pin"
+                aria-checked={pinnedIds.includes(choice.id)}
+                aria-label={`${$translator(pinnedIds.includes(choice.id) ? 'smart.unpin' : 'smart.pin')} ${choice.label}`}
+                title={$translator(!pinnedIds.includes(choice.id) && pinnedIds.length >= 2 ? 'smart.pin_limit' : pinnedIds.includes(choice.id) ? 'smart.unpin' : 'smart.pin')}
+                disabled={!pinsReady || pinsBusy || (!pinnedIds.includes(choice.id) && pinnedIds.length >= 2)}
+                onclick={() => pinnedViews.toggle(choice.id)}>{pinnedIds.includes(choice.id) ? '★' : '☆'}</button>
+              </div>
             {/each}
             <hr />
           {/if}
@@ -2669,6 +2975,8 @@
               {batchMode ? $translator("batch.exit") : $translator("batch.actions")}
             </button>
           {/if}
+          <button type="button" role="menuitem" disabled={trashOpening || noteAttachmentBusy} onclick={() => void openTrash()}>{$translator("trash.title")}</button>
+          <button type="button" role="menuitem" disabled={contentSearchOpening || noteAttachmentBusy} onclick={() => void openContentSearch()}>{$translator("contentSearch.title")}</button>
         </div>
       {/if}
     </div>
@@ -2728,6 +3036,14 @@
     </section>
   {/if}
 
+  {#if pinnedIds.length > 0 && listView !== 'notes'}
+    <nav class="pinned-smart-views" aria-label={$translator('smart.pinned')}>
+      {#each pinnedIds as id (id)}
+        <button type="button" class="action-button" data-tone={smartView === id ? 'primary' : 'normal'}
+          aria-pressed={smartView === id} onclick={() => selectSmartView(id)}>{$translator(`smart.${id}`)}</button>
+      {/each}
+    </nav>
+  {/if}
   {#if smartView && listView !== "notes"}
     <div class="smart-filter" role="status">
       <span>{$translator(`smart.${smartView}`)} · {renderedTodos.length}</span>
@@ -2736,17 +3052,55 @@
     </div>
   {/if}
 
-  {#if selectedNote}
+  {#if linkManager}
+    <LinkManagerDialog scope={linkManager.scope} uuid={linkManager.uuid} title={linkManager.title}
+      onOpen={item => openRelatedContent(item, linkManager!.scope)}
+      saveSource={saveLinkSource} afterCommit={refreshLinkChange} onClose={() => linkManager = null} />
+  {/if}
+  <LinkWorkspace active={linkHistory.length > 0} busy={linkNavigating || linkedTaskEditing || noteAttachmentBusy} onBack={backFromLinkedContent}>
+  {#if linkedTodoUuid}
+    <button class="action-button" disabled={linkNavigating || linkedTaskEditing} onclick={backFromLinkedContent}>{$translator("links.backSource")}</button>
+    {#if linkedTaskEditing}<p role="status">{$translator("links.finishEditing")}</p>{/if}
+    {#if linkedTodo}
+      <div class="todo-row">
+        <TodoItem todo={linkedTodo} animationEnabled={false}
+          onToggle={toggleTodo} onEdit={editTodo} onNote={noteTodo} onPin={pinTodo} onPriority={priorityTodo}
+          onFocus={todo => { void focusFromLinkedContent(todo); }}
+          onManageLinks={manageTaskLinks} onSchedule={scheduleTodo} onSnooze={snoozeTodo}
+          groups={$todos.groups} onGroupChange={moveTodoToGroup} onDelete={deleteTodo}
+          onMove={moveTodo} onDragStart={startDrag} onBatchSelect={toggleBatchTodo}
+          dragDisabled={true} reorderDisabled={true} onEditingChange={value => linkedTaskEditing = value} />
+      </div>
+    {:else}<p role="status">{$translator("links.unavailable")}</p>{/if}
+  {:else if selectedNote}
+    {#if linkedRequest}
+      <LinkedTodoDialog noteUuid={linkedRequest.uuid} initialTitle={linkedRequest.title}
+        onSave={saveLinkedTask} onCancel={() => linkedRequest = null} />
+    {/if}
+    {#key selectedNote.uuid + ':' + historyEditorRevision}
     <NoteEditor
+      locked={historyOpening || historyUuid !== null || contentSearchOpening || contentSearchActive}
+      onSearch={contentSearchSession ? null : () => void openContentSearch()}
+      focusAttachmentUuid={searchAttachmentUuid}
+      onClearAttachmentFocus={() => searchAttachmentUuid = ""}
+      onHistory={() => void openNoteHistory()}
       note={selectedNote}
       draft={selectedNote.uuid === NOTE_DRAFT_UUID}
+      linkRevision={[linkedRevision, $notes.items]}
+      {linkNotice}
+      onCreateLinked={() => void openLinkedTask()}
+      onManageLinks={() => void manageNoteLinks()}
+      onOpenLink={item => openRelatedContent(item, "note")}
+      scrollPositions={noteEditorScrollPositions}
       saving={noteEditorSaving}
-      error={noteAttachmentError || $notes.error}
+      error={historyOpenError ? $translator("history.saveFailed") : noteAttachmentError || $notes.error}
+      saveFailed={!!$notes.error && (noteDraft !== null || notes.hasPendingSave())}
       onChange={updateNote}
       onDone={closeNoteEditor}
+      onRetrySave={() => flushAllNoteChanges().catch(() => undefined)}
       onPin={pinNote}
       onColor={colorNote}
-      onDelete={deleteNote}
+      onDelete={requestNoteDeletion}
       attachments={selectedNote.uuid === NOTE_DRAFT_UUID ? [] : (noteAttachmentsByNote[selectedNote.uuid] ?? [])}
       attachmentPreviewUrls={noteAttachmentPreviewUrls}
       attachmentBusy={noteAttachmentBusy}
@@ -2758,8 +3112,13 @@
       onDeleteAttachment={deleteNoteAttachment}
       onRetryAttachment={retryNoteAttachment}
     />
+    {/key}
+  {:else if linkHistory.length}
+    <p role="status">{$translator("links.unavailable")}</p>
+    <button class="action-button" onclick={backFromLinkedContent}>{$translator("links.backSource")}</button>
   {:else if listView === "notes"}
     <NoteList
+      scrollPositions={listScrollPositions}
       items={$visibleNotes}
       loading={$notes.loading}
       error={$notes.error}
@@ -2767,12 +3126,13 @@
       onOpen={openNote}
       onPin={pinNote}
       onColor={colorNote}
-      onDelete={deleteNote}
+      onDelete={requestNoteDeletion}
       attachmentsByNote={noteAttachmentsByNote}
       attachmentPreviewUrls={noteAttachmentPreviewUrls}
     />
   {:else}
-  <section class="todo-list" aria-live="polite">
+  <section class="todo-list" aria-live="polite"
+    use:preserveScroll={{ positions: listScrollPositions, key: 'tasks', ready: !$todos.loading }}>
     {#if $todos.loading}
       <div class="status">{$translator("empty.loading")}</div>
     {:else if $todos.error && $todos.items.length === 0}
@@ -2878,6 +3238,7 @@
                       onPin={pinTodo}
                       onPriority={priorityTodo}
                       onFocus={openFocusForTodo}
+                      onManageLinks={manageTaskLinks}
                       onSchedule={scheduleTodo}
                       onSnooze={snoozeTodo}
                       groups={$todos.groups}
@@ -2992,6 +3353,7 @@
                         onPin={pinTodo}
                         onPriority={priorityTodo}
                         onFocus={openFocusForTodo}
+                        onManageLinks={manageTaskLinks}
                         onSchedule={scheduleTodo}
                         onSnooze={snoozeTodo}
                         groups={$todos.groups}
@@ -3046,6 +3408,7 @@
                       onPin={pinTodo}
                       onPriority={priorityTodo}
                       onFocus={openFocusForTodo}
+                      onManageLinks={manageTaskLinks}
                       onSchedule={scheduleTodo}
                       onSnooze={snoozeTodo}
                       groups={$todos.groups}
@@ -3091,6 +3454,7 @@
             onPin={pinTodo}
             onPriority={priorityTodo}
             onFocus={openFocusForTodo}
+            onManageLinks={manageTaskLinks}
             onSchedule={scheduleTodo}
             onSnooze={snoozeTodo}
             groups={$todos.groups}
@@ -3117,18 +3481,17 @@
     {/if}
   </section>
   {/if}
+  </LinkWorkspace>
 
   <footer>
     <span>{$translator("footer.encouragement")}</span>
     <button
-      class:syncing={$syncStatus.kind === "syncing"}
-      class:sync-ok={$syncStatus.kind === "synced"}
-      class:sync-problem={["offline", "conflict", "failed"].includes(
-        $syncStatus.kind,
-      )}
+      class:syncing={syncSummaryTone($syncSummary) === "active"}
+      class:sync-ok={syncSummaryTone($syncSummary) === "success"}
+      class:sync-problem={syncSummaryTone($syncSummary) === "warning"}
       class="footer-sync-status"
       type="button"
-      title={footerSyncTitle($syncStatus.kind)}
+      title={$translator(`sync.explain.${$syncSummary}`)}
       onclick={() => {
         showAbout = false;
         showDataManager = false;
@@ -3136,7 +3499,7 @@
       }}
     >
       <span aria-hidden="true"></span>
-      {footerSyncLabel($syncStatus.kind)}
+      {$translator(`sync.summary.${$syncSummary}`)}
     </button>
     <button
       type="button"
@@ -3177,6 +3540,18 @@
     </span>
     <button type="button" onclick={() => void undoDelete()}>{$translator("common.undo")}</button>
   </div>
+{/if}
+
+{#if showTrash}
+  <TrashDialog onClose={() => showTrash = false} afterCommit={refreshAfterTrash} />
+{/if}
+{#if contentSearchSession}
+  <ContentSearchDialog active={contentSearchActive} onOpen={openSearchResult}
+    onClose={() => { contentSearchSession = false; contentSearchActive = false; void readCapture(); }} />
+{/if}
+{#if historyUuid}
+  <NoteHistoryDialog uuid={historyUuid} beforeRestore={assertHistoryReady}
+    afterRestore={afterHistoryRestore} onRefresh={refreshHistoryEditor} onClose={closeNoteHistory} />
 {/if}
 
 {#if deletedNote}

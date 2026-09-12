@@ -133,6 +133,8 @@ pub(crate) fn set_color(connection: &Connection, uuid: &str, color: &str) -> Res
 
 pub(crate) fn soft_delete(connection: &Connection, uuid: &str) -> Result<Note, String> {
     validate_uuid(uuid)?;
+    let tx = connection.unchecked_transaction().map_err(database_error)?;
+    let connection = &tx;
     let updated_by = device_id(connection).map_err(database_error)?;
     let now = now_millis();
     let changed = connection
@@ -146,7 +148,10 @@ pub(crate) fn soft_delete(connection: &Connection, uuid: &str) -> Result<Note, S
         )
         .map_err(database_error)?;
     require_changed(changed)?;
-    find_by_uuid(connection, uuid)
+    crate::task_note_link_store::tombstone_entity(connection, uuid, true, now, &updated_by)?;
+    let result = find_by_uuid(connection, uuid)?;
+    tx.commit().map_err(database_error)?;
+    Ok(result)
 }
 
 pub(crate) fn restore(connection: &Connection, uuid: &str) -> Result<Note, String> {

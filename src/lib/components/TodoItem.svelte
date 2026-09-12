@@ -6,7 +6,7 @@
   import type { TranslationKey } from "$lib/i18n";
   import RecurrenceEditor from "./RecurrenceEditor.svelte";
   import { recurrenceRules } from "$lib/stores/recurrenceStore";
-  import { associatedRule } from "$lib/utils/recurrenceForm";
+  import { visibleRecurrenceRule } from "$lib/utils/recurrenceForm";
   import { recurrenceSummary } from "$lib/utils/recurrenceSummary";
   import type { TodoScheduleInput } from "$lib/api/todoApi";
   import type {
@@ -48,6 +48,7 @@
   export let onPin: (todo: Todo, pinned: boolean) => Promise<void>;
   export let onPriority: (todo: Todo, priority: number) => Promise<void>;
   export let onFocus: (todo: Todo) => void;
+  export let onManageLinks: (todo: Todo) => void = () => {};
   export let onSchedule: (
     id: number,
     schedule: TodoScheduleInput,
@@ -76,6 +77,7 @@
   export let dragDisabled = false;
   export let reorderDisabled = false;
   export let editRequest = 0;
+  export let onEditingChange: (editing: boolean) => void = () => {};
 
   let editing = false;
   let editTitle = "";
@@ -83,7 +85,7 @@
   let saving = false;
   let scheduleOpen = false;
   let recurrenceOpen = false;
-  $: customRule = associatedRule($recurrenceRules, todo.uuid, todo.repeat_series_uuid);
+  $: customRule = visibleRecurrenceRule($recurrenceRules, todo.uuid, todo.repeat_series_uuid, todo.repeat_rule);
   $: customSummary = customRule ? recurrenceSummary(customRule, key => $translator(("recurrence." + key) as TranslationKey)) :
     todo.repeat_rule === null && todo.repeat_series_uuid !== null ? $translator("recurrence.unknown") : "";
   let scheduleBaseline = "";
@@ -110,6 +112,7 @@
   let repeatChoice: RepeatRule | "none" = "none";
   let groupSaving = false;
   let actionsOpen = false;
+  $: onEditingChange(editing || saving || scheduleOpen || recurrenceOpen || scheduleSaving || noteOpen || noteSaving || groupSaving);
   let editInput: HTMLInputElement;
   let noteInput: HTMLTextAreaElement;
   let itemElement: HTMLElement;
@@ -530,7 +533,7 @@
               title={`${$translator("todo.group")}: ${currentGroup.name}`}
             >
               <span class="group-dot" aria-hidden="true"></span>
-              {currentGroup.name}
+              <span>{currentGroup.name}</span>
             </span>
           {/if}
           {#if todo.pinned}
@@ -668,8 +671,8 @@
             <button type="button" disabled={scheduleSaving} onclick={openRecurrence}>{$translator("recurrence.title")}</button>
           </div>
           <div class="schedule-footer">
-            <button type="button" disabled={scheduleSaving} onclick={() => void setSchedule(null)}>{$translator("common.clear")}</button>
-            <button type="button" disabled={scheduleSaving || !canSaveSchedule} onclick={() => void setSchedule(customDate)}>{$translator("common.save")}</button>
+            <button class="action-button" type="button" disabled={scheduleSaving} onclick={() => void setSchedule(null)}>{$translator("common.clear")}</button>
+            <button class="action-button" type="button" aria-busy={scheduleSaving} disabled={scheduleSaving || !canSaveSchedule} data-tone="primary" onclick={() => void setSchedule(customDate)}>{$translator("common.save")}</button>
           </div>
           {#if scheduleError}<small>{scheduleError}</small>{/if}
         </div>
@@ -689,7 +692,7 @@
           <div class="note-footer">
             <small>{noteDraft.length}/1000</small>
             <div>
-              <button
+              <button class="action-button"
                 type="button"
                 disabled={noteSaving}
                 onclick={() => {
@@ -697,10 +700,10 @@
                   noteError = "";
                 }}>{$translator("common.cancel")}</button
               >
-              <button
+              <button class="action-button"
                 type="button"
                 disabled={noteSaving}
-                onclick={() => void saveNote()}>{$translator("common.save")}</button
+                data-tone="primary" aria-busy={noteSaving} onclick={() => void saveNote()}>{$translator("common.save")}</button
               >
             </div>
           </div>
@@ -730,6 +733,9 @@
     </button>
     {#if actionsOpen}
       <div class="actions-menu" role="menu">
+        <button type="button" role="menuitem" onclick={() => { actionsOpen = false; onManageLinks(todo); }}>
+          {$translator("links.notes")}
+        </button>
         <button
           type="button"
           role="menuitem"
@@ -875,6 +881,3 @@
 {#if recurrenceOpen}
   <RecurrenceEditor {todo} onClose={() => recurrenceOpen = false} />
 {/if}
-<style>
-  .custom-repeat-badge { max-width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-</style>

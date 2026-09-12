@@ -75,7 +75,7 @@ impl NoteAssetStore {
     }
 
     #[cfg(test)]
-    fn for_root(app_data_root: PathBuf) -> Self {
+    pub(crate) fn for_root(app_data_root: PathBuf) -> Self {
         Self { app_data_root }
     }
 
