@@ -32,6 +32,7 @@ mod shortcut_preferences;
 mod sync;
 mod sync_runtime_state;
 mod sync_target;
+mod task_note_link_backup;
 #[cfg(test)]
 mod task_note_link_operation_tests;
 pub mod task_note_link_operations;

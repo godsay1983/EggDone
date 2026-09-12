@@ -79,8 +79,21 @@ pub fn prepare(
         .map_err(db_error)?;
     require_epoch(&tx, epoch)?;
     store::merge_in_transaction(&tx, incoming)?;
-    let by = crate::db::device_id(&tx).map_err(db_error)?;
-    let mut deleted = store::snapshot(&tx)?.document;
+    reconcile_in_transaction(&tx, now)?;
+    let result = capture(&tx, epoch, now)?;
+    tx.commit().map_err(db_error)?;
+    Ok(result)
+}
+
+pub(crate) fn reconcile_in_transaction(
+    tx: &rusqlite::Transaction<'_>,
+    now: i64,
+) -> Result<(), String> {
+    if !(0..=protocol::MAX_CLOCK).contains(&now) {
+        return Err("TASK_NOTE_LINK_INVALID_SNAPSHOT".into());
+    }
+    let by = crate::db::device_id(tx).map_err(db_error)?;
+    let mut deleted = store::snapshot(tx)?.document;
     deleted.links.retain(|l| l.deleted_at.is_none());
     let mut reconciled = Vec::new();
     for mut link in deleted.links {
@@ -101,15 +114,13 @@ pub fn prepare(
         }
     }
     store::merge_in_transaction(
-        &tx,
+        tx,
         &protocol::LinkDocument {
             format_version: 1,
             links: reconciled,
         },
     )?;
-    let result = capture(&tx, epoch, now)?;
-    tx.commit().map_err(db_error)?;
-    Ok(result)
+    Ok(())
 }
 
 /// Recheck before uploading links; versions and exact payloads protect against concurrent entity merges.

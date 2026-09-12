@@ -1,0 +1,64 @@
+{
+  "format_version": 3,
+  "exported_at": 1000,
+  "groups": [],
+  "todos": [
+    {
+      "uuid": "123e4567-e89b-42d3-a456-426614174000",
+      "title": "Linked backup task",
+      "note": null,
+      "group_uuid": null,
+      "completed": false,
+      "pinned": false,
+      "priority": 0,
+      "sort_order": 0,
+      "created_at": 1,
+      "updated_at": 100,
+      "completed_at": null,
+      "deleted_at": null,
+      "archived_at": null,
+      "due_date": null,
+      "due_at": null,
+      "reminder_at": null,
+      "repeat_rule": null,
+      "repeat_next_due_date": null,
+      "repeat_series_uuid": null
+    }
+  ],
+  "notes": [
+    {
+      "uuid": "123e4567-e89b-42d3-a456-426614174001",
+      "title": "Linked backup note",
+      "content": "Reference",
+      "color": "default",
+      "pinned": false,
+      "created_at": 1,
+      "updated_at": 100,
+      "deleted_at": null,
+      "updated_by": "00000000-0000-4000-8000-00000000000b"
+    }
+  ],
+  "note_attachments": [],
+  "attachment_files_included": false,
+  "recurrence": {
+    "document": {
+      "format_version": 1,
+      "rules": []
+    },
+    "instances": []
+  },
+  "task_note_links": {
+    "format_version": 1,
+    "links": [
+      {
+        "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+        "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+        "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+        "created_at": 10,
+        "updated_at": 100,
+        "updated_by": "00000000-0000-4000-8000-00000000000b",
+        "deleted_at": null
+      }
+    ]
+  }
+}

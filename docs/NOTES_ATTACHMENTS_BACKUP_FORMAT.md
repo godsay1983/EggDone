@@ -4,7 +4,7 @@
 
 ## 1. 普通 JSON
 
-自 2026-09-06 的 E3B 起，新导出使用数据 `format_version: 2` 并包含必需的 `recurrence` 区，详见 [规则备份恢复契约](RECURRENCE_BACKUP_CONTRACT.md)。旧数据 v1 仍可导入；下例展示原有 v1 基础字段，附件字段及行为在 v2 中保持不变。ZIP manifest 的版本仍为 1，不等于 data.json 的版本。
+自 2026-09-12 的 E7/L3c 起，新导出使用数据 `format_version: 3`，包含必需的 `recurrence` 和 `task_note_links`，详见[关联备份契约](TASK_NOTE_LINK_BACKUP_CONTRACT.md)。v3 沿用[规则备份契约](RECURRENCE_BACKUP_CONTRACT.md)的 recurrence 结构；有效旧数据 v1/v2 仍可导入。下例展示 v1 基础字段，附件字段及行为在 v2/v3 中保持不变。ZIP manifest 的版本仍为 1，不等于 data.json 的版本。
 
 ```json
 {
