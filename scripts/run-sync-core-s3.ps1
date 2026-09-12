@@ -2,18 +2,20 @@ param(
     [ValidateRange(1024, 65535)][int]$Port = 18477,
     [switch]$CrossClientSessions,
     [switch]$TrashRecoverySessions,
+    [switch]$NoteHistorySessions,
     [string]$HarmonyRoot
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 foreach ($command in @('docker', 'cargo')) { $null = Get-Command $command -ErrorAction Stop }
-if ($CrossClientSessions -and $TrashRecoverySessions) { throw 'Select only one cross-client suite' }
-if ($CrossClientSessions -or $TrashRecoverySessions) {
+if (@($CrossClientSessions, $TrashRecoverySessions, $NoteHistorySessions).Where({ $_.IsPresent }).Count -gt 1) { throw 'Select only one cross-client suite' }
+if ($CrossClientSessions -or $TrashRecoverySessions -or $NoteHistorySessions) {
     $null = Get-Command node -ErrorAction Stop
     if (-not $HarmonyRoot) { throw 'Cross-client suites require the explicit Harmony checkout path' }
     $HarmonyRoot = (Resolve-Path -LiteralPath $HarmonyRoot).Path
     $harmonyTest = Join-Path $HarmonyRoot 'scripts/test-full-sync-s3.cjs'
     if ($TrashRecoverySessions) { $harmonyTest = Join-Path $HarmonyRoot 'scripts/test-trash-sync-s3.cjs' }
+    if ($NoteHistorySessions) { $harmonyTest = Join-Path $HarmonyRoot 'scripts/test-note-history-sync-s3.cjs' }
     if (-not (Test-Path -LiteralPath $harmonyTest)) { throw 'Harmony checkout is missing the full session test' }
 }
 if (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue) { throw 'Port occupied; select another port' }
@@ -32,7 +34,7 @@ $created = $false
 $cleanupFailed = $false
 
 function Invoke-DesktopTest([string]$Test, [string]$Marker) {
-    $log = Join-Path $logs "$Test.log"
+    $log = Join-Path $logs ($Test.Replace('::', '-') + '.log')
     Push-Location (Join-Path $root 'src-tauri')
     try {
         & cargo test --lib "commands::sync_core_tests::s3_tests::$Test" -- --ignored --exact --nocapture 2>&1 |
@@ -51,6 +53,7 @@ function Invoke-HarmonyPhase([string]$Phase) {
     if ($LASTEXITCODE -ne 0) { throw "Harmony host session failed; see $log" }
     $marker = 'FULL_SESSION_HARMONY_' + $Phase.ToUpperInvariant() + '_OK:'
     if ($TrashRecoverySessions) { $marker = 'TRASH_SESSION_HARMONY_' + $Phase.ToUpperInvariant() + '_OK:' }
+    if ($NoteHistorySessions) { $marker = 'HISTORY_SESSION_HARMONY_' + $Phase.ToUpperInvariant() + '_OK:' }
     if ((Get-Content -LiteralPath $log -Raw) -notmatch $marker) { throw "Harmony phase did not complete; see $log" }
 }
 
@@ -81,7 +84,12 @@ try {
     }
     if (-not $ready) { throw 'Authenticated S3 readiness timed out' }
     Write-Host "Running the desktop production sync core against isolated S3. Evidence: $logs"
-    if ($TrashRecoverySessions) {
+    if ($NoteHistorySessions) {
+        Invoke-DesktopTest 'history::history_session_prepare' 'HISTORY_SESSION_DESKTOP_PREPARE_OK'
+        Invoke-HarmonyPhase 'exchange'
+        Invoke-DesktopTest 'history::history_session_verify' 'HISTORY_SESSION_DESKTOP_VERIFY_OK'
+        Invoke-HarmonyPhase 'verify'
+    } elseif ($TrashRecoverySessions) {
         Invoke-DesktopTest 'trash_session_prepare' 'TRASH_SESSION_DESKTOP_PREPARE_OK'
         Invoke-HarmonyPhase 'exchange'
         Invoke-DesktopTest 'trash_session_verify' 'TRASH_SESSION_DESKTOP_VERIFY_OK'
@@ -110,4 +118,4 @@ try {
     $env:EGGDONE_NS7_S3_PORT = $oldPort
 }
 if ($cleanupFailed) { throw 'Disposable resource cleanup incomplete' }
-Write-Host "Sync core S3 passed (cross-client: $CrossClientSessions; trash recovery: $TrashRecoverySessions); disposable service removed. Evidence: $logs"
+Write-Host "Sync core S3 passed (cross-client: $CrossClientSessions; trash recovery: $TrashRecoverySessions; note history: $NoteHistorySessions); disposable service removed. Evidence: $logs"
