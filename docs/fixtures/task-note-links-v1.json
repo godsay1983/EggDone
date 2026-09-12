@@ -1,0 +1,874 @@
+{
+  "base_record": {
+    "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+    "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+    "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+    "created_at": 1000,
+    "updated_at": 2000,
+    "updated_by": "device-a",
+    "deleted_at": null
+  },
+  "identities": [
+    {
+      "todo": "123e4567-e89b-42d3-a456-426614174000",
+      "note": "123e4567-e89b-42d3-a456-426614174001",
+      "expected": "b5d16c58-d3c9-5596-a7f4-774b530c3920"
+    },
+    {
+      "todo": "123E4567-E89B-42D3-A456-426614174000",
+      "note": "123E4567-E89B-42D3-A456-426614174001",
+      "expected": "b5d16c58-d3c9-5596-a7f4-774b530c3920"
+    },
+    {
+      "todo": "123e4567-e89b-42d3-a456-426614174001",
+      "note": "123e4567-e89b-42d3-a456-426614174000",
+      "expected": "5229c466-5175-5aa0-bbe2-ca5d6f4d3c8c"
+    }
+  ],
+  "valid": [
+    {
+      "id": "empty",
+      "document": {
+        "format_version": 1,
+        "links": []
+      }
+    },
+    {
+      "id": "active",
+      "document": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 2000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "deleted",
+      "document": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 3000,
+            "updated_by": "device-a",
+            "deleted_at": 3000
+          }
+        ]
+      }
+    },
+    {
+      "id": "multiple",
+      "document": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 2000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          },
+          {
+            "uuid": "c2fa642f-d6b0-512a-8bbe-6290c6666736",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174002",
+            "created_at": 1000,
+            "updated_at": 2000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "max-clock",
+      "document": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 9007199254740991,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "id": "updated_by:device-a\n",
+      "document": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 2000,
+            "updated_by": "device-a\n",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "todo_uuid:123e4567-e89b-42d3-a456-426614174000\n",
+      "document": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000\n",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 2000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "uuid:123e4567-e89b-42d3-a456-426614174001",
+      "document": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 2000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "todo_uuid:123E4567-E89B-42D3-A456-426614174000",
+      "document": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123E4567-E89B-42D3-A456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 2000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "note_uuid:broken",
+      "document": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "broken",
+            "created_at": 1000,
+            "updated_at": 2000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "created_at:-1",
+      "document": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": -1,
+            "updated_at": 2000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "created_at:3000",
+      "document": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 3000,
+            "updated_at": 2000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "updated_at:1.5",
+      "document": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 1.5,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "updated_at:9007199254740992",
+      "document": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 9007199254740992,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "updated_at:2000",
+      "document": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": "2000",
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "updated_by:",
+      "document": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 2000,
+            "updated_by": "",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "updated_by:bad device",
+      "document": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 2000,
+            "updated_by": "bad device",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "updated_by:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "document": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 2000,
+            "updated_by": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "deleted_at:999",
+      "document": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 2000,
+            "updated_by": "device-a",
+            "deleted_at": 999
+          }
+        ]
+      }
+    },
+    {
+      "id": "deleted_at:3000",
+      "document": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 2000,
+            "updated_by": "device-a",
+            "deleted_at": 3000
+          }
+        ]
+      }
+    },
+    {
+      "id": "deleted_at:false",
+      "document": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 2000,
+            "updated_by": "device-a",
+            "deleted_at": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "deleted_at:2000",
+      "document": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 2000,
+            "updated_by": "device-a",
+            "deleted_at": "2000"
+          }
+        ]
+      }
+    },
+    {
+      "id": "extra:true",
+      "document": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 2000,
+            "updated_by": "device-a",
+            "deleted_at": null,
+            "extra": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "missing-nullable",
+      "document": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 2000,
+            "updated_by": "device-a"
+          }
+        ]
+      }
+    },
+    {
+      "id": "duplicate",
+      "document": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 2000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          },
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 2000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "unknown-version",
+      "document": {
+        "format_version": 2,
+        "links": []
+      }
+    },
+    {
+      "id": "extra-envelope",
+      "document": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 2000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ],
+        "more": true
+      }
+    },
+    {
+      "id": "null-row",
+      "document": {
+        "format_version": 1,
+        "links": [
+          null
+        ]
+      }
+    },
+    {
+      "id": "null-document",
+      "document": null
+    }
+  ],
+  "merges": [
+    {
+      "id": "delete-newer",
+      "left": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 2000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 3000,
+            "updated_by": "device-a",
+            "deleted_at": 3000
+          }
+        ]
+      },
+      "expected": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 3000,
+            "updated_by": "device-a",
+            "deleted_at": 3000
+          }
+        ]
+      }
+    },
+    {
+      "id": "explicit-reconnect",
+      "left": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 3000,
+            "updated_by": "device-a",
+            "deleted_at": 3000
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 4000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      },
+      "expected": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 4000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "tie-delete",
+      "left": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 2000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 2000,
+            "updated_by": "device-a",
+            "deleted_at": 2000
+          }
+        ]
+      },
+      "expected": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 2000,
+            "updated_by": "device-a",
+            "deleted_at": 2000
+          }
+        ]
+      }
+    },
+    {
+      "id": "device-before-delete",
+      "left": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 2000,
+            "updated_by": "device-a",
+            "deleted_at": 2000
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 2000,
+            "updated_by": "device-z",
+            "deleted_at": null
+          }
+        ]
+      },
+      "expected": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 2000,
+            "updated_by": "device-z",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "created-tie",
+      "left": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 2000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1100,
+            "updated_at": 2000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      },
+      "expected": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1100,
+            "updated_at": 2000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "equal",
+      "left": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 2000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 2000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      },
+      "expected": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 2000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "missing-is-not-delete",
+      "left": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 2000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "links": []
+      },
+      "expected": {
+        "format_version": 1,
+        "links": [
+          {
+            "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+            "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+            "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+            "created_at": 1000,
+            "updated_at": 2000,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    }
+  ],
+  "keys": [
+    {
+      "todo": "todos.json",
+      "occupied": [],
+      "expected": "task-note-links.json"
+    },
+    {
+      "todo": "data/todos.json",
+      "occupied": [],
+      "expected": "data/task-note-links.json"
+    },
+    {
+      "todo": "资料/todos.json",
+      "occupied": [],
+      "expected": "资料/task-note-links.json"
+    },
+    {
+      "todo": "",
+      "occupied": [],
+      "error": true
+    },
+    {
+      "todo": "/todos.json",
+      "occupied": [],
+      "error": true
+    },
+    {
+      "todo": "../todos.json",
+      "occupied": [],
+      "error": true
+    },
+    {
+      "todo": "data//todos.json",
+      "occupied": [],
+      "error": true
+    },
+    {
+      "todo": "todos.json ",
+      "occupied": [],
+      "error": true
+    },
+    {
+      "todo": "task-note-links.json",
+      "occupied": [],
+      "error": true
+    },
+    {
+      "todo": "a\\b.json",
+      "occupied": [],
+      "error": true
+    },
+    {
+      "todo": "a\u0000.json",
+      "occupied": [],
+      "error": true
+    },
+    {
+      "todo": "data/todos.json",
+      "occupied": [
+        "data/task-note-links.json"
+      ],
+      "error": true
+    }
+  ]
+}

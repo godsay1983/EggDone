@@ -1,15 +1,24 @@
 # 任务与便签关联 Roadmap
 
-日期：2026-09-06
-状态：候选下一阶段，未启动编码；当前 NEXT_STAGE_ROADMAP 的 NS6 交付仅为设计。NS7 验收后再开始。
+更新：2026-09-12。
+状态：E7/L1 双端内核已实现，当前增量未提交。E6d 已本地提交：桌面 8c42ba9、鸿蒙 1af2bf3；不推送、不升版。既有 E6 完整人工验收继续保留，不因继续开发而视为通过。
 方案：[TASK_NOTE_LINK_IMPLEMENTATION_PLAN.md](TASK_NOTE_LINK_IMPLEMENTATION_PLAN.md)
 
 每一项双端一起完成、验证后分别用中文提交。先做协议和原子内核，最后开放入口；不得把未通过的原生/跨端测试勾选为完成。
 
 ## L1 协议与迁移
-- [ ] 冻结 links v1、命名空间、Object Key、限额、冲突、墓碑、悬挂链接和旧客户端行为。
-- [ ] 共享有效/无效、并发/删除 fixtures，Rust/ArkTS 校验与 UUID 完全一致。
-- [ ] 新旧 SQLite/RDB 迁移和 Repository；不改 Todo.note 与 Note 主记录。
+- [x] 冻结 links v1、命名空间、Object Key、限额、冲突、墓碑、悬挂链接和旧客户端行为，见 [协议](TASK_NOTE_LINK_PROTOCOL.md)。
+- [x] 共享 51 组有效/无效、身份、并发/删除和 Key fixtures，Rust/ArkTS 共同通过。
+- [x] SQLite 17->18、RDB 18->19 迁移和 Repository；不改 Todo.note 与 Note 主记录。宿主验证新库、升级、失败回滚/重试、幂等和既有数据保留。
+- [ ] 用户实际旧库升级与双端操作验收：关联入口未开放，后续阶段继续验证。
+
+### L1 验证记录
+
+- 桌面 cargo test --lib：231 通过、2 个真实 S3 测试忽略；新增 4 个聚合测试覆盖协议、限额/合并、Repository、文件数据库迁移/重开。cargo fmt/check、前端 check/build 通过。
+- 鸿蒙宿主关联 51 组及生产仓库/迁移测试通过；既有重复协议、日期、提醒完成回归通过。宿主 SQLite/crypto 适配不代替原生 RDB。
+- 鸿蒙 Debug 与 ohosTest 构建通过；Mate 80 Pro Max 模拟器（127.0.0.1:5557）及 MatePad Pro 13 模拟器（127.0.0.1:5555）的 TaskNoteLinkNative 各 2 项全部通过、0 失败/忽略。验证原生 SHA1 UUID、RDB 重开、墓碑幂等、迁移/写入失败回滚及重试；仅操作独立临时库，不等于真实用户旧库升级或真实跨端同步验收。
+- 设备均覆盖安装主包与测试包，没有卸载、清除数据或主动启动主界面。证据目录：C:/Users/CAOZHI~1/AppData/Local/Temp/eggdone-link-l1-c3c7b755d579476ba60a3e76425d3406。主包 SHA256：8CC9638C6A8EB211A4AA1489398759F0E04E59B2ABB78053DC537EE0076D4681；测试包：EE2D233D30491DD817C0BF3A25B1DFCD763DDE79E42022EBF20C7546732D8092。日志与构建产物不提交。
+- L1 没有新增界面、任务/便签原子命令、网络请求或备份格式。旧客户端跨设备协议保持兼容，但升级后的本地库不支持旧二进制降级打开。
 
 ## L2 原子操作
 - [ ] Todo+link 确认创建、关联已有任务、解绑、删除实体后的链接墓碑协调。

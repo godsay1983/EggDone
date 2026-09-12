@@ -32,6 +32,10 @@ mod shortcut_preferences;
 mod sync;
 mod sync_runtime_state;
 mod sync_target;
+pub mod task_note_link_protocol;
+pub mod task_note_link_store;
+#[cfg(test)]
+mod task_note_link_tests;
 mod tray;
 #[cfg(target_os = "linux")]
 mod tray_ksni;
