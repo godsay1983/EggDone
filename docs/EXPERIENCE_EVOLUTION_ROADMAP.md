@@ -181,6 +181,8 @@ E6d已本地提交：桌面8c42ba9、鸿蒙1af2bf3。本轮按用户要求继续
 
 同日平板补充：MatePad Pro 13 模拟器横屏全屏八配置 40/40 交互、24 份原生布局检查通过；八张菜单截图逐张核对，文字、背景和英文大字号均正常，普通主包恢复成功。详见鸿蒙仓库 `docs/CONTENT_SEARCH_NATIVE_UI_TEST.md` 的平板八组合记录。桌面浏览器重新通过 24 组布局/语言/主题/缩放及保存、导航、分页、失败回归，证据目录 `%TEMP%/eggdone-content-search-ui-1789232878421`；`pnpm check`、`pnpm build`、`cargo fmt -- --check`、`cargo check` 通过，保留既有 `TraySnapshot.locale` 未使用警告。这些是浏览器隔离 IPC 与模拟器证据，不关闭 H2/E8c3 的分屏、软键盘、主应用完整导航、旧库和真机验收。
 
+2026-09-13 E8c3 桌面原生补充：独立标识 `com.eggdone.searchtest`、真实 WebView2/Rust/SQLite 的 12 项流程通过，覆盖附件字节导入、同名文件父便签定位、归档只读、第二页任务返回、失效目标、三档原生缩放，以及来源/目标真实写入失败和重试。详见 [原生运行验证](CONTENT_SEARCH_NATIVE_RUNTIME.md)。本次只新增测试/文档，不影响普通客户端；远程附件、跨便签完整导航、旧库和多设备完整矩阵继续保留，E8c3 不整体勾选。
+
 ## E9：按需立项
 
 - [ ] 模板与单层检查清单分开冻结。
