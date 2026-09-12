@@ -2,6 +2,11 @@ import type { TranslationMessage } from "../types";
 import type { zhCN } from "./zh-CN";
 
 export const enUS = {
+  "links.content": "Linked content",
+  "links.backSource": "Back to source",
+  "links.finishEditing": "Save or cancel the current edit before returning.",
+  "links.archivedHint": "This task is archived. The link is kept; archived tasks cannot be opened here.",
+  "links.openFailed": "Could not open the linked content. Save the current note, then retry. The content or link may no longer be available.",
   "links.create": "Create linked task",
   "links.notes": "Linked notes",
   "links.available": "Available",

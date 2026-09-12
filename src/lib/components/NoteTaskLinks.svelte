@@ -1,15 +1,27 @@
 <script lang="ts">
   import { translator } from "$lib/i18n";
   import { createTaskNoteLinkStore } from "$lib/stores/taskNoteLinkStore";
+  import type { TaskNoteLinkView } from "$lib/types/taskNoteLink";
   export let uuid: string;
   export let revision: unknown;
+  export let onOpen: (item: TaskNoteLinkView) => Promise<void> = async () => {};
+  let opening = false;
+  let message = "";
+  async function open(item: TaskNoteLinkView) {
+    if (opening) return;
+    opening = true; message = "";
+    try { await onOpen(item); }
+    catch (error) { message = $translator(String(error).includes("LINK_ARCHIVED") ? "links.archivedHint" : "links.openFailed"); await links.load(uuid); }
+    finally { opening = false; }
+  }
   const links = createTaskNoteLinkStore();
   let expanded = false;
   $: { revision; void links.load(uuid); }
 </script>
 
-{#if $links.failed || $links.loading || $links.items.length > 0}
+{#if message || $links.failed || $links.loading || $links.items.length > 0}
   <section class="note-task-links" aria-label={$translator("links.tasks")}>
+    {#if message}<p role="alert">{message}</p>{/if}
     {#if $links.loading}<small role="status">{$translator("common.loading")}</small>{/if}
     {#if $links.failed}
       <p role="alert">{$translator("links.loadFailed")}</p>
@@ -23,7 +35,8 @@
         <ul>
           {#each $links.items as item (item.link.uuid)}
             <li><span title={item.todo_title ?? ""}>{item.todo_title ?? $translator("links.unavailable")}</span>
-              <small>{$translator(`links.state.${item.todo_state}`)}{item.is_repeating ? " · " + $translator("links.thisOnly") : ""}</small></li>
+              <small>{$translator(`links.state.${item.todo_state}`)}{item.is_repeating ? " · " + $translator("links.thisOnly") : ""}</small>
+              <button class="action-button" disabled={opening || $links.loading || $links.failed || ['deleted', 'missing'].includes(item.todo_state)} onclick={() => open(item)}>{$translator("common.open")}</button></li>
           {/each}
         </ul>
       {/if}

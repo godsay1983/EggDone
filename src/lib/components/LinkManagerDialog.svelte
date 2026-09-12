@@ -9,6 +9,7 @@
   export let saveSource: () => Promise<void>;
   export let afterCommit: () => Promise<void>;
   export let onClose: () => void;
+  export let onOpen: (item: TaskNoteLinkView) => Promise<void> = async () => {};
   const manager = createLinkManager();
   let dialog: HTMLDialogElement;
   let links: TaskNoteLinkView[] = [];
@@ -39,6 +40,13 @@
     pendingTitle = (scope === "todo" ? item.note_title : item.todo_title) ?? $translator("links.unavailable");
     message = "";
   }
+  async function open(item: TaskNoteLinkView) {
+    if (busy || loading || loadFailed) return;
+    busy = true; message = "";
+    try { await onOpen(item); }
+    catch (error) { message = $translator(String(error).includes("LINK_ARCHIVED") ? "links.archivedHint" : "links.openFailed"); await load(); }
+    finally { busy = false; }
+  }
   async function confirm() {
     if (!pending || busy) return;
     busy = true; message = "";
@@ -67,6 +75,7 @@
         {#each links as item (item.link.uuid)}
           <li><div><span>{(scope === "todo" ? item.note_title : item.todo_title) ?? $translator("links.unavailable")}</span>
             <small>{$translator(scope === "todo" && item.note_state === "active" ? "links.available" : `links.state.${scope === "todo" ? item.note_state : item.todo_state}`)}{item.is_repeating ? " · " + $translator("links.thisOnly") : ""}</small></div>
+            <button class="action-button" disabled={busy || loading || loadFailed || ['deleted', 'missing'].includes(scope === 'todo' ? item.note_state : item.todo_state)} onclick={() => open(item)}>{$translator("common.open")}</button>
             <button class="action-button" disabled={busy || loading || loadFailed} onclick={() => unlink(item)}>{$translator("links.unlink")}</button></li>
         {/each}
       </ul>

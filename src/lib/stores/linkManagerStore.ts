@@ -16,6 +16,14 @@ const candidates = async (scope: LinkScope): Promise<LinkCandidate[]> => {
 export function createLinkManager(api = taskNoteLinkApi, readCandidates = candidates) {
   let busy = false;
   return {
+    async resolve(scope: LinkScope, source: string, uuid: string): Promise<TaskNoteLinkView> {
+      const item = (await api.list(scope, source)).find(item => item.link.uuid === uuid);
+      if (!item || item.link.deleted_at !== null) throw Error("LINK_UNAVAILABLE");
+      const state = scope === "todo" ? item.note_state : item.todo_state;
+      if (state === "archived") throw Error("LINK_ARCHIVED");
+      if (state !== "active" && state !== "completed") throw Error("LINK_UNAVAILABLE");
+      return item;
+    },
     async load(scope: LinkScope, uuid: string): Promise<{ links: TaskNoteLinkView[]; candidates: LinkCandidate[] }> {
       const links = await api.list(scope, uuid);
       const choices = await readCandidates(scope);

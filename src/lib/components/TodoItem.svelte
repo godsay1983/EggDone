@@ -77,6 +77,7 @@
   export let dragDisabled = false;
   export let reorderDisabled = false;
   export let editRequest = 0;
+  export let onEditingChange: (editing: boolean) => void = () => {};
 
   let editing = false;
   let editTitle = "";
@@ -111,6 +112,7 @@
   let repeatChoice: RepeatRule | "none" = "none";
   let groupSaving = false;
   let actionsOpen = false;
+  $: onEditingChange(editing || saving || scheduleOpen || recurrenceOpen || scheduleSaving || noteOpen || noteSaving || groupSaving);
   let editInput: HTMLInputElement;
   let noteInput: HTMLTextAreaElement;
   let itemElement: HTMLElement;

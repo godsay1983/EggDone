@@ -1,4 +1,9 @@
 export const zhCN = {
+  "links.content": "关联内容",
+  "links.backSource": "返回来源",
+  "links.finishEditing": "请先保存或取消当前编辑，再返回来源。",
+  "links.archivedHint": "此任务已归档，关联仍保留；此处暂不打开归档任务。",
+  "links.openFailed": "未能打开关联内容。请先保存当前便签后重试，目标内容或关联也可能已不可用。",
   "links.create": "创建关联任务",
   "links.notes": "关联便签",
   "links.available": "可用",

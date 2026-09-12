@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import NoteTaskLinks from "./NoteTaskLinks.svelte";
+  import type { TaskNoteLinkView } from "$lib/types/taskNoteLink";
+  import { preserveScroll } from "$lib/utils/scrollContext";
   import { languageState, translator, type TranslationKey } from "$lib/i18n";
   import { formatFileSize } from "$lib/i18n/formatters";
   import { localizedErrorMessage } from "$lib/i18n/errors";
@@ -12,6 +14,8 @@
   export let linkNotice = "";
   export let onCreateLinked: () => void = () => {};
   export let onManageLinks: () => void = () => {};
+  export let onOpenLink: (item: TaskNoteLinkView) => Promise<void> = async () => {};
+  export let scrollPositions = new Map<string, number>();
   export let draft = false;
   export let saving = false;
   export let error: string | null = null;
@@ -150,9 +154,11 @@
 
   function handleViewerKeydown(event: KeyboardEvent) {
     if (viewerAttachment && event.key === "Escape") {
+      event.preventDefault();
       event.stopPropagation();
       closeViewer();
     } else if (attachmentManagerOpen && event.key === "Escape") {
+      event.preventDefault();
       event.stopPropagation();
       attachmentManagerOpen = false;
     }
@@ -230,7 +236,7 @@
   }
 </style>
 
-<svelte:window onkeydown={handleViewerKeydown} />
+<svelte:window onkeydowncapture={handleViewerKeydown} />
 
 <section
   class="note-editor"
@@ -274,6 +280,7 @@
     oninput={changed}
   />
   <textarea
+    use:preserveScroll={{ positions: scrollPositions, key: note.uuid }}
     bind:value={content}
     maxlength="20000"
     placeholder={$translator("note.contentPlaceholder")}
@@ -283,7 +290,7 @@
     onpaste={pasteImages}
   ></textarea>
   {#if linkNotice}<p class="attachment-state-hint" role="status">{linkNotice}</p>{/if}
-  <NoteTaskLinks uuid={draft ? "" : note.uuid} revision={linkRevision} />
+  <NoteTaskLinks uuid={draft ? "" : note.uuid} revision={linkRevision} onOpen={onOpenLink} />
   {#if attachments.length > 0}
     <section class="note-attachment-summary" aria-label={$translator("note.attachments")}>
       <button class="note-attachment-summary-heading" type="button" onclick={() => (attachmentManagerOpen = true)}>

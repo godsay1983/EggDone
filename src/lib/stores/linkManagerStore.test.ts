@@ -9,6 +9,21 @@ function fixture() {
   return { api, candidates, manager: createLinkManager(api, candidates) };
 }
 describe("link manager", () => {
+  it("revalidates a link and rejects missing, deleted and archived targets", async () => {
+    const { api, manager } = fixture();
+    for (const state of ['active', 'completed', 'archived', 'deleted', 'missing'] as const) {
+      api.list.mockResolvedValue([{ link, todo_state: state, note_state: state }]);
+      for (const scope of ['note', 'todo'] as const) {
+        const result = manager.resolve(scope, 'source', link.uuid);
+        if (state === 'active' || state === 'completed') expect((await result).link).toEqual(link);
+        else await expect(result).rejects.toThrow(state === 'archived' ? 'LINK_ARCHIVED' : 'LINK_UNAVAILABLE');
+      }
+    }
+    api.list.mockResolvedValue([]);
+    await expect(manager.resolve('note', 'source', link.uuid)).rejects.toThrow('LINK_UNAVAILABLE');
+    api.list.mockRejectedValue(Error('read failed'));
+    await expect(manager.resolve('note', 'source', link.uuid)).rejects.toThrow('read failed');
+  });
   it("maps both scopes and excludes active links without hiding read errors", async () => {
     expect(linkEndpoints("todo", "todo", "note")).toEqual(linkEndpoints("note", "note", "todo"));
     const { api, manager, candidates } = fixture();

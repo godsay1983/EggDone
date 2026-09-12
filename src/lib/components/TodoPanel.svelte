@@ -3,6 +3,9 @@
   import CaptureDialog from "./CaptureDialog.svelte";
   import LinkedTodoDialog from "./LinkedTodoDialog.svelte";
   import LinkManagerDialog from "./LinkManagerDialog.svelte";
+  import LinkWorkspace from "./LinkWorkspace.svelte";
+  import { createLinkManager } from "$lib/stores/linkManagerStore";
+  import type { TaskNoteLinkView } from "$lib/types/taskNoteLink";
   import type { LinkScope } from "$lib/types/taskNoteLink";
   import { createTaskNoteLinkStore } from "$lib/stores/taskNoteLinkStore";
   import type { LinkedTodoDraft } from "$lib/types/taskNoteLink";
@@ -284,6 +287,59 @@
   let linkedRevision = 0;
   let linkNotice = "";
   let linkManager: { scope: LinkScope; uuid: string; title: string } | null = null;
+  const linkReader = createLinkManager();
+  const noteEditorScrollPositions = new Map<string, number>();
+  let linkHistory: Array<{ noteUuid: string | null; todoUuid: string | null }> = [];
+  let linkedTodoUuid: string | null = null;
+  let linkedTaskEditing = false;
+  let linkNavigating = false;
+  $: linkedTodo = $todos.items.find(item => item.uuid === linkedTodoUuid) ?? null;
+  $: if (linkedTodoUuid && !linkedTodo) linkedTaskEditing = false;
+
+  async function openRelatedContent(item: TaskNoteLinkView, scope: LinkScope) {
+    if (linkNavigating || noteNavigationBusy || noteAttachmentBusy || linkedTaskEditing) throw Error("LINK_BUSY");
+    linkNavigating = true;
+    try {
+      await flushAllNoteChanges();
+      const source = scope === "todo" ? item.link.todo_uuid : item.link.note_uuid;
+      const current = await linkReader.resolve(scope, source, item.link.uuid);
+      if (scope === "todo") {
+        await notes.load();
+        if ($notes.error) throw Error("LINK_READ_FAILED");
+        if (!$notes.items.some(note => note.uuid === current.link.note_uuid)) throw Error("LINK_UNAVAILABLE");
+        await refreshNoteAttachments(current.link.note_uuid);
+      } else {
+        await todos.refresh();
+        if ($todos.error) throw Error("LINK_READ_FAILED");
+        if (!$todos.items.some(todo => todo.uuid === current.link.todo_uuid)) throw Error("LINK_UNAVAILABLE");
+      }
+      linkHistory = [...linkHistory, { noteUuid: selectedNoteUuid, todoUuid: linkedTodoUuid }];
+      linkManager = null;
+      selectedNoteUuid = scope === "todo" ? current.link.note_uuid : null;
+      linkedTodoUuid = scope === "note" ? current.link.todo_uuid : null;
+      linkedTaskEditing = false;
+      linkNotice = "";
+    } finally { linkNavigating = false; }
+  }
+  async function backFromLinkedContent(): Promise<boolean> {
+    if (!linkHistory.length || linkNavigating || linkedTaskEditing || noteAttachmentBusy || linkManager || linkedRequest) return false;
+    linkNavigating = true;
+    try {
+      await flushAllNoteChanges();
+      const previous = linkHistory[linkHistory.length - 1];
+      selectedNoteUuid = previous.noteUuid;
+      linkedTodoUuid = previous.todoUuid;
+      linkHistory = linkHistory.slice(0, -1);
+      linkedTaskEditing = false;
+      linkNotice = "";
+      return true;
+    } catch { return false; }
+    finally { linkNavigating = false; }
+  }
+  async function focusFromLinkedContent(todo: Todo) {
+    while (linkHistory.length) { if (!(await backFromLinkedContent())) return; }
+    openFocusForTodo(todo);
+  }
   function manageTaskLinks(todo: Todo) {
     if (linkedRequest || linkManager || noteNavigationBusy) return;
     linkManager = { scope: "todo", uuid: todo.uuid, title: todo.title };
@@ -983,6 +1039,7 @@
   }
 
   async function closeNoteEditor(): Promise<boolean> {
+    if (linkHistory.length) return backFromLinkedContent();
     if (noteNavigationBusy || noteAttachmentBusy || linkedRequest || linkManager) return false;
     noteNavigationBusy = true;
     try {
@@ -2862,13 +2919,30 @@
 
   {#if linkManager}
     <LinkManagerDialog scope={linkManager.scope} uuid={linkManager.uuid} title={linkManager.title}
+      onOpen={item => openRelatedContent(item, linkManager!.scope)}
       saveSource={saveLinkSource} afterCommit={refreshLinkChange} onClose={() => linkManager = null} />
   {/if}
-  {#if selectedNote}
+  <LinkWorkspace active={linkHistory.length > 0} busy={linkNavigating || linkedTaskEditing || noteAttachmentBusy} onBack={backFromLinkedContent}>
+  {#if linkedTodoUuid}
+    <button class="action-button" disabled={linkNavigating || linkedTaskEditing} onclick={backFromLinkedContent}>{$translator("links.backSource")}</button>
+    {#if linkedTaskEditing}<p role="status">{$translator("links.finishEditing")}</p>{/if}
+    {#if linkedTodo}
+      <div class="todo-row">
+        <TodoItem todo={linkedTodo} animationEnabled={false}
+          onToggle={toggleTodo} onEdit={editTodo} onNote={noteTodo} onPin={pinTodo} onPriority={priorityTodo}
+          onFocus={todo => { void focusFromLinkedContent(todo); }}
+          onManageLinks={manageTaskLinks} onSchedule={scheduleTodo} onSnooze={snoozeTodo}
+          groups={$todos.groups} onGroupChange={moveTodoToGroup} onDelete={deleteTodo}
+          onMove={moveTodo} onDragStart={startDrag} onBatchSelect={toggleBatchTodo}
+          dragDisabled={true} reorderDisabled={true} onEditingChange={value => linkedTaskEditing = value} />
+      </div>
+    {:else}<p role="status">{$translator("links.unavailable")}</p>{/if}
+  {:else if selectedNote}
     {#if linkedRequest}
       <LinkedTodoDialog noteUuid={linkedRequest.uuid} initialTitle={linkedRequest.title}
         onSave={saveLinkedTask} onCancel={() => linkedRequest = null} />
     {/if}
+    {#key selectedNote.uuid}
     <NoteEditor
       note={selectedNote}
       draft={selectedNote.uuid === NOTE_DRAFT_UUID}
@@ -2876,6 +2950,8 @@
       {linkNotice}
       onCreateLinked={() => void openLinkedTask()}
       onManageLinks={() => void manageNoteLinks()}
+      onOpenLink={item => openRelatedContent(item, "note")}
+      scrollPositions={noteEditorScrollPositions}
       saving={noteEditorSaving}
       error={noteAttachmentError || $notes.error}
       saveFailed={!!$notes.error && (noteDraft !== null || notes.hasPendingSave())}
@@ -2896,6 +2972,10 @@
       onDeleteAttachment={deleteNoteAttachment}
       onRetryAttachment={retryNoteAttachment}
     />
+    {/key}
+  {:else if linkHistory.length}
+    <p role="status">{$translator("links.unavailable")}</p>
+    <button class="action-button" onclick={backFromLinkedContent}>{$translator("links.backSource")}</button>
   {:else if listView === "notes"}
     <NoteList
       scrollPositions={listScrollPositions}
@@ -3261,6 +3341,7 @@
     {/if}
   </section>
   {/if}
+  </LinkWorkspace>
 
   <footer>
     <span>{$translator("footer.encouragement")}</span>
