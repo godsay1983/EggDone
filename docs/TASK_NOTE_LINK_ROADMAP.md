@@ -1,5 +1,7 @@
 # 任务与便签关联 Roadmap
 
+2026-09-13 升版交接：桌面 1.1.0、鸿蒙 1.2.0 / 1000029 已分配，按用户要求本地合并 main 并生成 handoff。版本与发布资料更新不关闭 L3d3、L4d2 或 L5 的原生、旧库及用户验收项；以下状态描述保留为阶段记录。
+
 更新：2026-09-12。
 状态：L4d2首批已提交（桌面23c649a、鸿蒙7c0e5fd）。第二批修复桌面删除操作未处理Promise，并通过原生SQLite保存失败、重试和关联版本冲突验证，见[原生运行证据](TASK_NOTE_LINK_NATIVE_RUNTIME.md)。继续其余设备及异常矩阵；L3d3真实用户环境和既有E6人工验收继续保留。不升版、不推送。
 方案：[TASK_NOTE_LINK_IMPLEMENTATION_PLAN.md](TASK_NOTE_LINK_IMPLEMENTATION_PLAN.md)
