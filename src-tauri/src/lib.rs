@@ -45,6 +45,10 @@ pub mod task_note_link_sync;
 mod task_note_link_tests;
 mod task_note_link_transport;
 mod task_note_link_views;
+mod trash;
+mod trash_commands;
+#[cfg(test)]
+mod trash_tests;
 mod tray;
 #[cfg(target_os = "linux")]
 mod tray_ksni;
@@ -175,6 +179,9 @@ pub fn run() {
             commands::set_note_color,
             commands::delete_note,
             commands::restore_note,
+            trash_commands::list_trash,
+            trash_commands::preview_trash,
+            trash_commands::restore_trash,
             commands::list_note_attachments,
             commands::reorder_note_attachments,
             commands::create_note_image_attachment,

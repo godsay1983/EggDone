@@ -1,0 +1,187 @@
+{
+  "seed": [
+    "INSERT INTO todos(uuid,title,note,created_at,updated_at,deleted_at,updated_by,sort_order,completed,reminder_at,repeat_rule,repeat_series_uuid) VALUES('123e4567-e89b-42d3-a456-426614174000','Task','Task body',1,100,100,'remote',1024,1,999,'daily','old-series')",
+    "INSERT INTO notes(uuid,title,content,color,created_at,updated_at,deleted_at,updated_by) VALUES('123e4567-e89b-42d3-a456-426614174001','Note','Full body','default',100,100,100,'remote')",
+    "INSERT INTO note_attachments(uuid,note_uuid,kind,display_name,mime_type,byte_size,sha256,created_at,updated_at,deleted_at,updated_by) VALUES('123e4567-e89b-42d3-a456-426614174002','123e4567-e89b-42d3-a456-426614174001','file','with-note.md','text/markdown',1,'hash',1,150,100,'remote')",
+    "INSERT INTO note_attachments(uuid,note_uuid,kind,display_name,mime_type,byte_size,sha256,created_at,updated_at,deleted_at,updated_by) VALUES('123e4567-e89b-42d3-a456-426614174003','123e4567-e89b-42d3-a456-426614174001','file','removed-earlier.md','text/markdown',1,'hash',1,99,99,'remote')"
+  ],
+  "cases": [
+    {
+      "id": "restore_single_task",
+      "kind": "todo",
+      "before": [],
+      "after": [],
+      "error": null,
+      "checks": [
+        {
+          "sql": "SELECT COUNT(*) FROM todos WHERE deleted_at IS NULL AND completed=1 AND reminder_at IS NULL AND repeat_rule IS NULL AND repeat_series_uuid IS NULL AND updated_at=101",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "id": "restore_note_cascade",
+      "kind": "note",
+      "before": [],
+      "after": [],
+      "error": null,
+      "checks": [
+        {
+          "sql": "SELECT updated_at FROM notes",
+          "value": 151
+        },
+        {
+          "sql": "SELECT COUNT(*) FROM note_attachments WHERE deleted_at IS NULL AND updated_at=151",
+          "value": 1
+        },
+        {
+          "sql": "SELECT deleted_at FROM note_attachments WHERE display_name='removed-earlier.md'",
+          "value": 99
+        }
+      ]
+    },
+    {
+      "id": "stale_deletion",
+      "kind": "todo",
+      "before": [],
+      "after": [
+        "UPDATE todos SET deleted_at=200,updated_at=200"
+      ],
+      "error": "TRASH_CONFLICT",
+      "checks": [
+        {
+          "sql": "SELECT deleted_at FROM todos",
+          "value": 200
+        }
+      ]
+    },
+    {
+      "id": "changed_text_same_stamp",
+      "kind": "note",
+      "before": [],
+      "after": [
+        "UPDATE notes SET content='New content'"
+      ],
+      "error": "TRASH_CONFLICT",
+      "checks": [
+        {
+          "sql": "SELECT deleted_at FROM notes",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "id": "changed_attachment",
+      "kind": "note",
+      "before": [],
+      "after": [
+        "UPDATE note_attachments SET display_name='changed.md' WHERE display_name='with-note.md'"
+      ],
+      "error": "TRASH_CONFLICT",
+      "checks": [
+        {
+          "sql": "SELECT deleted_at FROM notes",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "id": "already_restored",
+      "kind": "todo",
+      "before": [],
+      "after": [
+        "UPDATE todos SET deleted_at=NULL"
+      ],
+      "error": "TRASH_NOT_FOUND",
+      "checks": [
+        {
+          "sql": "SELECT COUNT(*) FROM todos WHERE deleted_at IS NULL",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "id": "write_failure_rolls_back",
+      "kind": "note",
+      "before": [],
+      "after": [
+        "CREATE TRIGGER reject_restore BEFORE UPDATE ON note_attachments WHEN NEW.deleted_at IS NULL BEGIN SELECT RAISE(ABORT,'injected'); END"
+      ],
+      "error": "DATABASE",
+      "checks": [
+        {
+          "sql": "SELECT deleted_at FROM notes",
+          "value": 100
+        },
+        {
+          "sql": "SELECT deleted_at FROM note_attachments WHERE display_name='with-note.md'",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "id": "unsafe_clock",
+      "kind": "note",
+      "before": [
+        "UPDATE notes SET updated_at=9007199254740991"
+      ],
+      "after": [],
+      "error": "TRASH_INVALID_VERSION",
+      "checks": [
+        {
+          "sql": "SELECT deleted_at FROM notes",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "id": "missing_entity",
+      "kind": "todo",
+      "before": [],
+      "after": [
+        "DELETE FROM todos"
+      ],
+      "error": "TRASH_NOT_FOUND",
+      "checks": [
+        {
+          "sql": "SELECT COUNT(*) FROM todos",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "id": "changed_owner",
+      "kind": "todo",
+      "before": [],
+      "after": [
+        "UPDATE todos SET updated_by='another'"
+      ],
+      "error": "TRASH_CONFLICT",
+      "checks": [
+        {
+          "sql": "SELECT deleted_at FROM todos",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "id": "active_rule",
+      "kind": "todo",
+      "before": [
+        "INSERT INTO recurrence_rules(uuid,record_json,current_todo_uuid,active) VALUES('rule','{}','123e4567-e89b-42d3-a456-426614174000',1)"
+      ],
+      "after": [],
+      "error": "TRASH_RULE_ACTIVE",
+      "checks": [
+        {
+          "sql": "SELECT deleted_at FROM todos",
+          "value": 100
+        },
+        {
+          "sql": "SELECT active FROM recurrence_rules",
+          "value": 1
+        }
+      ]
+    }
+  ]
+}
