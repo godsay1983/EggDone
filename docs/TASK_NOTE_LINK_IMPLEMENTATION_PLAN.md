@@ -1,7 +1,7 @@
 # 任务与便签关联实现方案
 
 更新：2026-09-12。
-状态：L4a已提交（桌面9e3bbd2、鸿蒙e42ff54）；L4b便签创建关联任务和关联列表开发/自动化完成，见[入口与验证](TASK_NOTE_LINK_NOTE_ENTRY.md)。L3d3原生/用户环境、L4c交互和L4d完整界面验收仍待完成，不升版、不推送。两端采用同一业务与协议语义。
+状态：L4b已提交（桌面c566394、鸿蒙e297b00）；L4c1关联已有内容与确认解绑开发/自动化完成，见[管理入口与验证](TASK_NOTE_LINK_MANAGEMENT.md)。下一步L4c2双向打开及上下文返回。L3d3原生/用户环境和L4d完整界面验收仍待完成，不升版、不推送。两端采用同一业务与协议语义。
 权威数据契约见 [TASK_NOTE_LINK_PROTOCOL.md](TASK_NOTE_LINK_PROTOCOL.md)，阶段证据见 [TASK_NOTE_LINK_ROADMAP.md](TASK_NOTE_LINK_ROADMAP.md)。下文未来业务流程是后续设计，不代表已开放。
 
 ## 范围

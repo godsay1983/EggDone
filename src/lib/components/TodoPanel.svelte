@@ -2,6 +2,8 @@
   import { invoke, isTauri } from "@tauri-apps/api/core";
   import CaptureDialog from "./CaptureDialog.svelte";
   import LinkedTodoDialog from "./LinkedTodoDialog.svelte";
+  import LinkManagerDialog from "./LinkManagerDialog.svelte";
+  import type { LinkScope } from "$lib/types/taskNoteLink";
   import { createTaskNoteLinkStore } from "$lib/stores/taskNoteLinkStore";
   import type { LinkedTodoDraft } from "$lib/types/taskNoteLink";
   import { normalizeCapture, captureContent, captureTitle, type CaptureDraft, type CaptureInput } from "$lib/utils/capture";
@@ -281,6 +283,31 @@
   let linkedRequest: { uuid: string; title: string } | null = null;
   let linkedRevision = 0;
   let linkNotice = "";
+  let linkManager: { scope: LinkScope; uuid: string; title: string } | null = null;
+  function manageTaskLinks(todo: Todo) {
+    if (linkedRequest || linkManager || noteNavigationBusy) return;
+    linkManager = { scope: "todo", uuid: todo.uuid, title: todo.title };
+  }
+  async function manageNoteLinks() {
+    if (linkedRequest || linkManager || noteNavigationBusy || noteAttachmentBusy || !selectedNote || noteDraft) return;
+    noteNavigationBusy = true; linkNotice = "";
+    try {
+      await flushAllNoteChanges();
+      if (selectedNote) linkManager = { scope: "note", uuid: selectedNote.uuid, title: selectedNote.title };
+    } catch { linkNotice = $translator("links.sourceFailed"); }
+    finally { noteNavigationBusy = false; }
+  }
+  async function saveLinkSource() {
+    if (!linkManager) throw Error("source changed");
+    if (linkManager.scope === "note") {
+      if (selectedNoteUuid !== linkManager.uuid) throw Error("source changed");
+      await flushAllNoteChanges();
+    }
+  }
+  async function refreshLinkChange() {
+    linkedRevision++;
+    scheduleAutoSync();
+  }
   async function openLinkedTask() {
     if (noteNavigationBusy || noteAttachmentBusy || !selectedNoteUuid) return;
     noteNavigationBusy = true;
@@ -956,7 +983,7 @@
   }
 
   async function closeNoteEditor(): Promise<boolean> {
-    if (noteNavigationBusy || noteAttachmentBusy || linkedRequest) return false;
+    if (noteNavigationBusy || noteAttachmentBusy || linkedRequest || linkManager) return false;
     noteNavigationBusy = true;
     try {
       await flushAllNoteChanges();
@@ -2833,6 +2860,10 @@
     </div>
   {/if}
 
+  {#if linkManager}
+    <LinkManagerDialog scope={linkManager.scope} uuid={linkManager.uuid} title={linkManager.title}
+      saveSource={saveLinkSource} afterCommit={refreshLinkChange} onClose={() => linkManager = null} />
+  {/if}
   {#if selectedNote}
     {#if linkedRequest}
       <LinkedTodoDialog noteUuid={linkedRequest.uuid} initialTitle={linkedRequest.title}
@@ -2844,6 +2875,7 @@
       linkRevision={[linkedRevision, $notes.items]}
       {linkNotice}
       onCreateLinked={() => void openLinkedTask()}
+      onManageLinks={() => void manageNoteLinks()}
       saving={noteEditorSaving}
       error={noteAttachmentError || $notes.error}
       saveFailed={!!$notes.error && (noteDraft !== null || notes.hasPendingSave())}
@@ -2986,6 +3018,7 @@
                       onPin={pinTodo}
                       onPriority={priorityTodo}
                       onFocus={openFocusForTodo}
+                      onManageLinks={manageTaskLinks}
                       onSchedule={scheduleTodo}
                       onSnooze={snoozeTodo}
                       groups={$todos.groups}
@@ -3100,6 +3133,7 @@
                         onPin={pinTodo}
                         onPriority={priorityTodo}
                         onFocus={openFocusForTodo}
+                        onManageLinks={manageTaskLinks}
                         onSchedule={scheduleTodo}
                         onSnooze={snoozeTodo}
                         groups={$todos.groups}
@@ -3154,6 +3188,7 @@
                       onPin={pinTodo}
                       onPriority={priorityTodo}
                       onFocus={openFocusForTodo}
+                      onManageLinks={manageTaskLinks}
                       onSchedule={scheduleTodo}
                       onSnooze={snoozeTodo}
                       groups={$todos.groups}
@@ -3199,6 +3234,7 @@
             onPin={pinTodo}
             onPriority={priorityTodo}
             onFocus={openFocusForTodo}
+            onManageLinks={manageTaskLinks}
             onSchedule={scheduleTodo}
             onSnooze={snoozeTodo}
             groups={$todos.groups}

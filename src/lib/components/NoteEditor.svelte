@@ -11,6 +11,7 @@
   export let linkRevision: unknown = 0;
   export let linkNotice = "";
   export let onCreateLinked: () => void = () => {};
+  export let onManageLinks: () => void = () => {};
   export let draft = false;
   export let saving = false;
   export let error: string | null = null;
@@ -257,6 +258,7 @@
           <button class="action-button" type="button" onclick={() => { addMenuOpen = false; imageInput.click(); }}>{$translator("attachment.addImage")}</button>
           <button class="action-button" type="button" onclick={() => { addMenuOpen = false; attachmentInput.click(); }}>{$translator("attachment.addFile")}</button>
           <button class="action-button" type="button" disabled={draft || saving} onclick={() => { addMenuOpen = false; onCreateLinked(); }}>{$translator("links.create")}</button>
+          <button class="action-button" type="button" disabled={draft || saving} onclick={() => { addMenuOpen = false; onManageLinks(); }}>{$translator("links.manage")}</button>
         </div>
       {/if}
     </div>

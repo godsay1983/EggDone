@@ -63,7 +63,7 @@ try{
     await page.goto(server.resolvedUrls.local[0]+'__links?lang='+lang+'&theme='+theme);
     await page.waitForFunction(()=>window.ready);
     const add=page.locator('.attachment-trigger'); await add.click();
-    await page.locator('.note-add-menu button').last().click();
+    await page.locator('.note-add-menu button').nth(2).click();
     await page.locator('dialog[open]').waitFor();
     assert.equal(await page.locator('dialog input').first().inputValue(),'Source note');
     assert.equal(await page.locator('dialog textarea').inputValue(),'');
@@ -82,14 +82,14 @@ try{
     assert.equal(creates.length,2);assert.deepEqual(creates[0].args.draft,creates[1].args.draft);
     assert.equal(creates[1].args.draft.note,'Task details');assert.equal(creates[1].args.draft.due_date,null);
     assert.equal(await page.locator('.note-editor > textarea').inputValue(),'Keep this content');
-    await add.click(); await page.locator('.note-add-menu button').last().click(); await page.locator('dialog[open]').waitFor();
+    await add.click(); await page.locator('.note-add-menu button').nth(2).click(); await page.locator('dialog[open]').waitFor();
     await page.keyboard.press('Escape');await page.waitForFunction(()=>window.cancelled===1);
     assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.command==='create_linked_todo').length),2);
     await page.locator('.note-task-links button[aria-expanded]').click();
     assert.equal(await page.locator('.note-task-links li').count(),5);
     assert.ok(await page.locator('.note-task-links').evaluate(el=>el.scrollWidth<=el.clientWidth),'links must wrap');
     if(size.width===320)await page.screenshot({path:resolve(output,lang+'-'+theme+'-list.png')});
-    await add.click(); await page.locator('.note-add-menu button').last().click();
+    await add.click(); await page.locator('.note-add-menu button').nth(2).click();
     if(size.width===320)await page.screenshot({path:resolve(output,lang+'-'+theme+'-dialog.png')});
     count++;
   }
@@ -98,7 +98,7 @@ try{
   await dst.goto(server.resolvedUrls.local[0]+'__links?lang=en-US&theme=light');
   await dst.waitForFunction(()=>window.ready);
   await dst.locator('.attachment-trigger').click();
-  await dst.locator('.note-add-menu button').last().click();
+  await dst.locator('.note-add-menu button').nth(2).click();
   await dst.getByLabel('Task title',{exact:true}).fill('DST validation');
   await dst.locator('input[type=datetime-local]').fill('2027-03-14T02:30');
   await dst.locator('dialog button[type=submit]').click();

@@ -14,7 +14,7 @@ const harness = `
   let noteDraft = { uuid: 'draft', title: 'title', content: 'body', color: 'default', pinned: false };
   let noteDraftCreated = null, noteDraftCreatePromise = null, noteDraftSaveTimer = null;
   let selectedNoteUuid = null, selectedNote = null, noteNavigationBusy = false, noteAttachmentBusy = false;
-  let linkedRequest = null, linkNotice = '';
+  let linkedRequest = null, linkManager = null, linkNotice = '';
   ${functions.map(n => n.getText(ast)).join('\n')}
   return {
     persistNoteDraft, flushAllNoteChanges, closeNoteEditor, ensureNoteForAttachment,

@@ -48,6 +48,7 @@
   export let onPin: (todo: Todo, pinned: boolean) => Promise<void>;
   export let onPriority: (todo: Todo, priority: number) => Promise<void>;
   export let onFocus: (todo: Todo) => void;
+  export let onManageLinks: (todo: Todo) => void = () => {};
   export let onSchedule: (
     id: number,
     schedule: TodoScheduleInput,
@@ -730,6 +731,9 @@
     </button>
     {#if actionsOpen}
       <div class="actions-menu" role="menu">
+        <button type="button" role="menuitem" onclick={() => { actionsOpen = false; onManageLinks(todo); }}>
+          {$translator("links.notes")}
+        </button>
         <button
           type="button"
           role="menuitem"

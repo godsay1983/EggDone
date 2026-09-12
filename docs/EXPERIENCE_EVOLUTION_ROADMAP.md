@@ -145,7 +145,8 @@ E6d已本地提交：桌面8c42ba9、鸿蒙1af2bf3。本轮按用户要求继续
 - [ ] L3d3 物理设备、用户云端环境、用户旧库升级和原生文件恢复验收。
 - [ ] L4 双端入口、返回上下文与异常状态。
 - [x] L4a 双端关联数据接口、端点状态、墓碑预期版本及自动化，见[TASK_NOTE_LINK_UI_DATA_ACCESS.md](TASK_NOTE_LINK_UI_DATA_ACCESS.md)。
-- [x] L4b 双端便签创建关联任务、关联列表、保存与刷新编排；自动化和有限模拟器检查通过，原生创建整体流程仍待验收，见[入口与边界](TASK_NOTE_LINK_NOTE_ENTRY.md)。下一步L4c。
+- [x] L4b 双端便签创建关联任务、关联列表、保存与刷新编排；自动化和有限模拟器检查通过，原生创建整体流程仍待验收，见[入口与边界](TASK_NOTE_LINK_NOTE_ENTRY.md)。
+- [x] L4c1 双端选择已有任务/便签、确认解绑与版本保护；开发/自动化完成，原生确认写入待验收，见[管理入口与边界](TASK_NOTE_LINK_MANAGEMENT.md)。下一步L4c2双向打开及上下文返回。
 - [ ] L5 原生设备、升级、双端兼容版本与发布资料。
 - 沿用 [TASK_NOTE_LINK_ROADMAP.md](TASK_NOTE_LINK_ROADMAP.md)，本表只汇总，不另造协议或重复勾选。
 
