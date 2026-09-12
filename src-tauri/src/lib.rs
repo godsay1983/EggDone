@@ -1,5 +1,9 @@
 mod capture;
 mod commands;
+mod content_search;
+mod content_search_commands;
+#[cfg(test)]
+mod content_search_tests;
 mod data_exchange;
 mod db;
 mod error_codes;
@@ -174,6 +178,8 @@ pub fn run() {
             commands::list_todos,
             commands::list_groups,
             commands::list_notes,
+            content_search_commands::search_content,
+            content_search_commands::resolve_search_target,
             commands::create_todo,
             commands::create_captured_todo,
             commands::create_group,
