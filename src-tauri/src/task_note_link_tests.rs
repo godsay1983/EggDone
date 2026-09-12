@@ -137,8 +137,9 @@ fn migration_upgrade_failure_retry_and_disk_reopen() {
         crate::db::migrate(&mut db).unwrap();
         identity = crate::db::device_id(&db).unwrap();
         db.execute_batch(
-            "DROP TABLE task_note_links; DROP TABLE task_note_link_sync_state;
-            DELETE FROM schema_migrations WHERE version=18;
+            "DROP TRIGGER notes_capture_history; DROP TRIGGER notes_delete_history; DROP TABLE note_history;
+            DROP TABLE task_note_links; DROP TABLE task_note_link_sync_state;
+            DELETE FROM schema_migrations WHERE version>=18;
             INSERT INTO todos(uuid,title,completed,sort_order,created_at,updated_at,updated_by)
               VALUES('keep-task','keep task',0,0,1,1,'device');
             INSERT INTO notes(uuid,title,content,color,pinned,created_at,updated_at,updated_by)

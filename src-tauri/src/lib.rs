@@ -8,6 +8,10 @@ mod i18n;
 mod note_asset_store;
 mod note_attachment_sync;
 mod note_attachments;
+mod note_history;
+mod note_history_commands;
+#[cfg(test)]
+mod note_history_tests;
 mod note_sync;
 mod notes;
 mod panel_position;
@@ -180,6 +184,9 @@ pub fn run() {
             commands::delete_note,
             commands::restore_note,
             trash_commands::list_trash,
+            note_history_commands::list_note_history,
+            note_history_commands::preview_note_history,
+            note_history_commands::restore_note_history,
             trash_commands::preview_trash,
             trash_commands::restore_trash,
             commands::list_note_attachments,

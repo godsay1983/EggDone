@@ -1,0 +1,253 @@
+{
+  "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+  "seed": [
+    "UPDATE app_metadata SET value='local' WHERE key='device_id'",
+    "INSERT INTO notes(uuid,title,content,color,created_at,updated_at,updated_by) VALUES('123e4567-e89b-42d3-a456-426614174001','Original','Original body','default',1,10,'remote')",
+    "INSERT INTO note_attachments(uuid,note_uuid,kind,display_name,mime_type,byte_size,sha256,created_at,updated_at,updated_by) VALUES('123e4567-e89b-42d3-a456-426614174002','123e4567-e89b-42d3-a456-426614174001','file','asset.md','text/markdown',1,'hash',1,11,'remote')",
+    "UPDATE notes SET title='Current',content='Current body',updated_at=20"
+  ],
+  "cases": [
+    {
+      "before": [],
+      "after": [],
+      "error": null,
+      "changed": true,
+      "id": "restore-preserves-current-text",
+      "checks": [
+        {
+          "sql": "SELECT count(*) FROM notes WHERE title='Original' AND content='Original body' AND updated_at=50 AND updated_by='local'",
+          "value": 1
+        },
+        {
+          "sql": "SELECT count(*) FROM note_history WHERE title='Current' AND content='Current body'",
+          "value": 1
+        },
+        {
+          "sql": "SELECT count(*) FROM note_history",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "before": [],
+      "after": [
+        "UPDATE notes SET content='Concurrent'"
+      ],
+      "error": "NOTE_HISTORY_CONFLICT",
+      "changed": true,
+      "id": "stale-text-even-with-same-clock",
+      "checks": [
+        {
+          "sql": "SELECT count(*) FROM notes WHERE content='Concurrent'",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "before": [],
+      "after": [
+        "UPDATE notes SET updated_at=21"
+      ],
+      "error": "NOTE_HISTORY_CONFLICT",
+      "changed": true,
+      "id": "stale-version",
+      "checks": [
+        {
+          "sql": "SELECT updated_at FROM notes",
+          "value": 21
+        }
+      ]
+    },
+    {
+      "before": [],
+      "after": [
+        "UPDATE notes SET updated_by='other'"
+      ],
+      "error": "NOTE_HISTORY_CONFLICT",
+      "changed": true,
+      "id": "stale-device",
+      "checks": []
+    },
+    {
+      "before": [],
+      "after": [
+        "UPDATE notes SET deleted_at=21"
+      ],
+      "error": "NOTE_HISTORY_NOTE_UNAVAILABLE",
+      "changed": true,
+      "id": "deleted-note",
+      "checks": [
+        {
+          "sql": "SELECT count(*) FROM notes WHERE deleted_at=21",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "before": [],
+      "after": [
+        "DELETE FROM note_history WHERE id=1"
+      ],
+      "error": "NOTE_HISTORY_NOT_FOUND",
+      "changed": true,
+      "id": "pruned-history",
+      "checks": [
+        {
+          "sql": "SELECT count(*) FROM notes WHERE title='Current'",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "before": [],
+      "after": [
+        "UPDATE note_history SET content='Altered' WHERE id=1"
+      ],
+      "error": "NOTE_HISTORY_CONFLICT",
+      "changed": true,
+      "id": "altered-history",
+      "checks": [
+        {
+          "sql": "SELECT count(*) FROM notes WHERE title='Current'",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "before": [],
+      "after": [
+        "CREATE TRIGGER fail_capture BEFORE INSERT ON note_history BEGIN SELECT RAISE(ABORT,'injected'); END"
+      ],
+      "error": "NOTE_HISTORY_DATABASE_FAILED",
+      "changed": true,
+      "id": "capture-failure-rolls-back",
+      "checks": [
+        {
+          "sql": "SELECT count(*) FROM note_history",
+          "value": 1
+        },
+        {
+          "sql": "SELECT count(*) FROM notes WHERE title='Current' AND updated_at=20",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "before": [],
+      "after": [
+        "CREATE TRIGGER fail_restore AFTER UPDATE ON notes BEGIN SELECT RAISE(ABORT,'injected'); END"
+      ],
+      "error": "NOTE_HISTORY_DATABASE_FAILED",
+      "changed": true,
+      "id": "write-failure-rolls-back-capture",
+      "checks": [
+        {
+          "sql": "SELECT count(*) FROM note_history",
+          "value": 1
+        },
+        {
+          "sql": "SELECT count(*) FROM notes WHERE title='Current' AND updated_at=20",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "before": [
+        "UPDATE notes SET title='Original',content='Original body',updated_at=30"
+      ],
+      "after": [],
+      "error": null,
+      "changed": false,
+      "id": "same-text-is-noop",
+      "checks": [
+        {
+          "sql": "SELECT updated_at FROM notes",
+          "value": 30
+        },
+        {
+          "sql": "SELECT count(*) FROM note_history",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "before": [
+        "UPDATE notes SET updated_at=1000"
+      ],
+      "after": [],
+      "error": null,
+      "changed": true,
+      "id": "local-clock-behind",
+      "checks": [
+        {
+          "sql": "SELECT updated_at FROM notes",
+          "value": 1001
+        }
+      ]
+    },
+    {
+      "before": [
+        "UPDATE note_history SET updated_at=2000 WHERE id=1"
+      ],
+      "after": [],
+      "error": null,
+      "changed": true,
+      "id": "source-clock-ahead",
+      "checks": [
+        {
+          "sql": "SELECT updated_at FROM notes",
+          "value": 2001
+        }
+      ]
+    },
+    {
+      "before": [
+        "UPDATE notes SET updated_at=9007199254740991"
+      ],
+      "after": [],
+      "error": "NOTE_HISTORY_INVALID_VERSION",
+      "changed": true,
+      "id": "clock-overflow",
+      "checks": [
+        {
+          "sql": "SELECT count(*) FROM notes WHERE title='Current'",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "before": [
+        "UPDATE note_history SET title=printf('%101s','x') WHERE id=1"
+      ],
+      "after": [],
+      "error": "NOTE_HISTORY_INVALID_TEXT",
+      "changed": true,
+      "id": "invalid-snapshot-size",
+      "checks": [
+        {
+          "sql": "SELECT count(*) FROM notes WHERE title='Current'",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "before": [
+        "UPDATE notes SET color='blue'"
+      ],
+      "after": [],
+      "error": null,
+      "changed": true,
+      "id": "no-nontext-rollback",
+      "checks": [
+        {
+          "sql": "SELECT count(*) FROM notes WHERE color='blue' AND title='Original'",
+          "value": 1
+        },
+        {
+          "sql": "SELECT count(*) FROM note_attachments WHERE display_name='asset.md' AND updated_at=11",
+          "value": 1
+        }
+      ]
+    }
+  ]
+}

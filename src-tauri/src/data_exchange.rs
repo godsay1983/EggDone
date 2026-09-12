@@ -2119,6 +2119,9 @@ mod tests {
         .unwrap();
 
         assert_eq!(result.note_updated, 1);
+        let history = crate::note_history::list(&connection, uuid).unwrap();
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].title, "local");
         assert_eq!(
             note_sync::build_document(&connection, 11).unwrap().notes,
             vec![imported]
