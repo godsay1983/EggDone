@@ -51,6 +51,8 @@ E8a2必须提供完整可用界面，不将内部命令存在当作用户功能�
 
 ## E8a1 验证
 
+后续 E8a3a 已完成生产内核的隔离 S3 双向回归与有限平板预览/取消检查，详见 [TRASH_SYNC_REGRESSION.md](TRASH_SYNC_REGRESSION.md)。E8a2 的“尚未进行”保留为该阶段历史记录；E8a3b 真机/旧库及完整原生验收继续待办。
+
 共享 docs/fixtures/trash-restore-v1.json 的 11 组案例由桌面 Rust/SQLite 和鸿蒙生产 Repository/宿主 SQLite 执行：恢复单次任务、便签与附件、删除版本变化、同版本正文变化、附件变化、已恢复、事务失败回滚、不安全时间、实体消失、写入者变化、活动规则阻止恢复。鸿蒙额外覆盖调用者修改确认对象与分页/非法输入；桌面额外覆盖恢复不复活关联。两端使用既有真实迁移创建隔离库；不改用户数据库。
 
 命令：桌面 cargo test --lib trash_（3 项通过，含 11 组共享场景、关联事务回滚、磁盘库关闭重开）；鸿蒙 node scripts/test-trash.cjs（11 组及分页/输入校验通过）；桌面 pnpm test src/lib/api/trashApi.test.ts（3 项通过）检查 IPC 参数与失败传播。cargo fmt -- --check、cargo check、pnpm check、pnpm build 和鸿蒙 Debug 构建通过。没有把宿主 SQLite 当成 ArkData 原生测试，也未宣称真机、完整云端和附件文件恢复已通过。

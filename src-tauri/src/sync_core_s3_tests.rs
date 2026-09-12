@@ -6,6 +6,159 @@ const ACCESS: &str = "eggdone-ns7-test-access";
 const SECRET: &str = "eggdone-ns7-public-test-fixture";
 
 #[test]
+#[ignore = "Use run-sync-core-s3.ps1 -TrashRecoverySessions with the Harmony peer"]
+fn trash_session_prepare() {
+    tauri::async_runtime::block_on(async {
+        let target = bucket(SECRET);
+        let response = Bucket::create_with_path_style(
+            &target.name,
+            target.region.clone(),
+            Credentials::new(Some(ACCESS), Some(SECRET), None, None, None).unwrap(),
+            BucketConfiguration::default(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(response.response_code, 200);
+        let desktop = Client::new(TODO, NOTE);
+        desktop.add_file();
+        {
+            let db = desktop.db.connection.lock().unwrap();
+            db.execute("UPDATE todos SET completed=1,due_date='2026-09-13',reminder_at=9999999999999,repeat_rule='daily',repeat_next_due_date='2026-09-14' WHERE uuid=?1", [TODO]).unwrap();
+        }
+        desktop.sync(bucket(SECRET)).await.unwrap();
+        let second = Client::new(TODO2, NOTE2);
+        second.sync(bucket(SECRET)).await.unwrap();
+        // Seed deletion state; the production sync core and later restore APIs are under test.
+        {
+            let db = desktop.db.connection.lock().unwrap();
+            let stamp = now_millis() + 1000;
+            db.execute(
+                "UPDATE todos SET deleted_at=?1,updated_at=?1 WHERE uuid=?2",
+                params![stamp, TODO],
+            )
+            .unwrap();
+            db.execute(
+                "UPDATE notes SET deleted_at=?1,updated_at=?1 WHERE uuid=?2",
+                params![stamp, NOTE],
+            )
+            .unwrap();
+        }
+        desktop.sync(bucket(SECRET)).await.unwrap();
+        assert!(desktop.state().dirty_domains.is_empty());
+        assert_eq!(
+            crate::trash::list(&desktop.db.connection.lock().unwrap(), 0, 50)
+                .unwrap()
+                .len(),
+            2
+        );
+        assert_eq!(
+            target
+                .get_object(&format!("account/assets/{ASSET}/original"))
+                .await
+                .unwrap()
+                .as_slice(),
+            BYTES
+        );
+        println!("TRASH_SESSION_DESKTOP_PREPARE_OK");
+    });
+}
+
+#[test]
+#[ignore = "Requires Harmony trash exchange; never use a user bucket"]
+fn trash_session_verify() {
+    tauri::async_runtime::block_on(async {
+        // A stale active peer was offline throughout deletion and restoration.
+        let desktop = Client::new(TODO, NOTE);
+        desktop.sync(bucket(SECRET)).await.unwrap();
+        {
+            let mut db = desktop.db.connection.lock().unwrap();
+            let task: (bool, Option<i64>, Option<String>, Option<i64>) = db
+                .query_row(
+                    "SELECT completed,reminder_at,repeat_rule,deleted_at FROM todos WHERE uuid=?1",
+                    [TODO],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+                )
+                .unwrap();
+            assert_eq!(task, (true, None, None, None));
+            assert_eq!(crate::trash::list(&db, 0, 50).unwrap().len(), 2);
+            let by = crate::db::device_id(&db).unwrap();
+            for (kind, id) in [
+                (crate::trash::TrashKind::Todo, TODO2),
+                (crate::trash::TrashKind::Note, NOTE2),
+            ] {
+                let preview = crate::trash::preview(&db, kind, id).unwrap();
+                crate::trash::restore(&mut db, &preview, now_millis(), &by).unwrap();
+            }
+        }
+        desktop.sync(bucket(SECRET)).await.unwrap();
+        // A different offline peer carries an obsolete deletion instead of an active copy.
+        let stale = Client::new(TODO, NOTE);
+        stale.db.connection.lock().unwrap().execute_batch(
+            "UPDATE todos SET updated_at=500,deleted_at=500; UPDATE notes SET updated_at=500,deleted_at=500;"
+        ).unwrap();
+        stale.sync(bucket(SECRET)).await.unwrap();
+        desktop.sync(bucket(SECRET)).await.unwrap();
+        for client in [&desktop, &stale] {
+            let db = client.db.connection.lock().unwrap();
+            assert!(crate::trash::list(&db, 0, 50).unwrap().is_empty());
+            let snapshot = links::snapshot(&db).unwrap();
+            assert_eq!(snapshot.document.links.len(), 2);
+            assert!(snapshot
+                .document
+                .links
+                .iter()
+                .all(|link| link.deleted_at.is_some()));
+            assert_eq!(snapshot.revision, snapshot.synced_revision);
+            drop(db);
+            assert!(client.state().dirty_domains.is_empty());
+        }
+        let attachment =
+            note_attachments::list_active_by_note(&desktop.db.connection.lock().unwrap(), NOTE)
+                .unwrap()
+                .remove(0);
+        assert!(attachment.local_original_path.is_none());
+        assert_eq!(attachment.transfer_state, "remote_only");
+        let prepared = s3_sync::PreparedManualSync::from_test_bucket(
+            &desktop.db.connection.lock().unwrap(),
+            bucket(SECRET),
+        );
+        let bytes = s3_sync::download_asset_bytes(
+            &desktop.runtime,
+            &prepared,
+            ASSET,
+            "original",
+            attachment.byte_size,
+            &attachment.sha256,
+        )
+        .await
+        .unwrap();
+        assert_eq!(bytes, BYTES);
+        let response = bucket(SECRET)
+            .delete_object(&format!("account/assets/{ASSET}/original"))
+            .await
+            .unwrap();
+        assert!((200..300).contains(&response.status_code()));
+        assert!(s3_sync::download_asset_bytes(
+            &desktop.runtime,
+            &prepared,
+            ASSET,
+            "original",
+            attachment.byte_size,
+            &attachment.sha256
+        )
+        .await
+        .is_err());
+        assert_eq!(
+            note_attachments::list_active_by_note(&desktop.db.connection.lock().unwrap(), NOTE)
+                .unwrap()
+                .len(),
+            1
+        );
+        println!("TRASH_SESSION_DESKTOP_VERIFY_OK: stale active/deleted peers, reverse restore, no old links, original hash and missing bytes");
+    });
+}
+
+#[test]
 #[ignore = "Use run-sync-core-s3.ps1 -CrossClientSessions with the Harmony peer"]
 fn full_session_prepare() {
     tauri::async_runtime::block_on(async {
