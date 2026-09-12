@@ -1,7 +1,7 @@
 # 任务与便签关联 Roadmap
 
 更新：2026-09-12。
-状态：L3b 已本地提交（桌面eefe7cc、鸿蒙283732b）；E7/L3c 备份 v3、关联预览、原子恢复与解绑保护已实现，当前增量未提交。下一步 L3d 真实跨端验收，之后 L4 UI；不推送、不升版。既有 E6 完整人工验收继续保留。
+状态：L3c 已本地提交（桌面94ec48b、鸿蒙565a8f3）。L3d1 隔离S3原生关联交换已接入，使用真实签名/网络及独立数据库；本轮新增测试尚未提交。不升版、不推送。L3d整应用会话、用户旧库升级和物理设备验收仍待完成，之后进入L4 UI。 既有E6完整人工验收继续保留。
 方案：[TASK_NOTE_LINK_IMPLEMENTATION_PLAN.md](TASK_NOTE_LINK_IMPLEMENTATION_PLAN.md)
 
 每一项双端一起完成、验证后分别用中文提交。先做协议和原子内核，最后开放入口；不得把未通过的原生/跨端测试勾选为完成。
@@ -35,7 +35,10 @@
 - [x] L3b 网络接入：独立GET/HEAD/条件PUT与dirty/ACK/ETag；实体先于链接；全局会话锁、配置世代隔离、最多两轮外层冲突重试；手动/自动同步与状态摘要。内层冲突仍沿用原有有界预算。
 - [x] L3b 协议异常自动化：缺失保留、实体墓碑、404/403/412/传输错误，不把权限/临时错误当空文档；真实旧客户端混用及S3仍待L3d验收。
 - [x] L3c 数据备份v3、关联预览、原子恢复与旧备份不复活解绑；双端自动化和手机/平板模拟器各5项原生RDB测试通过，文件选择器/真实数据恢复仍待验收。
-- [ ] L3d 真实S3离线双端创建/解绑、冲突、失败恢复和真实用户旧库升级验收。
+- [ ] L3d 整体：真实S3离线双端创建/解绑、冲突、失败恢复和真实用户旧库升级验收。
+- [x] L3d1 测试接入：隔离S3服务、桌面/鸿蒙原生签名传输、链接仓库合并与墓碑交换；阶段证据和设备结果见[TASK_NOTE_LINK_S3_INTEGRATION.md](TASK_NOTE_LINK_S3_INTEGRATION.md)。不是整应用同步通过。
+- [ ] L3d2 完整SyncService会话的实体优先上传、dirty/ACK、离线双端变更、冲突及恢复；不得仅用传输层用例替代。
+- [ ] L3d3 物理设备、用户旧库升级、原生文件恢复和用户云端环境验收。
 
 L3a范围见[TASK_NOTE_LINK_SYNC_SNAPSHOT.md](TASK_NOTE_LINK_SYNC_SNAPSHOT.md)，L3b生产接入与自动化证据见[TASK_NOTE_LINK_SYNC_SESSION.md](TASK_NOTE_LINK_SYNC_SESSION.md)。链接网络与备份代码均已接入，无用户关联入口；L3c契约与证据见[TASK_NOTE_LINK_BACKUP_CONTRACT.md](TASK_NOTE_LINK_BACKUP_CONTRACT.md)。真实跨端/设备恢复尚待验收，L3未整体完成。
 

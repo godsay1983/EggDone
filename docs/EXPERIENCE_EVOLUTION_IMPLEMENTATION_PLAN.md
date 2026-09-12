@@ -2,7 +2,7 @@
 
 更新：2026-09-12。状态：按配套 roadmap 分阶段执行。
 
-最新进度E7/L3c：L3b已本地提交（桌面eefe7cc、鸿蒙283732b）。L3c 备份 v3、关联预览、原子恢复与解绑保护已实现，见[TASK_NOTE_LINK_BACKUP_CONTRACT.md](TASK_NOTE_LINK_BACKUP_CONTRACT.md)。当前增量未提交；下一步 L3d 真实跨端验收和 L4 UI，未验证项目继续保留。 不升版、推送或发布；尚无关联入口。E6b1～E6b3、E6c及E6d完整人工验收继续保留，见[验证矩阵](PREFERENCES_REGRESSION_MATRIX.md)。下方旧阶段状态为历史记录。
+最新进度E7/L3d1：L3c 已本地提交（桌面94ec48b、鸿蒙565a8f3）。L3d1 隔离S3原生关联交换已接入，使用真实签名/网络及独立数据库；本轮新增测试尚未提交。不升版、不推送。L3d整应用会话、用户旧库升级和物理设备验收仍待完成，之后进入L4 UI。 见[原生S3集成](TASK_NOTE_LINK_S3_INTEGRATION.md)及[分阶段记录](TASK_NOTE_LINK_ROADMAP.md)。E6b1～E6b3、E6c及E6d完整人工验收继续保留。下方旧阶段状态为历史记录。
 
 最新实现至E6b3（2026-09-12）：双端系统状态独立查询、未知/实际启用摘要、用户重试及返回刷新，见[SYSTEM_CAPABILITY_STATUS.md](SYSTEM_CAPABILITY_STATUS.md)。E6b2通用偏好及视图持久化已提交，见[PREFERENCE_PERSISTENCE.md](PREFERENCE_PERSISTENCE.md)；所有未确认的原生验收继续保留，E6c/E7未开始。下文旧阶段状态作为过程记录。
 

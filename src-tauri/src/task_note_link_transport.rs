@@ -11,6 +11,10 @@ use crate::task_note_link_protocol::{self, LinkDocument};
 
 pub const MAX_LINK_BYTES: usize = 4 * 1024 * 1024;
 
+#[cfg(test)]
+#[path = "task_note_link_s3_integration_tests.rs"]
+mod s3_integration_tests;
+
 pub struct TaskNoteLinkTransport {
     bucket: Box<Bucket>,
     object_key: String,

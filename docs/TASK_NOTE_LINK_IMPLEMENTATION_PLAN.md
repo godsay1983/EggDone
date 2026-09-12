@@ -1,7 +1,7 @@
 # 任务与便签关联实现方案
 
 更新：2026-09-12。
-状态：L3b 已本地提交（桌面eefe7cc、鸿蒙283732b）；E7/L3c 备份 v3、关联预览、原子恢复与解绑保护已实现，当前增量未提交。下一步 L3d 真实跨端验收，之后 L4 UI；不推送、不升版。既有 E6 完整人工验收继续保留。 两端采用同一业务与协议语义。
+状态：L3c 已本地提交（桌面94ec48b、鸿蒙565a8f3）。L3d1 隔离S3原生关联交换已接入，使用真实签名/网络及独立数据库；本轮新增测试尚未提交。不升版、不推送。L3d整应用会话、用户旧库升级和物理设备验收仍待完成，之后进入L4 UI。 隔离测试契约见[TASK_NOTE_LINK_S3_INTEGRATION.md](TASK_NOTE_LINK_S3_INTEGRATION.md)。两端采用同一业务与协议语义。
 权威数据契约见 [TASK_NOTE_LINK_PROTOCOL.md](TASK_NOTE_LINK_PROTOCOL.md)，阶段证据见 [TASK_NOTE_LINK_ROADMAP.md](TASK_NOTE_LINK_ROADMAP.md)。下文未来业务流程是后续设计，不代表已开放。
 
 ## 范围
