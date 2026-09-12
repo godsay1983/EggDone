@@ -1,6 +1,6 @@
 # 双端统一搜索实现方案
 
-更新日期：2026-09-12。阶段：E8c1 双端内核已验证；E8c2-D 桌面界面已实现，E8c2-H 鸿蒙界面待接入，均未发布。
+更新日期：2026-09-12。阶段：E8c1 双端内核已验证；E8c2-D 桌面界面已实现，E8c2-H 鸿蒙界面已接入并进入原生运行验证，完整多设备矩阵仍待完成，均未发布。
 
 ## 目标与范围
 
@@ -40,14 +40,15 @@
 - 桌面 `src-tauri/src/content_search.rs`：只读检索和目标复核。
 - 桌面 `content_search_commands.rs` 和 `src/lib/api/contentSearchApi.ts`：注册 Tauri IPC 和类型化调用，不改现有列表命令。
 - 鸿蒙 `models/ContentSearch.ets`、`data/repositories/ContentSearchRepository.ets`：共享返回结构和原生 RDB 事务读取，沿用现有队列。
-- 桌面 `contentSearchStore.ts` 管理分组请求、分页和竞态，`ContentSearchDialog.svelte` 管理结果及归档只读预览；TodoPanel 只负责来源保存和目标导航。鸿蒙待接入独立 Store 与 ArkUI 组件；数据库查询不得搬进 TodoPanel/Index 或 UI 组件。
+- 桌面 `contentSearchStore.ts` 管理分组请求、分页和竞态，`ContentSearchDialog.svelte` 管理结果及归档只读预览；TodoPanel 只负责来源保存和目标导航。鸿蒙 `ContentSearchStore.ets`、`ContentSearchDialog.ets` 分别管理请求与界面，Index 只编排保存和目标导航；数据库查询不得搬进 TodoPanel/Index 或 UI 组件。
 - 鸿蒙不能只检查 `goToFirstRow()`：原生查询失败可能返回 rowCount=-1 的结果集。总数查询须确实返回一行，分页/目标结果集须有效，分页实际读取数须与结果集行数一致；失败回滚，不返回部分成功。
 
 ## Roadmap
 
 - [x] E8c1：冻结检索契约、双端内核/IPC、共享用例、故障与分页回归、手机/平板原生数据库验证。
 - [x] E8c2-D：桌面入口、分组分页、归档只读、附件定位及保存/返回上下文；自动化证据见下文，不等于原生验收。
-- [ ] E8c2-H：鸿蒙同契约的独立 Store、搜索面板及导航，手机/平板/分屏适配与自动化验证。
+- [x] E8c2-H1：鸿蒙同契约的独立 Store、搜索面板及导航已接入；宿主回归和构建通过。
+- [ ] E8c2-H2：手机/平板完整原生界面矩阵，包括分屏、中英文、主题、大字体、键盘、分页与异常场景，不以 H1 关闭此项。
 - [ ] E8c2：双端统一搜索入口、分组结果、摘要、独立分页、清空/空白/加载/失败/重试与中英文文案。
 - [ ] E8c2：过期请求隔离、输入切换/翻页/关闭竞态；部分组失败不能显示为全部检索成功。
 - [ ] E8c2：复核后打开任务、便签或定位附件；已归档任务只读查看，不静默取消归档。
@@ -91,7 +92,7 @@ E8c1 不代表整个 E8c 完成；E6、L3d3、L4d2、E8a3b、E8b3b 的既有门�
 - 历史、关联和搜索入口互斥；搜索中暂缓原生快捷收集请求，退出后重新读取。搜索结果进入历史恢复后若刷新失败，关闭过期编辑器并重新显示搜索，不回填恢复前旧文。
 - 短窗口采用整面板滚动并固定关闭区，较高窗口只滚动结果；宽窗口限制阅读宽度，长标题和英文按钮自然换行，不缩小字体来隐藏溢出。
 
-自动化使用真实 Svelte 组件、保存队列及提取的生产导航/预览逻辑，数据库 IPC 为隔离替身，不接触用户数据。这些证据不替代 Tauri 原生 IPC/窗口、用户旧库、真实规模与物理设备验收；鸿蒙本轮仅同步计划，不能当作已具备搜索入口。
+自动化使用真实 Svelte 组件、保存队列及提取的生产导航/预览逻辑，数据库 IPC 为隔离替身，不接触用户数据。这些证据不替代 Tauri 原生 IPC/窗口、用户旧库、真实规模与物理设备验收；本节只记录桌面交付，鸿蒙入口和后续验证另列。
 
 2026-09-12 验证：
 
@@ -106,6 +107,19 @@ E8c1 不代表整个 E8c 完成；E6、L3d3、L4d2、E8a3b、E8b3b 的既有门�
 
 界面截图和隔离测试记录位于本机临时目录，未加入提交。需要复核当前界面时应重新运行脚本，以最新输出目录为准。
 
+## E8c2-H 鸿蒙交付与验证边界
+
+- 入口：手机首页「更多 → 统一搜索」、平板侧栏「统一搜索」，以及已保存便签编辑器的「统一搜索」。
+- 支持独立分组、分页、类型筛选、失败重试和过期响应隔离；普通结果复核后进入既有界面，归档任务只读。
+- 附件结果突出显示匹配项，不改变附件存储顺序，不自动读取原图或预览。来源保存失败不离开；返回保持搜索词、类型和已有结果。
+- 2026-09-12 原生检查复现了分组停在加载态和类型按钮初始无文字：固定分类的 ForEach 复用旧对象，按值 Builder 未订阅后续对象替换；Select 的 selected 不等于初始显示文字。改为三个固定分组的引用绑定，并显式设置 Select.value，不重建整个搜索会话或修改数据库来规避问题。
+- 宿主新增异步分组逐项替换回归；设备脚本直接读取 ArkUI 树和截图，区分缺失、加载、失败、空结果和有结果，不以命令退出码替代断言。
+- 原生复跑使用既有测试数据、保留数据覆盖安装，不创建或删除内容。完整 H2 和 E8c3 门槛仍保留，不能把模拟器基线等同于物理设备、用户旧库、编辑同步或完整异常矩阵。
+
+2026-09-12 本轮结果：中文、深色、常规字号下，手机模拟器任务打开/返回与平板模拟器便签打开/返回通过；均保持查询词、分类和结果数量，分类切换、重复查询和清空通过。平板还检查了切换分类前的异步分组刷新。两次 `QA` 查询均返回任务 3、便签 1、附件 0。手机以 `.md` 执行附件往返测试时没有匹配结果，脚本按前置条件失败，附件定位及往返不计为本轮通过。
+
+原生证据在本机临时目录 `eggdone-search-rendering-ep3Nhx`（手机）、`eggdone-search-rendering-rnuQgK`（平板）和 `eggdone-search-rendering-qtvfld`（附件未完成）。Debug 构建、搜索宿主回归、共享检索用例、关联导航、历史界面回归及资源检查通过；这些结果不关闭完整 H2/E8c3。
+
 ## 复跑命令
 
 桌面工程：`pnpm test`、`pnpm check`、`pnpm build`；在 src-tauri 下运行 `cargo test --lib`、`cargo fmt --all -- --check`。
@@ -113,4 +127,5 @@ E8c1 不代表整个 E8c 完成；E6、L3d3、L4d2、E8a3b、E8b3b 的既有门�
 桌面界面：`node scripts/test-content-search-ui.mjs`、`node scripts/test-note-history-ui.mjs`、`node scripts/test-link-navigation-ui.mjs`；宿主编排：`node scripts/test-note-history-lifecycle.cjs`、`node scripts/test-link-navigation.cjs`。浏览器脚本需要 Playwright 和 Edge，允许用环境变量 `PLAYWRIGHT_PATH` 指向已安装的 Playwright；与 `pnpm check/build` 串行运行，避免配置刷新打断页面。
 
 鸿蒙仓库：`node scripts/test-content-search.cjs --desktop=D:/Develop/EggDone`、`node scripts/test-recurrence-protocol.cjs`。
+鸿蒙界面宿主：`node scripts/test-content-search-ui.cjs`、`node scripts/test-content-search-rendering-check.cjs`。原生只读界面：安装当前 Debug 包并停在首页，运行 `node scripts/test-content-search-rendering.cjs --device=127.0.0.1:5557 --query=QA --open=todo`；平板改为当前序列号，`--open=note` 或 `--open=attachment` 选择对应往返。查询必须匹配设备上已有的测试内容；缺少匹配内容会失败，不会自动造数据。支持 `--locale=en_US`，但参数不修改设备语言；每次输出本地临时证据目录。脚本只检查声明的场景，不覆盖保存失败、同步或全部窗口尺寸。
 先 `devecocli device list` 确认序列号，再使用 PowerShell 7 执行 `scripts/run-device-tests.ps1 -Device 127.0.0.1:5557 -Suite ContentSearch`（平板改为当前平板序列号）。脚本串行构建并覆盖安装，不卸载应用；只对该套件专用临时库做清理。
