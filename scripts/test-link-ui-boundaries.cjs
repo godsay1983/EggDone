@@ -37,14 +37,19 @@ function fixture() {
   const noOverlay=event();h.handleViewerKeydown(noOverlay);assert.equal(noOverlay.prevented,false);
   const d=h.openAttachment({uuid:'d'});h.closeViewer();pending[3].reject(Error('late failure'));await d;assert.equal(h.state().viewerError,'');
 
-  const deletion=functions('TodoPanel.svelte',['deleteNote']);let failure='save',removed=0;
+  const deletion=functions('TodoPanel.svelte',['deleteNote','requestNoteDeletion']);let failure='save',removed=0;
   const remove=new Function('flushAllNoteChanges','notes','setTimeout',compile(`
     const NOTE_DRAFT_UUID='draft';let selectedNoteUuid='source',deletedNote=null,noteUndoTimer=null;
     ${deletion}
-    return {deleteNote,state:()=>selectedNoteUuid};
+    return {deleteNote,requestNoteDeletion,state:()=>selectedNoteUuid};
   `))(async()=>{if(failure==='save')throw Error('save failed');},{remove:async()=>{if(failure==='delete')throw Error('delete failed');removed++;return {uuid:'source'};}},()=>1);
   await assert.rejects(remove.deleteNote({uuid:'source'}),/save failed/);assert.equal(removed,0);assert.equal(remove.state(),'source');
+  await remove.requestNoteDeletion({uuid:'source'});assert.equal(removed,0);assert.equal(remove.state(),'source');
   failure='delete';await assert.rejects(remove.deleteNote({uuid:'source'}),/delete failed/);assert.equal(remove.state(),'source');
-  failure='';await remove.deleteNote({uuid:'source'});assert.equal(removed,1);assert.equal(remove.state(),null);
+  await remove.requestNoteDeletion({uuid:'source'});assert.equal(removed,0);assert.equal(remove.state(),'source');
+  failure='';await remove.requestNoteDeletion({uuid:'source'});assert.equal(removed,1);assert.equal(remove.state(),null);
+  const panel=fs.readFileSync(path.join(__dirname,'../src/lib/components/TodoPanel.svelte'),'utf8');
+  assert.equal((panel.match(/onDelete=\{requestNoteDeletion\}/g)||[]).length,2);
+  assert.ok(!panel.includes('onDelete={deleteNote}'));
   console.log('Production viewer race/overlay priority and delete save/failure boundaries passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

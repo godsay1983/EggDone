@@ -1073,6 +1073,15 @@
     await notes.setColor(note, color);
   }
 
+  async function requestNoteDeletion(note: Note) {
+    try {
+      await deleteNote(note);
+    } catch {
+      // The note store retains the draft and exposes the failure in the editor/list.
+      // Consume it at the UI boundary, not inside the persistence operation.
+    }
+  }
+
   async function deleteNote(note: Note) {
     if (note.uuid === NOTE_DRAFT_UUID) {
       if (noteDraftCreatePromise) {
@@ -2960,7 +2969,7 @@
       onRetrySave={() => flushAllNoteChanges().catch(() => undefined)}
       onPin={pinNote}
       onColor={colorNote}
-      onDelete={deleteNote}
+      onDelete={requestNoteDeletion}
       attachments={selectedNote.uuid === NOTE_DRAFT_UUID ? [] : (noteAttachmentsByNote[selectedNote.uuid] ?? [])}
       attachmentPreviewUrls={noteAttachmentPreviewUrls}
       attachmentBusy={noteAttachmentBusy}
@@ -2986,7 +2995,7 @@
       onOpen={openNote}
       onPin={pinNote}
       onColor={colorNote}
-      onDelete={deleteNote}
+      onDelete={requestNoteDeletion}
       attachmentsByNote={noteAttachmentsByNote}
       attachmentPreviewUrls={noteAttachmentPreviewUrls}
     />

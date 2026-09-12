@@ -1,7 +1,7 @@
 # 任务与便签关联实现方案
 
 更新：2026-09-12。
-状态：L4d1已提交（桌面d153b95、鸿蒙b549e42）。L4d2首批原生关联、附件及桌面缩放验证通过，见[原生运行证据](TASK_NOTE_LINK_NATIVE_RUNTIME.md)。继续其余原生矩阵；L3d3用户环境及既有人工验收继续保留。不升版、不推送。
+状态：L4d2首批已提交（桌面23c649a、鸿蒙7c0e5fd）。第二批原生写入失败/重试/关联冲突通过，并修复桌面删除UI未处理Promise，见[原生运行证据](TASK_NOTE_LINK_NATIVE_RUNTIME.md)。继续其余原生矩阵；L3d3用户环境及既有人工验收继续保留。不升版、不推送。
 权威数据契约见 [TASK_NOTE_LINK_PROTOCOL.md](TASK_NOTE_LINK_PROTOCOL.md)，阶段证据见 [TASK_NOTE_LINK_ROADMAP.md](TASK_NOTE_LINK_ROADMAP.md)。下文未来业务流程是后续设计，不代表已开放。
 
 ## 范围
