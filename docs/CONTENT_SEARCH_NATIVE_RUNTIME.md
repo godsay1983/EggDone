@@ -83,6 +83,16 @@ try {
 
 提交前 `node --check`、`pnpm check`（0 错误/0 警告）、`pnpm build`、`pnpm test`（35 文件、306 项）、`cargo fmt -- --check`、`cargo check` 和 `git diff --check` 通过。Rust 保留既有 `TraySnapshot.locale` 未使用告警；本次没有修改该模块。
 
+## 图片入口复验（2026-09-13）
+
+桌面占位按钮改为“查看图片 / View image”，避免搜索刻意不加载预览时一直显示“正在准备”。点击逻辑不变；鸿蒙同时补齐无预览时缺失的点击入口，详见其 `docs/NOTE_IMAGE_OPEN_REGRESSION.md`。
+
+新构建 SHA-256：`8B6D3EB7C98E088D1E79F3DEF7E5BB8336B05ED98AEA3DDF3D3ADA55041D42CF`。重新运行 `scripts/test-content-search-native.mjs` 的证据为 `%TEMP%/eggdone-search-native-1789239769884`：12 项通过，`pageErrors=[]`，中文浅色、三档原生缩放。新增断言确认按钮文案为“查看图片”；已查看本轮图片定位和主动打开两张截图，入口及原图可见，不把历史八张截图的视觉检查算作本轮检查。
+
+浏览器回归的 24 组配置及保存/导航场景通过（`%TEMP%/eggdone-content-search-ui-1789238805686`），新增英文按钮文案断言，原有未主动打开前的零读取断言保留。`pnpm check`、`pnpm build`、`pnpm i18n:check`（724 键）、`pnpm test`（306 项）、`cargo fmt -- --check`、`cargo check` 通过；Rust 仍有既有 `TraySnapshot.locale` 告警。
+
+首次新包启动后进程退出、9228 拒绝连接，未记作通过；确认进程不存在后重新启动，随后连接与完整测试通过，未确认首次退出根因。测试结束后按路径和精确启动时间核对并结束隔离 PID 25716，9228 无监听。普通客户端 PID 52336 未停止、未替换，其数据未参与测试。
+
 ## 保留边界
 
 - 本批不是中英文、深浅主题、所有窗口大小的完整原生矩阵；也未验收原生下拉菜单展开的系统绘制，既有浏览器配色证据不能直接替代。

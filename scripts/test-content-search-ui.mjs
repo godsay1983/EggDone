@@ -157,6 +157,7 @@ try {
  await page.locator('[data-scope="attachment"] .result').click();await page.locator('.note-attachment-manager .search-target').waitFor();
  assert.equal(await page.getByRole('button',{name:'Search everything',exact:true}).count(),0);
  assert.equal(await page.locator('.search-target').getAttribute('data-attachment-id'),'attachment0');assert.equal(await page.evaluate(()=>window.fileReads),0);
+ assert.equal(await page.locator('.note-attachment-preview').innerText(),'View image');
  const box=await page.locator('.search-target').boundingBox();assert.ok(box.y>=0&&box.y<720);await page.screenshot({path:resolve(output,'attachment-target.png')});
  await page.getByRole('button',{name:'Close attachment manager',exact:true}).click();
  await page.evaluate(()=>window.openRelated());await page.waitForFunction(()=>window.navigation.depth===2);

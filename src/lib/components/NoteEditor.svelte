@@ -407,7 +407,7 @@
                     {#if attachmentPreviewUrls[attachment.uuid]}
                       <img src={attachmentPreviewUrls[attachment.uuid]} alt={attachment.display_name} />
                     {:else}
-                      <span>{attachment.transfer_state === "remote_only" ? $translator("attachment.needsPreview") : $translator("attachment.preparing")}</span>
+                      <span>{$translator("attachment.viewImage")}</span>
                     {/if}
                   </button>
                   <div>

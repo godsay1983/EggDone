@@ -541,6 +541,7 @@ export const enUS = {
   "attachment.open": "Open",
   "attachment.pendingUpload": "Waiting to sync",
   "attachment.preparing": "Preparing",
+  "attachment.viewImage": "View image",
   "attachment.retry": "Retry",
   "attachment.save": "Save",
   "attachment.saveOriginal": "Save original",

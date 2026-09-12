@@ -161,6 +161,7 @@ try {
     sameRows(await invoke('list_note_attachments', { noteUuid: note.uuid }), assets);
     await screenshot(`attachment-${asset.kind}.png`);
     if (asset.kind === 'image') {
+      assert.equal(await target.locator('.note-attachment-preview').innerText(), '查看图片');
       await target.locator('.note-attachment-preview').click();
       await page.locator('.note-image-viewer img').waitFor();
       await page.waitForFunction(() => document.querySelector('.note-image-viewer img')?.naturalWidth === 128);

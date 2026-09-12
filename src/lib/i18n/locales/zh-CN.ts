@@ -520,6 +520,7 @@ export const zhCN = {
   "attachment.open": "打开",
   "attachment.pendingUpload": "等待同步",
   "attachment.preparing": "正在准备",
+  "attachment.viewImage": "查看图片",
   "attachment.retry": "重试",
   "attachment.save": "保存",
   "attachment.saveOriginal": "保存原图",
