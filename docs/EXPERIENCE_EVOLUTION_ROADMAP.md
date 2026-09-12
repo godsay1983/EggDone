@@ -139,7 +139,8 @@ E6d已本地提交：桌面8c42ba9、鸿蒙1af2bf3。本轮按用户要求继续
 - [x] L3a 原子同步快照、旧回执保护、删除协调与配置世代失效，自动化/原生模拟器验证通过，见[TASK_NOTE_LINK_SYNC_SNAPSHOT.md](TASK_NOTE_LINK_SYNC_SNAPSHOT.md)。已本地提交：桌面2342edb、鸿蒙eba3c9e。
 - [x] L3b 生产网络会话、实体优先上传、独立探测/状态及有界冲突重试；本机HTTP/宿主自动化、构建和原生RDB回归通过，见[TASK_NOTE_LINK_SYNC_SESSION.md](TASK_NOTE_LINK_SYNC_SESSION.md)。L3b已提交（桌面eefe7cc、鸿蒙283732b），真实S3仍留在L3d。
 - [x] L3c 备份v3、关联预览、原子恢复及解绑保护；双端自动化和手机/平板模拟器RDB测试通过，见[TASK_NOTE_LINK_BACKUP_CONTRACT.md](TASK_NOTE_LINK_BACKUP_CONTRACT.md)。L3c已提交（桌面94ec48b、鸿蒙565a8f3）。
-- [x] L3d1 隔离S3原生关联交换测试接入，见[TASK_NOTE_LINK_S3_INTEGRATION.md](TASK_NOTE_LINK_S3_INTEGRATION.md)。当前测试增量未提交，无产品界面变化。
+- [x] L3d1 隔离S3原生关联交换测试接入，已提交桌面6dd3111、鸿蒙7092be2，见[TASK_NOTE_LINK_S3_INTEGRATION.md](TASK_NOTE_LINK_S3_INTEGRATION.md)。
+- [x] L3d2a 桌面完整内核及隔离S3测试通过，见[验证边界](TASK_NOTE_LINK_FULL_SESSION_TESTS.md)。鸿蒙L3d2b完整会话与跨端交换继续开发，无产品界面变化。
 - [ ] L3d2/L3d3 完整会话跨端离线/冲突、用户旧库升级和原生文件恢复验收。
 - [ ] L4 双端入口、返回上下文与异常状态。
 - [ ] L5 原生设备、升级、双端兼容版本与发布资料。

@@ -2,7 +2,7 @@
 
 更新：2026-09-12。状态：按配套 roadmap 分阶段执行。
 
-最新进度E7/L3d1：L3c 已本地提交（桌面94ec48b、鸿蒙565a8f3）。L3d1 隔离S3原生关联交换已接入，使用真实签名/网络及独立数据库；本轮新增测试尚未提交。不升版、不推送。L3d整应用会话、用户旧库升级和物理设备验收仍待完成，之后进入L4 UI。 见[原生S3集成](TASK_NOTE_LINK_S3_INTEGRATION.md)及[分阶段记录](TASK_NOTE_LINK_ROADMAP.md)。E6b1～E6b3、E6c及E6d完整人工验收继续保留。下方旧阶段状态为历史记录。
+最新进度E7/L3d2：L3d1已提交（桌面6dd3111、鸿蒙7092be2）；L3d2a桌面完整内核与隔离S3测试通过，继续L3d2b鸿蒙完整会话及跨端交换。见[验证边界](TASK_NOTE_LINK_FULL_SESSION_TESTS.md)及[分阶段记录](TASK_NOTE_LINK_ROADMAP.md)。L3d3与L4尚未完成；E6b1～E6b3、E6c及E6d完整人工验收继续保留。下方旧阶段状态为历史记录。
 
 最新实现至E6b3（2026-09-12）：双端系统状态独立查询、未知/实际启用摘要、用户重试及返回刷新，见[SYSTEM_CAPABILITY_STATUS.md](SYSTEM_CAPABILITY_STATUS.md)。E6b2通用偏好及视图持久化已提交，见[PREFERENCE_PERSISTENCE.md](PREFERENCE_PERSISTENCE.md)；所有未确认的原生验收继续保留，E6c/E7未开始。下文旧阶段状态作为过程记录。
 

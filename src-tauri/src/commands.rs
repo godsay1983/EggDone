@@ -1301,13 +1301,9 @@ pub async fn sync_now(
         sync_runtime_state::begin_attempt(&connection)?;
         prepared
     };
-    let outcome = sync_now_inner(
-        app.clone(),
-        database.clone(),
-        runtime.clone(),
-        asset_store,
-        &prepared,
-    )
+    let outcome = sync_now_inner(&database, &runtime, &asset_store, &prepared, || {
+        let _ = app.emit_to("main", "notes-changed", ());
+    })
     .await;
     // A partial merge is still visible locally and may have changed reminder scheduling.
     tray::update_task_badge(&app);
@@ -1335,11 +1331,11 @@ pub async fn sync_now(
 }
 
 async fn sync_now_inner(
-    app: AppHandle,
-    database: State<'_, Database>,
-    runtime: State<'_, SyncRuntime>,
-    asset_store: State<'_, NoteAssetStore>,
+    database: &Database,
+    runtime: &SyncRuntime,
+    asset_store: &NoteAssetStore,
     prepared: &s3_sync::PreparedManualSync,
+    notify_notes: impl Fn() + Send,
 ) -> Result<ManualSyncResult, String> {
     let entities = crate::task_note_link_session::run(&database, prepared).await?;
     let todo = entities.todo;
@@ -1498,7 +1494,7 @@ async fn sync_now_inner(
         now_millis(),
     )
     .await;
-    let _ = app.emit_to("main", "notes-changed", ());
+    notify_notes();
 
     ensure_sync_target(&database, prepared)?;
     let state = s3_sync::get_remote_state(&prepared, &database).await.ok();
@@ -1524,6 +1520,10 @@ async fn sync_now_inner(
     })
 }
 
+#[cfg(test)]
+#[path = "sync_core_tests.rs"]
+mod sync_core_tests;
+
 #[derive(Default)]
 struct RemoteAssetCleanupSummary {
     deleted_object_count: usize,
@@ -1546,7 +1546,7 @@ impl RemoteAssetCleanupSummary {
 }
 
 async fn cleanup_remote_note_assets(
-    database: &State<'_, Database>,
+    database: &Database,
     runtime: &SyncRuntime,
     prepared: &s3_sync::PreparedManualSync,
     document: &note_attachment_sync::NoteAttachmentSyncDocument,
@@ -1612,7 +1612,7 @@ async fn cleanup_remote_note_assets(
 }
 
 fn ensure_sync_target(
-    database: &State<'_, Database>,
+    database: &Database,
     prepared: &s3_sync::PreparedManualSync,
 ) -> Result<(), String> {
     let connection = lock_database(database)?;
@@ -1632,7 +1632,7 @@ fn emit_notes_changed_after_success<T>(app: &AppHandle, result: &Result<T, Strin
 }
 
 fn lock_database<'a>(
-    database: &'a State<'_, Database>,
+    database: &'a Database,
 ) -> Result<std::sync::MutexGuard<'a, Connection>, String> {
     database
         .connection
