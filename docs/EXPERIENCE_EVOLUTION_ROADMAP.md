@@ -1,6 +1,6 @@
 # 双端体验优化与功能扩展 Roadmap
 
-更新：2026-09-12。配套实现方案见 [EXPERIENCE_EVOLUTION_IMPLEMENTATION_PLAN.md](EXPERIENCE_EVOLUTION_IMPLEMENTATION_PLAN.md)。
+更新：2026-09-13。配套实现方案见 [EXPERIENCE_EVOLUTION_IMPLEMENTATION_PLAN.md](EXPERIENCE_EVOLUTION_IMPLEMENTATION_PLAN.md)。
 
 ## 当前状态
 
@@ -176,6 +176,8 @@ E6d已本地提交：桌面8c42ba9、鸿蒙1af2bf3。本轮按用户要求继续
 - [x] E8c2-H1 鸿蒙搜索 Store、ArkUI 面板及导航已接入：分组分页、过期请求隔离、归档只读、附件定位、保存保护及返回上下文；宿主回归、资源检查及构建通过。
 - [ ] E8c2-H2 手机/平板/分屏、中英文、主题、大字体、键盘、分页与异常场景的完整原生界面矩阵。基线检查发现并修复分组不刷新及类型标签初始为空，详见[实现与验证记录](CONTENT_SEARCH_IMPLEMENTATION_PLAN.md)，不以部分检查关闭本项。
 - [ ] E8c3 完整原生搜索操作、用户旧库、实际内容规模、物理设备与用户验收；不以底层测试替代。
+
+2026-09-13 H2 分批推进：手机模拟器应用内中英文 × 深浅主题 × 1/1.5 字号的八组合共 40 项交互测试通过，24 份原生布局结构检查通过，普通包恢复成功。修正了测试的菜单/清空等待和长滚动超时，不改生产搜索代码。英文深色大字号的菜单截图曾捕获过渡画面，增加独立渲染等待后专项补跑 5/5、截图核对通过；该单组补充不是又一次完整八组合。平板完整矩阵、分屏/键盘、主应用导航与真机门槛继续保留，不能勾选整个 H2。详情见鸿蒙仓库 `docs/CONTENT_SEARCH_NATIVE_UI_TEST.md`。
 
 ## E9：按需立项
 
