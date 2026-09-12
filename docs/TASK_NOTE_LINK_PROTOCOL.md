@@ -1,6 +1,6 @@
 # 任务与便签关联协议 v1
 
-更新：2026-09-12。E7/L1 的双端冻结契约；后续实现必须遵循本文件。L1 仅交付协议、合并内核、迁移和持久化，尚未接入用户入口、同步或备份。原子业务操作在 L2、网络与备份在 L3、界面在 L4。
+更新：2026-09-12。E7/L1 的双端冻结契约；后续实现必须遵循本文件。L1 仅交付协议、合并内核、迁移和持久化。L2本机原子操作现已完成，见[TASK_NOTE_LINK_ATOMIC_OPERATIONS.md](TASK_NOTE_LINK_ATOMIC_OPERATIONS.md)；下文“L2待实现”等保留L1边界记录，协议值不变。尚未接入用户入口、同步或备份，网络与备份在 L3、界面在 L4。
 
 ## 文档与身份
 
@@ -79,4 +79,3 @@ L3 必须传入便签、重复规则及其它保留对象的 Key 做碰撞检查
 鸿蒙：在仓库根运行 node scripts/test-task-note-links.cjs --desktop=D:/Develop/EggDone。该脚本执行生产 ArkTS，经宿主 SQLite/crypto 适配，不冒充原生 RDB。相关重复协议、日期和提醒回归也通过。
 
 原生独立 suite 为 TaskNoteLinkNative，只有 aa test 显式传 -s taskNoteLinks 1 才运行，不改变默认 suite 数量。用独立临时 RDB 验证 SHA1 UUID、关闭重开、墓碑与幂等、迁移/写入故障回滚和重试；不使用用户 eggdone.db。使用覆盖安装，禁止 onDeviceTest 的卸载流程。结果与操作见 TASK_NOTE_LINK_ROADMAP.md。
-

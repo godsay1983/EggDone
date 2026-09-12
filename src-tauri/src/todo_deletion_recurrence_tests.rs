@@ -4,6 +4,44 @@ use crate::recurrence_protocol::RecurrenceDocument;
 use crate::{recurrence_store, recurrence_transaction};
 
 #[test]
+fn task_note_links_stay_on_completed_instance_and_tombstone_on_skip() {
+    for complete in [false, true] {
+        let (mut db, todo, _) = fixture();
+        let note = "123e4567-e89b-42d3-a456-426614174099";
+        db.execute("INSERT INTO notes(uuid,title,content,color,pinned,created_at,updated_at,updated_by) VALUES(?1,'source','','default',0,1,1,'a')",[note]).unwrap();
+        crate::task_note_link_operations::change(
+            &mut db,
+            &todo.uuid,
+            note,
+            true,
+            None,
+            now_millis(),
+            "a",
+        )
+        .unwrap();
+        let next = if complete {
+            set_todo_completed_in_connection(&mut db, todo.id, true)
+                .unwrap()
+                .created_todo
+                .unwrap()
+        } else {
+            soft_delete_todo_in_connection(&mut db, todo.id, None)
+                .unwrap()
+                .created_todo
+                .unwrap()
+        };
+        let links = crate::task_note_link_store::snapshot(&db)
+            .unwrap()
+            .document
+            .links;
+        assert_eq!(links.len(), 1);
+        assert_eq!(links[0].todo_uuid, todo.uuid);
+        assert_ne!(links[0].todo_uuid, next.uuid);
+        assert_eq!(links[0].deleted_at.is_none(), complete);
+    }
+}
+
+#[test]
 fn delete_current_skips_once_and_replay_is_noop() {
     let (mut db, todo, _) = fixture();
     let result = soft_delete_todo_in_connection(&mut db, todo.id, None).unwrap();

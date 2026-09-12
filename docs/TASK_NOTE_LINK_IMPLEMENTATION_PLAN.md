@@ -1,7 +1,7 @@
 # 任务与便签关联实现方案
 
 更新：2026-09-12。
-状态：已进入 E7/L1，双端协议、共享 fixtures、迁移与持久化内核已实现，尚未提交；原子业务操作、同步/备份与 UI 仍待 L2-L4。两端采用同一业务与协议语义。
+状态：L1 已提交（桌面5e06653、鸿蒙c43bba0），E7/L2 原子创建/关联/解绑及本机删除协调已实现，当前增量未提交。见 [L2实现与证据](TASK_NOTE_LINK_ATOMIC_OPERATIONS.md)；同步/备份与 UI 仍待 L3-L4。两端采用同一业务与协议语义。
 权威数据契约见 [TASK_NOTE_LINK_PROTOCOL.md](TASK_NOTE_LINK_PROTOCOL.md)，阶段证据见 [TASK_NOTE_LINK_ROADMAP.md](TASK_NOTE_LINK_ROADMAP.md)。下文未来业务流程是后续设计，不代表已开放。
 
 ## 范围

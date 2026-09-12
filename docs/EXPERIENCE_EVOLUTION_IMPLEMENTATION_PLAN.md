@@ -2,7 +2,7 @@
 
 更新：2026-09-12。状态：按配套 roadmap 分阶段执行。
 
-最新进度E7/L1：E6d已本地提交（桌面8c42ba9、鸿蒙1af2bf3）。双端任务便签关联协议、共享fixtures、迁移与持久化内核已实现，见[冻结协议](TASK_NOTE_LINK_PROTOCOL.md)与[分阶段记录](TASK_NOTE_LINK_ROADMAP.md)。当前L1增量未提交，不升版、推送或发布；尚无关联入口与同步。E6b1～E6b3、E6c及E6d完整人工验收继续保留，见[验证矩阵](PREFERENCES_REGRESSION_MATRIX.md)。下方旧阶段状态为历史记录。
+最新进度E7/L2：L1已本地提交（桌面5e06653、鸿蒙c43bba0）。双端原子创建、关联/解绑、幂等回执、本机实体删除协调完成，见[L2实现与验证](TASK_NOTE_LINK_ATOMIC_OPERATIONS.md)与[分阶段记录](TASK_NOTE_LINK_ROADMAP.md)。当前L2增量未提交，不升版、推送或发布；尚无关联入口与同步。E6b1～E6b3、E6c及E6d完整人工验收继续保留，见[验证矩阵](PREFERENCES_REGRESSION_MATRIX.md)。下方旧阶段状态为历史记录。
 
 最新实现至E6b3（2026-09-12）：双端系统状态独立查询、未知/实际启用摘要、用户重试及返回刷新，见[SYSTEM_CAPABILITY_STATUS.md](SYSTEM_CAPABILITY_STATUS.md)。E6b2通用偏好及视图持久化已提交，见[PREFERENCE_PERSISTENCE.md](PREFERENCE_PERSISTENCE.md)；所有未确认的原生验收继续保留，E6c/E7未开始。下文旧阶段状态作为过程记录。
 

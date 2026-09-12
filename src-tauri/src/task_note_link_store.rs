@@ -62,6 +62,13 @@ pub fn merge(db: &mut Connection, incoming: &LinkDocument) -> Result<LinkSnapsho
 }
 
 pub fn merge_in_transaction(tx: &Transaction<'_>, incoming: &LinkDocument) -> Result<(), String> {
+    merge_in_open_transaction(tx, incoming)
+}
+
+fn merge_in_open_transaction(tx: &Connection, incoming: &LinkDocument) -> Result<(), String> {
+    if tx.is_autocommit() {
+        return Err("TASK_NOTE_LINK_TRANSACTION_REQUIRED".into());
+    }
     let current = snapshot(tx)?;
     let merged = merge_documents(&current.document, incoming)?;
     for link in merged.links {
@@ -70,6 +77,46 @@ pub fn merge_in_transaction(tx: &Transaction<'_>, incoming: &LinkDocument) -> Re
           ON CONFLICT(uuid) DO UPDATE SET active=excluded.active,record_json=excluded.record_json
           WHERE record_json<>excluded.record_json",
           params![link.uuid, link.todo_uuid, link.note_uuid, link.deleted_at.is_none(), record]).map_err(db_error)?;
+    }
+    Ok(())
+}
+
+pub(crate) fn tombstone_entity(
+    tx: &Connection,
+    uuid: &str,
+    is_note: bool,
+    now: i64,
+    by: &str,
+) -> Result<(), String> {
+    if tx.is_autocommit() {
+        return Err("TASK_NOTE_LINK_TRANSACTION_REQUIRED".into());
+    }
+    let mut links = snapshot(tx)?.document.links;
+    links.retain(|l| {
+        l.deleted_at.is_none()
+            && if is_note {
+                l.note_uuid == uuid
+            } else {
+                l.todo_uuid == uuid
+            }
+    });
+    for link in &mut links {
+        let stamp = now.max(link.updated_at.saturating_add(1));
+        if !(0..=crate::task_note_link_protocol::MAX_CLOCK).contains(&stamp) {
+            return Err("TASK_NOTE_LINK_CLOCK_EXHAUSTED".into());
+        }
+        link.updated_at = stamp;
+        link.updated_by = by.into();
+        link.deleted_at = Some(stamp);
+    }
+    if !links.is_empty() {
+        merge_in_open_transaction(
+            tx,
+            &LinkDocument {
+                format_version: 1,
+                links,
+            },
+        )?;
     }
     Ok(())
 }

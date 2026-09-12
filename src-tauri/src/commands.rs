@@ -2392,7 +2392,7 @@ fn reorder_todos_in_connection(
     list_todos_from_connection(connection)
 }
 
-fn soft_delete_todo_in_connection(
+pub(crate) fn soft_delete_todo_in_connection(
     connection: &mut Connection,
     id: i64,
     repeat_scope: Option<&str>,
@@ -2491,6 +2491,13 @@ fn soft_delete_todo_in_connection(
                 params![stamp, updated_by, todo_id],
             )
             .map_err(database_error)?;
+        crate::task_note_link_store::tombstone_entity(
+            connection,
+            &todo.uuid,
+            false,
+            stamp,
+            &updated_by,
+        )?;
     }
 
     if changed == 0 {
@@ -2550,10 +2557,22 @@ fn restore_todo_in_connection(connection: &mut Connection, id: i64) -> Result<To
     Ok(restored)
 }
 
-fn clear_completed_todos_in_connection(connection: &Connection) -> Result<usize, String> {
+pub(crate) fn clear_completed_todos_in_connection(
+    connection: &Connection,
+) -> Result<usize, String> {
+    let tx = connection.unchecked_transaction().map_err(database_error)?;
     let now = now_millis();
-    let updated_by = device_id(connection).map_err(database_error)?;
-    connection
+    let updated_by = device_id(&tx).map_err(database_error)?;
+    let ids = {
+        let mut query = tx.prepare("SELECT uuid FROM todos WHERE completed=1 AND deleted_at IS NULL AND archived_at IS NULL").map_err(database_error)?;
+        let rows = query
+            .query_map([], |r| r.get::<_, String>(0))
+            .map_err(database_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(database_error)?;
+        rows
+    };
+    let changed = tx
         .execute(
             "
             UPDATE todos
@@ -2562,7 +2581,12 @@ fn clear_completed_todos_in_connection(connection: &Connection) -> Result<usize,
             ",
             params![now, updated_by],
         )
-        .map_err(database_error)
+        .map_err(database_error)?;
+    for uuid in ids {
+        crate::task_note_link_store::tombstone_entity(&tx, &uuid, false, now, &updated_by)?;
+    }
+    tx.commit().map_err(database_error)?;
+    Ok(changed)
 }
 
 fn archive_completed_todos_in_connection(connection: &Connection) -> Result<usize, String> {
@@ -2841,7 +2865,7 @@ fn normalize_todo_priority(priority: i64) -> Result<i64, String> {
     }
 }
 
-fn normalize_due_date(due_date: Option<String>) -> Result<Option<String>, String> {
+pub(crate) fn normalize_due_date(due_date: Option<String>) -> Result<Option<String>, String> {
     let Some(value) = due_date else {
         return Ok(None);
     };
