@@ -1631,7 +1631,7 @@ fn emit_notes_changed_after_success<T>(app: &AppHandle, result: &Result<T, Strin
     }
 }
 
-fn lock_database<'a>(
+pub(crate) fn lock_database<'a>(
     database: &'a Database,
 ) -> Result<std::sync::MutexGuard<'a, Connection>, String> {
     database

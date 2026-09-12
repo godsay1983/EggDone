@@ -1,7 +1,7 @@
 # 任务与便签关联实现方案
 
 更新：2026-09-12。
-状态：L3d2a已提交（桌面de60450、鸿蒙9fd7038）；L3d2b跨端完整业务服务的隔离S3交换、冲突和恢复自动化通过，见[证据与宿主适配边界](TASK_NOTE_LINK_FULL_SESSION_TESTS.md)。L3d3与L4仍待完成，不升版、不推送。两端采用同一业务与协议语义。
+状态：L3d2b已提交（桌面3b6c022、鸿蒙4c669a9）；L4a关联读取与命令/服务入口完成，见[接口契约与验证](TASK_NOTE_LINK_UI_DATA_ACCESS.md)。L3d3原生/用户环境与L4b-L4d界面仍待完成，不升版、不推送。两端采用同一业务与协议语义。
 权威数据契约见 [TASK_NOTE_LINK_PROTOCOL.md](TASK_NOTE_LINK_PROTOCOL.md)，阶段证据见 [TASK_NOTE_LINK_ROADMAP.md](TASK_NOTE_LINK_ROADMAP.md)。下文未来业务流程是后续设计，不代表已开放。
 
 ## 范围

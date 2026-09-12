@@ -33,6 +33,7 @@ mod sync;
 mod sync_runtime_state;
 mod sync_target;
 mod task_note_link_backup;
+mod task_note_link_commands;
 #[cfg(test)]
 mod task_note_link_operation_tests;
 pub mod task_note_link_operations;
@@ -43,6 +44,7 @@ pub mod task_note_link_sync;
 #[cfg(test)]
 mod task_note_link_tests;
 mod task_note_link_transport;
+mod task_note_link_views;
 mod tray;
 #[cfg(target_os = "linux")]
 mod tray_ksni;
@@ -143,6 +145,10 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            task_note_link_commands::list_task_note_links,
+            task_note_link_commands::get_task_note_link,
+            task_note_link_commands::create_linked_todo,
+            task_note_link_commands::change_task_note_link,
             shortcut_preferences::get_shortcut_preference,
             shortcut_preferences::save_shortcut_preference,
             window_preferences::get_window_preferences,
