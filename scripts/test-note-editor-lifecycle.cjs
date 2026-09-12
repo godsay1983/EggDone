@@ -14,11 +14,13 @@ const harness = `
   let noteDraft = { uuid: 'draft', title: 'title', content: 'body', color: 'default', pinned: false };
   let noteDraftCreated = null, noteDraftCreatePromise = null, noteDraftSaveTimer = null;
   let selectedNoteUuid = null, selectedNote = null, noteNavigationBusy = false, noteAttachmentBusy = false;
+  let linkedRequest = null, linkNotice = '';
   ${functions.map(n => n.getText(ast)).join('\n')}
   return {
     persistNoteDraft, flushAllNoteChanges, closeNoteEditor, ensureNoteForAttachment,
     edit(patch) { noteDraft = { ...noteDraft, ...patch }; },
     busy(value) { noteAttachmentBusy = value; },
+    linking(value) { linkedRequest = value ? { uuid: 'source' } : null; },
     state() { return { noteDraft, noteDraftCreated, selectedNoteUuid, noteNavigationBusy }; }
   };
 `;
@@ -47,6 +49,15 @@ function fixture() {
 let count = 0;
 async function test(name, run) { await run(); count++; console.log('PASS ' + name); }
 (async () => {
+  await test('linked task confirmation blocks leaving without writing a note', async () => {
+    const { h, adds } = fixture();
+    h.linking(true);
+    assert.equal(await h.closeNoteEditor(), false);
+    assert.equal(adds(), 0);
+    assert.equal(h.state().noteDraft.content, 'body');
+    h.linking(false);
+    assert.equal(await h.closeNoteEditor(), true);
+  });
   await test('empty draft and appearance-only edits do not create a record', async () => {
     const { h, adds } = fixture();
     h.edit({ title: '', content: ' ', pinned: true });

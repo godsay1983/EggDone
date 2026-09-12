@@ -1,7 +1,7 @@
 # 任务与便签关联 Roadmap
 
 更新：2026-09-12。
-状态：L3d2b已提交（桌面3b6c022、鸿蒙4c669a9）。L4a双端关联读取模型、命令/服务入口及自动化完成；还没有开放UI。L3d3原生环境与用户数据验收仍待完成。不升版、不推送；既有E6完整人工验收继续保留。
+状态：L4a已提交（桌面9e3bbd2、鸿蒙e42ff54）。L4b双端创建入口、关联任务列表及状态编排开发/自动化完成；有限模拟器入口与取消检查通过，原生确认创建整体流程仍待验收。下一步L4c。L3d3原生环境与用户数据验收、既有E6完整人工验收继续保留。不升版、不推送。
 方案：[TASK_NOTE_LINK_IMPLEMENTATION_PLAN.md](TASK_NOTE_LINK_IMPLEMENTATION_PLAN.md)
 
 每一项双端一起完成、验证后分别用中文提交。先做协议和原子内核，最后开放入口；不得把未通过的原生/跨端测试勾选为完成。
@@ -42,11 +42,11 @@
 - [x] L3d2b 鸿蒙真实SyncService与便签/附件元数据服务、跨端四阶段完整会话交换、真实412及失败恢复，宿主平台适配执行。不是原生文件传输或物理设备验收。
 - [ ] L3d3 物理设备、用户旧库升级、原生文件恢复和用户云端环境验收。
 
-L3a范围见[TASK_NOTE_LINK_SYNC_SNAPSHOT.md](TASK_NOTE_LINK_SYNC_SNAPSHOT.md)，L3b生产接入与自动化证据见[TASK_NOTE_LINK_SYNC_SESSION.md](TASK_NOTE_LINK_SYNC_SESSION.md)。链接网络与备份代码均已接入，无用户关联入口；L3c契约与证据见[TASK_NOTE_LINK_BACKUP_CONTRACT.md](TASK_NOTE_LINK_BACKUP_CONTRACT.md)。真实跨端/设备恢复尚待验收，L3未整体完成。
+L3a范围见[TASK_NOTE_LINK_SYNC_SNAPSHOT.md](TASK_NOTE_LINK_SYNC_SNAPSHOT.md)，L3b生产接入与自动化证据见[TASK_NOTE_LINK_SYNC_SESSION.md](TASK_NOTE_LINK_SYNC_SESSION.md)。链接网络与备份代码均已接入；L3c契约与证据见[TASK_NOTE_LINK_BACKUP_CONTRACT.md](TASK_NOTE_LINK_BACKUP_CONTRACT.md)。真实跨端/设备恢复尚待验收，L3未整体完成。
 
 ## L4 双端 UI
 - [x] L4a 数据接入：按任务/便签读取关联、端点状态与墓碑预期版本；桌面Tauri命令/API、鸿蒙Service复用L2原子操作。共享8组状态、宿主/原生验证见[接口与验证](TASK_NOTE_LINK_UI_DATA_ACCESS.md)。
-- [ ] L4b 从已保存便签创建关联任务、便签关联列表；状态编排、保存保护与同步/提醒/卡片刷新接入。
+- [x] L4b 开发及自动化：从已保存便签创建关联任务、便签关联列表；状态编排、保存保护与同步/提醒/卡片刷新接入。有限模拟器检查与待验收边界见[入口与验证](TASK_NOTE_LINK_NOTE_ENTRY.md)。
 - [ ] L4c 任务打开便签、关联已有内容、解绑和上下文返回。
 - [ ] L4d 完整UI异常、语言/主题/窗口与设备矩阵验收。
 - [ ] 便签创建关联任务、任务打开便签、便签查看关联任务。

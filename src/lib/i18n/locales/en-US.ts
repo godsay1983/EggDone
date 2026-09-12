@@ -2,6 +2,23 @@ import type { TranslationMessage } from "../types";
 import type { zhCN } from "./zh-CN";
 
 export const enUS = {
+  "links.create": "Create linked task",
+  "links.title": "Task title",
+  "links.tasks": "Linked tasks",
+  "links.date": "Task date (optional)",
+  "links.reminder": "Reminder (optional)",
+  "links.loadFailed": "Unable to load linked tasks. Try again.",
+  "links.saveFailed": "Unable to create the task. Check the content and reminder time, then retry.",
+  "links.sourceFailed": "The note could not be saved. Retry saving it first.",
+  "links.created": "Linked task saved on this device.",
+  "links.refreshFailed": "Task created, but the list could not refresh. Reopen the task view; do not create it again.",
+  "links.unavailable": "Content unavailable",
+  "links.thisOnly": "This occurrence only",
+  "links.state.active": "Incomplete",
+  "links.state.completed": "Completed",
+  "links.state.archived": "Archived",
+  "links.state.deleted": "Deleted",
+  "links.state.missing": "Not on this device yet",
   "attachment.state.upload_failed": "Upload failed",
   "attachment.state.download_failed": "Download failed",
   "attachment.state.pending_upload": "Upload pending",

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import NoteTaskLinks from "./NoteTaskLinks.svelte";
   import { languageState, translator, type TranslationKey } from "$lib/i18n";
   import { formatFileSize } from "$lib/i18n/formatters";
   import { localizedErrorMessage } from "$lib/i18n/errors";
@@ -7,6 +8,9 @@
   import { attachmentStatus, attachmentFailureHint } from "$lib/utils/attachmentPresentation";
 
   export let note: Note;
+  export let linkRevision: unknown = 0;
+  export let linkNotice = "";
+  export let onCreateLinked: () => void = () => {};
   export let draft = false;
   export let saving = false;
   export let error: string | null = null;
@@ -252,6 +256,7 @@
         <div class="note-add-menu">
           <button class="action-button" type="button" onclick={() => { addMenuOpen = false; imageInput.click(); }}>{$translator("attachment.addImage")}</button>
           <button class="action-button" type="button" onclick={() => { addMenuOpen = false; attachmentInput.click(); }}>{$translator("attachment.addFile")}</button>
+          <button class="action-button" type="button" disabled={draft || saving} onclick={() => { addMenuOpen = false; onCreateLinked(); }}>{$translator("links.create")}</button>
         </div>
       {/if}
     </div>
@@ -275,6 +280,8 @@
     oninput={changed}
     onpaste={pasteImages}
   ></textarea>
+  {#if linkNotice}<p class="attachment-state-hint" role="status">{linkNotice}</p>{/if}
+  <NoteTaskLinks uuid={draft ? "" : note.uuid} revision={linkRevision} />
   {#if attachments.length > 0}
     <section class="note-attachment-summary" aria-label={$translator("note.attachments")}>
       <button class="note-attachment-summary-heading" type="button" onclick={() => (attachmentManagerOpen = true)}>

@@ -1,6 +1,9 @@
 <script lang="ts">
   import { invoke, isTauri } from "@tauri-apps/api/core";
   import CaptureDialog from "./CaptureDialog.svelte";
+  import LinkedTodoDialog from "./LinkedTodoDialog.svelte";
+  import { createTaskNoteLinkStore } from "$lib/stores/taskNoteLinkStore";
+  import type { LinkedTodoDraft } from "$lib/types/taskNoteLink";
   import { normalizeCapture, captureContent, captureTitle, type CaptureDraft, type CaptureInput } from "$lib/utils/capture";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -274,6 +277,33 @@
     pinsFailure = pinnedViews.failure;
   });
   let selectedNoteUuid: string | null = null;
+  const noteLinkStore = createTaskNoteLinkStore();
+  let linkedRequest: { uuid: string; title: string } | null = null;
+  let linkedRevision = 0;
+  let linkNotice = "";
+  async function openLinkedTask() {
+    if (noteNavigationBusy || noteAttachmentBusy || !selectedNoteUuid) return;
+    noteNavigationBusy = true;
+    linkNotice = "";
+    try {
+      await flushAllNoteChanges();
+      if (selectedNote && !noteDraft) linkedRequest = { uuid: selectedNote.uuid, title: selectedNote.title.slice(0, 100) };
+    } catch { linkNotice = $translator("links.sourceFailed"); }
+    finally { noteNavigationBusy = false; }
+  }
+  async function saveLinkedTask(draft: LinkedTodoDraft) {
+    const result = await noteLinkStore.create(draft, async () => {
+      if (selectedNoteUuid !== draft.note_uuid || !linkedRequest) throw Error("source changed");
+      await flushAllNoteChanges();
+    }, async () => {
+      linkedRequest = null;
+      linkedRevision++;
+      scheduleAutoSync();
+      await todos.refresh();
+      if ($todos.error) throw Error("refresh failed");
+    });
+    linkNotice = $translator(result.refreshFailed ? "links.refreshFailed" : "links.created");
+  }
   let noteNavigationBusy = false;
   let noteDraft: Note | null = null;
   let noteDraftCreated: Note | null = null;
@@ -926,12 +956,13 @@
   }
 
   async function closeNoteEditor(): Promise<boolean> {
-    if (noteNavigationBusy || noteAttachmentBusy) return false;
+    if (noteNavigationBusy || noteAttachmentBusy || linkedRequest) return false;
     noteNavigationBusy = true;
     try {
       await flushAllNoteChanges();
       discardNoteDraft();
       selectedNoteUuid = null;
+      linkNotice = "";
       return true;
     } catch {
       return false;
@@ -2803,9 +2834,16 @@
   {/if}
 
   {#if selectedNote}
+    {#if linkedRequest}
+      <LinkedTodoDialog noteUuid={linkedRequest.uuid} initialTitle={linkedRequest.title}
+        onSave={saveLinkedTask} onCancel={() => linkedRequest = null} />
+    {/if}
     <NoteEditor
       note={selectedNote}
       draft={selectedNote.uuid === NOTE_DRAFT_UUID}
+      linkRevision={[linkedRevision, $notes.items]}
+      {linkNotice}
+      onCreateLinked={() => void openLinkedTask()}
       saving={noteEditorSaving}
       error={noteAttachmentError || $notes.error}
       saveFailed={!!$notes.error && (noteDraft !== null || notes.hasPendingSave())}
