@@ -1,7 +1,18 @@
-param([ValidateRange(1024, 65535)][int]$Port = 18477)
+param(
+    [ValidateRange(1024, 65535)][int]$Port = 18477,
+    [switch]$CrossClientSessions,
+    [string]$HarmonyRoot
+)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 foreach ($command in @('docker', 'cargo')) { $null = Get-Command $command -ErrorAction Stop }
+if ($CrossClientSessions) {
+    $null = Get-Command node -ErrorAction Stop
+    if (-not $HarmonyRoot) { throw 'CrossClientSessions requires the explicit Harmony checkout path' }
+    $HarmonyRoot = (Resolve-Path -LiteralPath $HarmonyRoot).Path
+    $harmonyTest = Join-Path $HarmonyRoot 'scripts/test-full-sync-s3.cjs'
+    if (-not (Test-Path -LiteralPath $harmonyTest)) { throw 'Harmony checkout is missing the full session test' }
+}
 if (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue) { throw 'Port occupied; select another port' }
 $run = [guid]::NewGuid().ToString('N')
 $name = "eggdone-sync-core-$run"
@@ -16,6 +27,29 @@ $oldRun = $env:EGGDONE_NS7_S3_RUN
 $oldPort = $env:EGGDONE_NS7_S3_PORT
 $created = $false
 $cleanupFailed = $false
+
+function Invoke-DesktopTest([string]$Test, [string]$Marker) {
+    $log = Join-Path $logs "$Test.log"
+    Push-Location (Join-Path $root 'src-tauri')
+    try {
+        & cargo test --lib "commands::sync_core_tests::s3_tests::$Test" -- --ignored --exact --nocapture 2>&1 |
+            Out-File -LiteralPath $log -Encoding utf8
+        if ($LASTEXITCODE -ne 0) { throw "Desktop sync core failed; see $log" }
+        $report = Get-Content -LiteralPath $log -Raw
+        if ($report -notmatch 'test result: ok\. 1 passed; 0 failed; 0 ignored;' -or $report -notmatch $Marker) {
+            throw "Expected test did not execute; see $log"
+        }
+    } finally { Pop-Location }
+}
+
+function Invoke-HarmonyPhase([string]$Phase) {
+    $log = Join-Path $logs "harmony-$Phase.log"
+    & node $harmonyTest $Phase 2>&1 | Out-File -LiteralPath $log -Encoding utf8
+    if ($LASTEXITCODE -ne 0) { throw "Harmony host session failed; see $log" }
+    $marker = 'FULL_SESSION_HARMONY_' + $Phase.ToUpperInvariant() + '_OK:'
+    if ((Get-Content -LiteralPath $log -Raw) -notmatch $marker) { throw "Harmony phase did not complete; see $log" }
+}
+
 try {
     $env:EGGDONE_NS7_S3_RUN = $run
     $env:EGGDONE_NS7_S3_PORT = $Port.ToString()
@@ -42,18 +76,15 @@ try {
         Start-Sleep -Milliseconds 500
     }
     if (-not $ready) { throw 'Authenticated S3 readiness timed out' }
-    $log = Join-Path $logs 'desktop-sync-core.log'
     Write-Host "Running the desktop production sync core against isolated S3. Evidence: $logs"
-    Push-Location (Join-Path $root 'src-tauri')
-    try {
-        & cargo test --lib commands::sync_core_tests::s3_tests::isolated_s3_offline_peers_unlink_binary_and_credentials_recovery -- --ignored --exact --nocapture 2>&1 |
-            Out-File -LiteralPath $log -Encoding utf8
-        if ($LASTEXITCODE -ne 0) { throw "Desktop sync core failed; see $log" }
-        $report = Get-Content -LiteralPath $log -Raw
-        if ($report -notmatch 'test result: ok\. 1 passed; 0 failed; 0 ignored;' -or $report -notmatch 'SYNC_CORE_S3_DESKTOP_OK:') {
-            throw "Expected test did not execute; see $log"
-        }
-    } finally { Pop-Location }
+    if ($CrossClientSessions) {
+        Invoke-DesktopTest 'full_session_prepare' 'FULL_SESSION_DESKTOP_PREPARE_OK'
+        Invoke-HarmonyPhase 'exchange'
+        Invoke-DesktopTest 'full_session_verify' 'FULL_SESSION_DESKTOP_VERIFY_OK'
+        Invoke-HarmonyPhase 'verify'
+    } else {
+        Invoke-DesktopTest 'isolated_s3_offline_peers_unlink_binary_and_credentials_recovery' 'SYNC_CORE_S3_DESKTOP_OK:'
+    }
 } finally {
     if ($created) {
         & docker logs $cid 2>&1 | Out-File (Join-Path $logs 'server.log') -Encoding utf8
@@ -70,4 +101,4 @@ try {
     $env:EGGDONE_NS7_S3_PORT = $oldPort
 }
 if ($cleanupFailed) { throw 'Disposable resource cleanup incomplete' }
-Write-Host "Desktop sync core S3 passed; disposable service removed. Evidence: $logs"
+Write-Host "Sync core S3 passed (cross-client host sessions: $CrossClientSessions); disposable service removed. Evidence: $logs"

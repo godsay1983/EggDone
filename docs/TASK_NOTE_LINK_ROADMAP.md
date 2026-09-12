@@ -1,7 +1,7 @@
 # 任务与便签关联 Roadmap
 
 更新：2026-09-12。
-状态：L3d1已提交（桌面6dd3111、鸿蒙7092be2）。L3d2a桌面完整内核及隔离S3测试通过；L3d2b鸿蒙完整会话和跨端交换继续开发。L3d3原生环境与用户数据验收仍待完成，L4尚未开始。不升版、不推送；既有E6完整人工验收继续保留。
+状态：L3d2a已提交（桌面de60450、鸿蒙9fd7038）；L3d2b真实鸿蒙业务服务与桌面内核的隔离S3四阶段交换、冲突及恢复自动化通过。L3d3原生环境与用户数据验收仍待完成，L4尚未开始。不升版、不推送；既有E6完整人工验收继续保留。
 方案：[TASK_NOTE_LINK_IMPLEMENTATION_PLAN.md](TASK_NOTE_LINK_IMPLEMENTATION_PLAN.md)
 
 每一项双端一起完成、验证后分别用中文提交。先做协议和原子内核，最后开放入口；不得把未通过的原生/跨端测试勾选为完成。
@@ -37,9 +37,9 @@
 - [x] L3c 数据备份v3、关联预览、原子恢复与旧备份不复活解绑；双端自动化和手机/平板模拟器各5项原生RDB测试通过，文件选择器/真实数据恢复仍待验收。
 - [ ] L3d 整体：真实S3离线双端创建/解绑、冲突、失败恢复和真实用户旧库升级验收。
 - [x] L3d1 测试接入：隔离S3服务、桌面/鸿蒙原生签名传输、链接仓库合并与墓碑交换；阶段证据和设备结果见[TASK_NOTE_LINK_S3_INTEGRATION.md](TASK_NOTE_LINK_S3_INTEGRATION.md)。不是整应用同步通过。
-- [ ] L3d2 完整SyncService会话的实体优先上传、dirty/ACK、离线双端变更、冲突及恢复；不得仅用传输层用例替代。
+- [x] L3d2 完整SyncService会话自动化：实体优先上传、dirty/ACK、离线双端变更、真实S3冲突及恢复；调用生产业务服务，宿主平台适配边界见[完整内核验证](TASK_NOTE_LINK_FULL_SESSION_TESTS.md)。原生验收属于L3d3。
 - [x] L3d2a 桌面完整同步内核：5项故障/顺序测试及真实S3双桌面实例/文件交换/错误凭据恢复通过，见[完整内核验证](TASK_NOTE_LINK_FULL_SESSION_TESTS.md)。不等于鸿蒙跨端或Tauri外层命令验收。
-- [ ] L3d2b 鸿蒙真实SyncService与便签/附件元数据服务、跨端完整会话交换、冲突和失败恢复。
+- [x] L3d2b 鸿蒙真实SyncService与便签/附件元数据服务、跨端四阶段完整会话交换、真实412及失败恢复，宿主平台适配执行。不是原生文件传输或物理设备验收。
 - [ ] L3d3 物理设备、用户旧库升级、原生文件恢复和用户云端环境验收。
 
 L3a范围见[TASK_NOTE_LINK_SYNC_SNAPSHOT.md](TASK_NOTE_LINK_SYNC_SNAPSHOT.md)，L3b生产接入与自动化证据见[TASK_NOTE_LINK_SYNC_SESSION.md](TASK_NOTE_LINK_SYNC_SESSION.md)。链接网络与备份代码均已接入，无用户关联入口；L3c契约与证据见[TASK_NOTE_LINK_BACKUP_CONTRACT.md](TASK_NOTE_LINK_BACKUP_CONTRACT.md)。真实跨端/设备恢复尚待验收，L3未整体完成。

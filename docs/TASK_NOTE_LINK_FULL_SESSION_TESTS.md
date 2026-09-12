@@ -1,6 +1,25 @@
 # 完整同步内核验证
 
-更新：2026-09-12。所属阶段：E7/L3d2，当前完成桌面子项 L3d2a，双端完整会话阶段尚未完成。
+更新：2026-09-12。所属阶段：E7/L3d2。L3d2a桌面内核与L3d2b跨端完整会话自动化已完成，原生用户环境验收仍在L3d3，不据此认定L3整体通过。
+
+## L3d2b 跨端完整会话
+
+- 桌面L3d2a已提交 `de60450`，鸿蒙文档 `9fd7038`。本轮新增桌面准备/复核阶段及鸿蒙宿主测试，未改生产ArkTS、协议、schema或UI。
+- 四阶段通过：桌面真实内核上传任务/便签/关联/文件；鸿蒙真实SyncService合并离线记录、解绑和修改；桌面真实内核确认墓碑/实体/附件改名并再次修改；全新鸿蒙数据库再次同步并核对最终状态。
+- 鸿蒙加载生产SyncService、SyncDocumentService、NoteSyncDocumentService、NoteAttachmentSyncDocumentService、关联与附件Repository、SyncRuntimeCoordinator及S3SyncClient。没有替换这些业务服务为固定响应。
+- 实际S3条件写冲突：第二个签名请求在原PUT前更新对象，S3返回真实412；一次冲突重新上传任务/便签/关联后成功，两次冲突停止并保留links待同步，下一会话可恢复。核对两轮完整请求顺序与403/412真实响应。
+- 附件元数据读取前注入离线错误，已确认的实体/关联保持确认，附件仍待同步，恢复后清除；实际错误签名返回403，不清除本地修改，恢复凭据后成功。另验证跨SyncService实例互斥、成功/失败记录、错误摘要不含凭据和地址。
+- 宿主适配范围：RDB使用独立Node SQLite；NetworkKit接口由Node HTTP承接真实签名请求；安全存储仅持有公开测试凭据；SHA1使用Node crypto；原生文件读取被显式拒绝，原生时区转换不在本套范围。鸿蒙验证的是附件元数据，不声称验证其原生二进制上传/文件选择器。
+- `cargo test --lib`：253通过、7项隔离测试默认忽略；本轮显式运行新增准备/复核各1项、原单桌面S3模式1项。鸿蒙四阶段中exchange/verify均有完成标记，既有9项关联会话、42项完整会话/配置回归通过。桌面check/build/fmt/check通过。无ArkTS修改，未重新安装设备或将宿主结果标注为原生测试。
+- 最终跨端证据：`C:/Users/CAOZHI~1/AppData/Local/Temp/eggdone-sync-core-3768e1836ee94257901276dded4ae7df`；查看`full_session_prepare.log`、`harmony-exchange.log`、`full_session_verify.log`、`harmony-verify.log`。首轮附件测试的旧时间戳被合并逻辑正确拒绝，改为递增时间戳后重跑通过。
+
+在桌面仓库运行跨端模式：
+
+```powershell
+./scripts/run-sync-core-s3.ps1 -Port 18477 -CrossClientSessions -HarmonyRoot D:/Develop/EggDoneHarmony
+```
+
+同一脚本默认模式仍只运行桌面实例；两种模式均限制随机隔离桶与loopback，完成或失败后清理本轮容器，不影响已有服务。下方L3d2a结果保留为历史证据。
 
 ## 当前结果
 
@@ -27,7 +46,7 @@ cargo test --manifest-path src-tauri/Cargo.toml --lib commands::sync_core_tests
 ## 验证边界与下一步
 
 - 这不是完整客户端 UI/系统凭据仓库/托盘通知的端到端测试。测试调用真实内核并持有同一个运行时锁，但不执行 Tauri 命令外层的凭据读取及成功/失败记录逻辑。
-- 两个桌面实例不等于桌面与鸿蒙。L3d2b 仍须接入鸿蒙真实 SyncService、便签和附件元数据服务，完成与桌面内核的隔离 S3 交换、冲突和恢复测试。
-- 冲突和晚到回执用例使用可控本机 HTTP 故障响应；真实 S3 用例覆盖实际签名、读写、校验和凭据拒绝，不将模拟冲突称为真实云端并发验收。
+- 两个桌面实例本身不等于桌面与鸿蒙；本轮L3d2b另行提供真实鸿蒙业务服务的宿主跨端证据，仍不等于物理设备端到端验收。
+- L3d2a冲突和晚到回执使用可控HTTP故障响应；L3d2b另外验证实际S3条件写冲突。二者都不是用户真实云端环境的并发验收。
 - 尚未验证用户实际旧库、物理设备断网、用户 S3/TLS 环境或原生文件选择器恢复。L3d3 继续保留，不以本轮自动化代替。
-- 无界面、schema、同步协议或版本变化；鸿蒙本轮仅同步文档，未重新构建或安装。尚未开放 L4 关联入口。
+- 无界面、schema、同步协议或版本变化；鸿蒙L3d2a仅同步文档，L3d2b新增宿主测试脚本，未重新构建或安装。尚未开放 L4 关联入口。

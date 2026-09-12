@@ -5,6 +5,116 @@ use s3::{creds::Credentials, region::Region, BucketConfiguration};
 const ACCESS: &str = "eggdone-ns7-test-access";
 const SECRET: &str = "eggdone-ns7-public-test-fixture";
 
+#[test]
+#[ignore = "Use run-sync-core-s3.ps1 -CrossClientSessions with the Harmony peer"]
+fn full_session_prepare() {
+    tauri::async_runtime::block_on(async {
+        let target = bucket(SECRET);
+        let response = Bucket::create_with_path_style(
+            &target.name,
+            target.region.clone(),
+            Credentials::new(Some(ACCESS), Some(SECRET), None, None, None).unwrap(),
+            BucketConfiguration::default(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(response.response_code, 200);
+        let desktop = Client::new(TODO, NOTE);
+        desktop.add_file();
+        let result = desktop.sync(bucket(SECRET)).await.unwrap();
+        assert_eq!(
+            (
+                result.todo_count,
+                result.note_count,
+                result.note_attachment_count
+            ),
+            (1, 1, 1)
+        );
+        assert!(desktop.state().dirty_domains.is_empty());
+        println!("FULL_SESSION_DESKTOP_PREPARE_OK");
+    });
+}
+
+#[test]
+#[ignore = "Requires the Harmony full SyncService exchange phase first"]
+fn full_session_verify() {
+    tauri::async_runtime::block_on(async {
+        let desktop = Client::new(TODO, NOTE);
+        {
+            let mut db = desktop.db.connection.lock().unwrap();
+            let mut doc = links::snapshot(&db).unwrap().document;
+            doc.links[0].updated_at = 200;
+            links::merge(&mut db, &doc).unwrap();
+        }
+        let result = desktop.sync(bucket(SECRET)).await.unwrap();
+        assert_eq!(
+            (
+                result.todo_count,
+                result.note_count,
+                result.note_attachment_count
+            ),
+            (2, 2, 1)
+        );
+        assert!(desktop.state().dirty_domains.is_empty());
+        let snapshot = links::snapshot(&desktop.db.connection.lock().unwrap()).unwrap();
+        assert_eq!(snapshot.revision, snapshot.synced_revision);
+        assert_eq!(snapshot.document.links.len(), 2);
+        assert_eq!(
+            snapshot
+                .document
+                .links
+                .iter()
+                .find(|l| l.todo_uuid == TODO)
+                .unwrap()
+                .deleted_at,
+            Some(300)
+        );
+        assert!(snapshot
+            .document
+            .links
+            .iter()
+            .find(|l| l.todo_uuid == TODO2)
+            .unwrap()
+            .deleted_at
+            .is_none());
+        {
+            let db = desktop.db.connection.lock().unwrap();
+            assert_eq!(
+                db.query_row("SELECT content FROM notes WHERE uuid=?1", [NOTE], |r| {
+                    r.get::<_, String>(0)
+                })
+                .unwrap(),
+                "harmony note revision"
+            );
+            assert_eq!(
+                db.query_row("SELECT title FROM todos WHERE uuid=?1", [TODO2], |r| r
+                    .get::<_, String>(
+                    0
+                ))
+                .unwrap(),
+                "harmony changed task"
+            );
+            assert_eq!(
+                db.query_row(
+                    "SELECT display_name FROM note_attachments WHERE uuid=?1",
+                    [ASSET],
+                    |r| r.get::<_, String>(0)
+                )
+                .unwrap(),
+                "harmony renamed fixture.md"
+            );
+            db.execute(
+                "UPDATE todos SET title='desktop final title',updated_at=400 WHERE uuid=?1",
+                [TODO],
+            )
+            .unwrap();
+        }
+        desktop.sync(bucket(SECRET)).await.unwrap();
+        assert!(desktop.state().dirty_domains.is_empty());
+        println!("FULL_SESSION_DESKTOP_VERIFY_OK");
+    });
+}
+
 fn bucket(secret: &str) -> Box<Bucket> {
     let run = std::env::var("EGGDONE_NS7_S3_RUN").expect("Use scripts/run-sync-core-s3.ps1");
     assert_eq!(run.len(), 32);
