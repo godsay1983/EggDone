@@ -8,6 +8,7 @@ const names = ['openRelatedContent', 'backFromLinkedContent'];
 const methods = ast.statements.filter(n => ts.isFunctionDeclaration(n) && names.includes(n.name?.text));
 assert.equal(methods.length, names.length);
 const body = `let selectedNoteUuid='source', linkedTodoUuid=null, linkHistory=[], linkedTaskEditing=false;
+ let historyOpening=false,historyUuid=null;
  let noteNavigationBusy=false,noteAttachmentBusy=false,linkNavigating=false,linkManager=null,linkedRequest=null,linkNotice='';
  const $notes={items:[{uuid:'source'},{uuid:'target-note'}],error:null};
  const $todos={items:[{uuid:'target-task'}],error:null};

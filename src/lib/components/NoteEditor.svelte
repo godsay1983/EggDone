@@ -17,6 +17,8 @@
   export let onOpenLink: (item: TaskNoteLinkView) => Promise<void> = async () => {};
   export let scrollPositions = new Map<string, number>();
   export let draft = false;
+  export let locked = false;
+  export let onHistory: () => void = () => {};
   export let saving = false;
   export let error: string | null = null;
   export let saveFailed = false;
@@ -62,6 +64,7 @@
   });
 
   function changed() {
+    if (locked) return;
     onChange(note, title, content);
   }
 
@@ -257,6 +260,7 @@
 
 <section
   class="note-editor"
+  inert={locked}
   data-note-color={note.color}
   aria-label={$translator("note.edit")}
   ondragover={(event) => event.preventDefault()}
@@ -341,6 +345,7 @@
         ></button>
       {/each}
     </div>
+    <button class="action-button" type="button" disabled={draft || attachmentBusy} onclick={onHistory}>{$translator("history.title")}</button>
     <button class="action-button" type="button" onclick={() => void onPin(note, !note.pinned)}>{note.pinned ? $translator("note.unpin") : $translator("note.pin")}</button>
     <button class="action-button" data-tone="danger" type="button" onclick={() => void onDelete(note)}>{draft ? $translator("note.discard") : $translator("common.delete")}</button>
   </footer>

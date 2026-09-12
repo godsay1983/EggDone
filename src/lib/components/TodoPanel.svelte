@@ -80,6 +80,7 @@
   } from "$lib/utils/viewPreferences";
   import DataManager from "./DataManager.svelte";
   import TrashDialog from "./TrashDialog.svelte";
+  import NoteHistoryDialog from "./NoteHistoryDialog.svelte";
   import SettingsPanel from "./SettingsPanel.svelte";
   import TodoItem from "./TodoItem.svelte";
   import { refreshRecurrenceRules } from "$lib/stores/recurrenceStore";
@@ -226,6 +227,44 @@
   let showAbout = false;
   let showDataManager = false;
   let showTrash = false;
+  let historyUuid: string | null = null;
+  let historyOpening = false;
+  let historyOpenError = false;
+  let historyEditorRevision = 0;
+  let historyRefreshed = false;
+  async function openNoteHistory() {
+    if (historyOpening || historyUuid || noteNavigationBusy || noteAttachmentBusy || linkNavigating || linkedRequest || linkManager || !selectedNote || noteDraft) return;
+    const uuid = selectedNote.uuid;
+    historyOpening = true; historyRefreshed = false; historyOpenError = false;
+    try {
+      await flushAllNoteChanges();
+      if (notes.hasPendingSave() || $notes.error || selectedNoteUuid !== uuid) throw Error("NOTE_HISTORY_BUSY");
+      historyUuid = uuid;
+    } catch { historyOpenError = true; }
+    finally { historyOpening = false; }
+  }
+  function assertHistoryReady() {
+    if (!historyUuid || selectedNoteUuid !== historyUuid || notes.hasPendingSave() || noteDraft || noteAttachmentBusy) {
+      throw Error("NOTE_HISTORY_BUSY");
+    }
+  }
+  async function refreshHistoryEditor() {
+    await notes.refresh();
+    if ($notes.error || !$notes.items.some(note => note.uuid === historyUuid)) throw Error("NOTE_HISTORY_REFRESH_FAILED");
+    historyRefreshed = true;
+  }
+  async function afterHistoryRestore(changed: boolean) {
+    historyRefreshed = false;
+    if (changed) scheduleAutoSync();
+    await refreshHistoryEditor();
+  }
+  function closeNoteHistory(refreshFailed: boolean) {
+    if (refreshFailed) {
+      // Never return to inputs that still contain text from before the committed restore.
+      selectedNoteUuid = null; linkHistory = []; linkNotice = "";
+    } else if (historyRefreshed) historyEditorRevision++;
+    historyUuid = null;
+  }
   let trashOpening = false;
   async function openTrash() {
     if (showTrash || trashOpening || noteNavigationBusy || noteAttachmentBusy) return;
@@ -314,6 +353,7 @@
   $: if (linkedTodoUuid && !linkedTodo) linkedTaskEditing = false;
 
   async function openRelatedContent(item: TaskNoteLinkView, scope: LinkScope) {
+    if (historyOpening || historyUuid) throw Error("LINK_BUSY");
     if (linkNavigating || noteNavigationBusy || noteAttachmentBusy || linkedTaskEditing) throw Error("LINK_BUSY");
     linkNavigating = true;
     try {
@@ -339,6 +379,7 @@
     } finally { linkNavigating = false; }
   }
   async function backFromLinkedContent(): Promise<boolean> {
+    if (historyOpening || historyUuid) return false;
     if (!linkHistory.length || linkNavigating || linkedTaskEditing || noteAttachmentBusy || linkManager || linkedRequest) return false;
     linkNavigating = true;
     try {
@@ -1047,6 +1088,8 @@
   }
 
   function updateNote(note: Note, nextTitle: string, content: string) {
+    if (historyOpening || historyUuid) return;
+    historyOpenError = false;
     if (note.uuid === NOTE_DRAFT_UUID && noteDraft) {
       noteDraft = { ...noteDraft, title: nextTitle, content };
       scheduleNoteDraftSave();
@@ -1056,6 +1099,7 @@
   }
 
   async function closeNoteEditor(): Promise<boolean> {
+    if (historyOpening || historyUuid) return false;
     if (linkHistory.length) return backFromLinkedContent();
     if (noteNavigationBusy || noteAttachmentBusy || linkedRequest || linkManager) return false;
     noteNavigationBusy = true;
@@ -1063,6 +1107,7 @@
       await flushAllNoteChanges();
       discardNoteDraft();
       selectedNoteUuid = null;
+      historyOpenError = false;
       linkNotice = "";
       return true;
     } catch {
@@ -1800,6 +1845,7 @@
   }
 
   function handlePanelKeydown(event: KeyboardEvent) {
+    if (historyOpening || historyUuid) return;
     if (captureRequest) return;
     if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLocaleLowerCase() === "n") {
       event.preventDefault();
@@ -2970,8 +3016,10 @@
       <LinkedTodoDialog noteUuid={linkedRequest.uuid} initialTitle={linkedRequest.title}
         onSave={saveLinkedTask} onCancel={() => linkedRequest = null} />
     {/if}
-    {#key selectedNote.uuid}
+    {#key selectedNote.uuid + ':' + historyEditorRevision}
     <NoteEditor
+      locked={historyOpening || historyUuid !== null}
+      onHistory={() => void openNoteHistory()}
       note={selectedNote}
       draft={selectedNote.uuid === NOTE_DRAFT_UUID}
       linkRevision={[linkedRevision, $notes.items]}
@@ -2981,7 +3029,7 @@
       onOpenLink={item => openRelatedContent(item, "note")}
       scrollPositions={noteEditorScrollPositions}
       saving={noteEditorSaving}
-      error={noteAttachmentError || $notes.error}
+      error={historyOpenError ? $translator("history.saveFailed") : noteAttachmentError || $notes.error}
       saveFailed={!!$notes.error && (noteDraft !== null || notes.hasPendingSave())}
       onChange={updateNote}
       onDone={closeNoteEditor}
@@ -3432,6 +3480,10 @@
 
 {#if showTrash}
   <TrashDialog onClose={() => showTrash = false} afterCommit={refreshAfterTrash} />
+{/if}
+{#if historyUuid}
+  <NoteHistoryDialog uuid={historyUuid} beforeRestore={assertHistoryReady}
+    afterRestore={afterHistoryRestore} onRefresh={refreshHistoryEditor} onClose={closeNoteHistory} />
 {/if}
 
 {#if deletedNote}
