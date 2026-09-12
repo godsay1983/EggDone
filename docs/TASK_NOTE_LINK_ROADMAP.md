@@ -63,6 +63,8 @@ L3a范围见[TASK_NOTE_LINK_SYNC_SNAPSHOT.md](TASK_NOTE_LINK_SYNC_SNAPSHOT.md)�
 - [ ] 中英文、亮暗、窄桌面、手机平板/大字体/键盘，附件布局不退化。
 
 ## L5 发布验收
+- [x] L5a 发布资料草案：汇总双端未发布 changelog，补齐版本识别、旧端混用、v3 备份、本机历史及不可降级说明，见 [升级与兼容指南](EXPERIENCE_UPGRADE_GUIDE.md)。未分配正式版本，不代表以下发布验收完成。
+- 2026-09-13 本轮检查：桌面 release:check 通过（前端 306 项、Rust 266 项，11 项外部 S3 按配置忽略）；鸿蒙关联备份 21 场景、历史 15 组及回收站 11 组宿主用例、国际化检查和五份共享 fixture 对照通过。本轮没有重跑鸿蒙原生测试或构建最终包，不关闭 LocalTest/ohosTest、真机和升级门槛。
 - [ ] 桌面 release:check、鸿蒙 LocalTest/ohosTest/构建与共享 fixtures。
 - [ ] 原生设备、跨端真实同步和升级后数据保留人工验收。
 - [ ] 发布说明、版本、handoff，双端兼容版本就绪后才发布。

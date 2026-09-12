@@ -153,6 +153,7 @@ E6d已本地提交：桌面8c42ba9、鸿蒙1af2bf3。本轮按用户要求继续
 - [x] L4d1 双端保存/返回/图片异步边界修复与桌面100%/150%缩放矩阵完成，详见[异常验证](TASK_NOTE_LINK_UI_REGRESSION.md)；下一步L4d2，原生完整矩阵及L3d3继续保留。
 - [ ] L4d2完整原生矩阵；第一批桌面8组原生回归、鸿蒙真实Markdown导入/关联往返/平板下载已验证，见[原生运行证据](TASK_NOTE_LINK_NATIVE_RUNTIME.md)。不关闭其余设备、异常或用户验收项。
 - [ ] L5 原生设备、升级、双端兼容版本与发布资料。
+- [x] L5a 发布资料草案：双端未发布 changelog 与 [升级/兼容指南](EXPERIENCE_UPGRADE_GUIDE.md) 已补齐；桌面 release:check、鸿蒙专项宿主回归及共享 fixture 对照通过。正式版本、最终包、handoff 和完整用户环境验收仍待完成，不关闭 L5。
 - 沿用 [TASK_NOTE_LINK_ROADMAP.md](TASK_NOTE_LINK_ROADMAP.md)，本表只汇总，不另造协议或重复勾选。
 
 ## E8：恢复与搜索
