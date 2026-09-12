@@ -50,9 +50,10 @@
 </dialog>
 
 <style>
-  dialog { --link-border: #d5c8ac; width: min(480px, calc(100% - 24px)); padding: 16px; max-height: calc(100dvh - 24px); border: 1px solid var(--link-border); border-radius: 8px; background: #fffaf0; color: #463e31; }
+  dialog { --link-border: #d5c8ac; width: min(480px, calc(100% - 24px)); padding: 16px; max-height: calc(100% - 24px); box-sizing: border-box; border: 1px solid var(--link-border); border-radius: 8px; background: #fffaf0; color: #463e31; }
+  dialog[open] { display: flex; flex-direction: column; }
   dialog::backdrop { background: #0006; }
-  form { display: flex; flex-direction: column; gap: 12px; max-height: calc(100dvh - 58px); }
+  form { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
   h2 { font-size: 18px; margin: 0; }
   .fields { min-height: 0; overflow: auto; display: grid; gap: 12px; }
   label { display: grid; gap: 6px; font-size: 14px; }

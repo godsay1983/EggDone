@@ -34,7 +34,7 @@ import {mount,unmount} from 'svelte';
 import Dialog from '/src/lib/components/LinkManagerDialog.svelte';
 import {setLanguageMode} from '/src/lib/i18n/index.ts';
 import '/src/app.css';
-const p=new URLSearchParams(location.search);setLanguageMode(p.get('lang'));document.documentElement.dataset.theme=p.get('theme');
+const p=new URLSearchParams(location.search);setLanguageMode(p.get('lang'));document.documentElement.dataset.theme=p.get('theme');document.documentElement.style.zoom=p.get('scale')||'1';
 const scope=p.get('scope');window.calls=[];window.events=[];window.managerClosed=false;window.rows={};window.failRefresh=false;window.failSource=false;window.failLoad=p.has('failLoad');
 for(const target of ['existing','candidate']){
  const todo_uuid=scope==='todo'?'source':target,note_uuid=scope==='todo'?target:'source',key=todo_uuid+':'+note_uuid;
@@ -53,8 +53,8 @@ let browser;
 try{
  await server.listen();browser=await chromium.launch({headless:true,channel:'msedge'});const page=await browser.newPage();const errors=[];
  page.on('pageerror',e=>{errors.push(e.message);console.error('Browser:',e.message);});page.setDefaultTimeout(15000);let count=0;
- for(const lang of ['zh-CN','en-US'])for(const theme of ['light','dark'])for(const scope of ['todo','note'])for(const size of [{width:320,height:430},{width:480,height:720},{width:1000,height:760}]){
-  await page.setViewportSize(size);await page.goto(server.resolvedUrls.local[0]+'__manager?lang='+lang+'&theme='+theme+'&scope='+scope);
+ for(const lang of ['zh-CN','en-US'])for(const theme of ['light','dark'])for(const scope of ['todo','note'])for(const size of [{width:320,height:430},{width:480,height:720},{width:1000,height:760}])for(const scale of [1,1.5]){
+  await page.setViewportSize(size);await page.goto(server.resolvedUrls.local[0]+'__manager?lang='+lang+'&theme='+theme+'&scope='+scope+'&scale='+scale);
   await page.locator('.candidate').waitFor();
   const confirm=()=>page.getByRole('button',{name:lang==='zh-CN'?'确认':'Confirm',exact:true});
   const cancel=()=>page.getByRole('button',{name:lang==='zh-CN'?'取消':'Cancel',exact:true});
@@ -76,7 +76,7 @@ try{
   assert.equal(await page.locator('dialog header p').textContent(),'Source title');
   assert.ok(await page.locator('dialog').evaluate(el=>el.scrollWidth<=el.clientWidth),'dialog overflow');
   for(const button of await page.locator('footer button').all()){const b=await button.boundingBox();assert.ok(b.x>=0&&b.y>=0&&b.x+b.width<=size.width&&b.y+b.height<=size.height,'footer outside viewport');}
-  if(size.width===320)await page.screenshot({path:resolve(output,lang+'-'+theme+'-'+scope+'.png')});
+  if(size.width===320)await page.screenshot({path:resolve(output,lang+'-'+theme+'-'+scope+'-'+scale+'.png')});
   await page.keyboard.press('Escape');await page.waitForFunction(()=>window.managerClosed);count++;
  }
  await page.goto(server.resolvedUrls.local[0]+'__manager?lang=en-US&theme=light&scope=todo&failLoad=1');

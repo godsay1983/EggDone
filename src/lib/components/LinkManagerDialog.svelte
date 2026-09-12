@@ -95,7 +95,7 @@
 </dialog>
 
 <style>
-  dialog { width: min(560px, calc(100% - 24px)); max-height: calc(100dvh - 24px); padding: 16px; border: 1px solid #d5c8ac; border-radius: 8px; background: #fffaf0; color: #463e31; }
+  dialog { width: min(560px, calc(100% - 24px)); max-height: calc(100% - 24px); box-sizing: border-box; padding: 16px; border: 1px solid #d5c8ac; border-radius: 8px; background: #fffaf0; color: #463e31; }
   dialog[open] { display: flex; flex-direction: column; gap: 12px; }
   dialog::backdrop { background: #0006; }
   h2 { margin: 0; font-size: 18px; } h3 { font-size: 15px; margin: 12px 0 8px; }

@@ -30,7 +30,7 @@ import Dialog from '/src/lib/components/LinkedTodoDialog.svelte';
 import {createTaskNoteLinkStore} from '/src/lib/stores/taskNoteLinkStore.ts';
 import {setLanguageMode} from '/src/lib/i18n/index.ts';
 import '/src/app.css';
-const p=new URLSearchParams(location.search); setLanguageMode(p.get('lang')); document.documentElement.dataset.theme=p.get('theme');
+const p=new URLSearchParams(location.search); setLanguageMode(p.get('lang')); document.documentElement.dataset.theme=p.get('theme');document.documentElement.style.zoom=p.get('scale')||'1';
 window.calls=[];window.cancelled=0;window.saved=0;window.failSave=false;window.failLoad=false;
 const workflow=createTaskNoteLinkStore();
 const note={uuid:'123e4567-e89b-42d3-a456-426614174001',title:'Source note',content:'Keep this content',color:'default',pinned:false};
@@ -58,9 +58,9 @@ try{
   const page=await browser.newPage(); const errors=[];
   page.on('pageerror',e=>{errors.push(e.message);console.error('Browser:',e.message);}); page.setDefaultTimeout(15000);
   let count=0;
-  for(const lang of ['zh-CN','en-US'])for(const theme of ['light','dark'])for(const size of [{width:320,height:430},{width:480,height:720},{width:1000,height:760}]){
+  for(const lang of ['zh-CN','en-US'])for(const theme of ['light','dark'])for(const size of [{width:320,height:430},{width:480,height:720},{width:1000,height:760}])for(const scale of [1,1.5]){
     await page.setViewportSize(size);
-    await page.goto(server.resolvedUrls.local[0]+'__links?lang='+lang+'&theme='+theme);
+    await page.goto(server.resolvedUrls.local[0]+'__links?lang='+lang+'&theme='+theme+'&scale='+scale);
     await page.waitForFunction(()=>window.ready);
     const add=page.locator('.attachment-trigger'); await add.click();
     await page.locator('.note-add-menu button').nth(2).click();
@@ -88,9 +88,9 @@ try{
     await page.locator('.note-task-links button[aria-expanded]').click();
     assert.equal(await page.locator('.note-task-links li').count(),5);
     assert.ok(await page.locator('.note-task-links').evaluate(el=>el.scrollWidth<=el.clientWidth),'links must wrap');
-    if(size.width===320)await page.screenshot({path:resolve(output,lang+'-'+theme+'-list.png')});
+    if(size.width===320)await page.screenshot({path:resolve(output,lang+'-'+theme+'-'+scale+'-list.png')});
     await add.click(); await page.locator('.note-add-menu button').nth(2).click();
-    if(size.width===320)await page.screenshot({path:resolve(output,lang+'-'+theme+'-dialog.png')});
+    if(size.width===320)await page.screenshot({path:resolve(output,lang+'-'+theme+'-'+scale+'-dialog.png')});
     count++;
   }
   const dst=await browser.newPage({timezoneId:'America/New_York'});

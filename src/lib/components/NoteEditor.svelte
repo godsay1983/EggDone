@@ -47,6 +47,7 @@
   let viewerUrl = "";
   let viewerLoading = false;
   let viewerError = "";
+  let viewerRequest = 0;
   let fileActionError = "";
   let attachmentManagerOpen = false;
   let addMenuOpen = false;
@@ -57,6 +58,7 @@
   onMount(() => {
     titleInput.focus();
     titleInput.select();
+    return closeViewer;
   });
 
   function changed() {
@@ -133,20 +135,26 @@
   }
 
   async function openAttachment(attachment: NoteAttachment) {
+    closeViewer();
+    const request = ++viewerRequest;
     viewerLoading = true;
     viewerError = "";
     viewerAttachment = attachment;
     try {
-      viewerUrl = await onOpenAttachment(attachment);
+      const url = await onOpenAttachment(attachment);
+      if (request !== viewerRequest) { URL.revokeObjectURL(url); return; }
+      viewerUrl = url;
     } catch (reason) {
-      viewerError = localizedErrorMessage(reason);
+      if (request === viewerRequest) viewerError = localizedErrorMessage(reason);
     } finally {
-      viewerLoading = false;
+      if (request === viewerRequest) viewerLoading = false;
     }
   }
 
   function closeViewer() {
+    viewerRequest++;
     if (viewerUrl) URL.revokeObjectURL(viewerUrl);
+    viewerLoading = false;
     viewerUrl = "";
     viewerError = "";
     viewerAttachment = null;
@@ -161,6 +169,10 @@
       event.preventDefault();
       event.stopPropagation();
       attachmentManagerOpen = false;
+    } else if (addMenuOpen && event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      addMenuOpen = false;
     }
   }
 
@@ -200,6 +212,11 @@
 </script>
 
 <style>
+  .note-color-picker button {
+    flex: 0 0 19px;
+    border: 1px solid var(--note-border);
+    background: var(--note-bg);
+  }
   .attachment-state-hint {
     margin: 4px 6px 8px;
     font-size: 11px;

@@ -148,6 +148,7 @@ E6d已本地提交：桌面8c42ba9、鸿蒙1af2bf3。本轮按用户要求继续
 - [x] L4b 双端便签创建关联任务、关联列表、保存与刷新编排；自动化和有限模拟器检查通过，原生创建整体流程仍待验收，见[入口与边界](TASK_NOTE_LINK_NOTE_ENTRY.md)。
 - [x] L4c1 双端选择已有任务/便签、确认解绑与版本保护，已提交桌面0651dcb、鸿蒙85849cc；完整原生验收继续保留，见[管理入口与边界](TASK_NOTE_LINK_MANAGEMENT.md)。
 - [x] L4c2 双向打开与逐层返回、来源保存及上下文保护，开发/自动化及有限模拟器检查完成，见[导航与验证](TASK_NOTE_LINK_NAVIGATION.md)。下一步L4d，不关闭L3d3及既有人工验收门槛。
+- [x] L4d1 双端保存/返回/图片异步边界修复与桌面100%/150%缩放矩阵完成，详见[异常验证](TASK_NOTE_LINK_UI_REGRESSION.md)；下一步L4d2，原生完整矩阵及L3d3继续保留。
 - [ ] L5 原生设备、升级、双端兼容版本与发布资料。
 - 沿用 [TASK_NOTE_LINK_ROADMAP.md](TASK_NOTE_LINK_ROADMAP.md)，本表只汇总，不另造协议或重复勾选。
 

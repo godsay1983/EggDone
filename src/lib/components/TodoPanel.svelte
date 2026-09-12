@@ -1085,7 +1085,7 @@
       selectedNoteUuid = null;
       return;
     }
-    notes.cancelPending();
+    await flushAllNoteChanges();
     deletedNote = await notes.remove(note);
     selectedNoteUuid = null;
     if (noteUndoTimer) clearTimeout(noteUndoTimer);
