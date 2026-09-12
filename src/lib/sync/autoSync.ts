@@ -229,6 +229,7 @@ async function performSyncWithRetry(): Promise<ManualSyncResult> {
       const result = await syncNow();
       if (!pollState.isGenerationCurrent(generation)) throw new Error("RECURRENCE_CONFIG_CHANGED");
       if (result.recurrenceRemoteToken !== undefined) pollState.acknowledgeRules(generation, result.recurrenceRemoteToken);
+      if (result.linkRemoteToken !== undefined) pollState.acknowledgeLinks(generation, result.linkRemoteToken);
       const cleanupNotice = result.message.includes("远端附件");
       let snapshot: SyncRuntimeSnapshot | null = null;
       try {
@@ -286,6 +287,7 @@ async function checkRemoteAndSync() {
     if (!pollState.isCurrent(ticket) || !enabled || !foreground || running) return;
     const changed =
       pollState.rulesChanged(remote.recurrenceToken) ||
+      pollState.linksChanged(remote.linkToken) ||
       !remoteStateInitialized ||
       remote.todoObjectExists !== (knownTodoRemoteEtag !== null) ||
       remote.todoEtag !== knownTodoRemoteEtag ||
@@ -405,7 +407,7 @@ function isRetryable(reason: unknown) {
 }
 
 function isConflict(message: string) {
-  return message.includes("远端文件持续发生变化") || message.toLowerCase().includes("recurrence_sync_conflict");
+  return message.includes("远端文件持续发生变化") || message.toLowerCase().includes("recurrence_sync_conflict") || message.toLowerCase().includes("task_note_link_sync_conflict");
 }
 
 function clearDebounce() {

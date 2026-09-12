@@ -162,6 +162,7 @@
   }
 
   function domainLabel(domain: SyncDirtyDomain) {
+    if (domain === "links") return $translator("sync.domainLinks");
     if (domain === "todos") return $translator("sync.domainTodos");
     if (domain === "notes") return $translator("sync.domainNotes");
     return $translator("sync.domainAttachments");

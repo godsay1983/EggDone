@@ -22,9 +22,11 @@ struct Session<'a> {
     prepared: PreparedManualSync,
     rules: RecurrenceTransport,
     initial: Option<RemotePair>,
+    uploaded: Option<sync::SyncDocument>,
 }
 
 pub(crate) struct TodoRunResult {
+    pub uploaded: sync::SyncDocument,
     pub recurrence_token: Option<String>,
     pub count: usize,
     pub conflict_retried: bool,
@@ -41,6 +43,7 @@ pub(crate) async fn sync_todos(
         prepared,
         rules,
         initial: None,
+        uploaded: None,
     };
     port.check()?;
     let todos = s3_sync::download_remote(&port.prepared).await?;
@@ -82,6 +85,9 @@ pub(crate) async fn sync_todos(
             sync_runtime_state::retain_todos_pending(&db)?;
         }
         return Ok(TodoRunResult {
+            uploaded: port
+                .uploaded
+                .ok_or("TASK_NOTE_LINK_ENTITY_RECEIPT_MISSING")?,
             recurrence_token: Some(format!("etag:{}", result.rule_etag)),
             count: sync::build_document(&db, crate::db::now_millis())?
                 .todos
@@ -111,6 +117,7 @@ pub async fn sync_pair(
         prepared,
         rules,
         initial: None,
+        uploaded: None,
     })
     .await
 }
@@ -151,6 +158,7 @@ impl Session<'_> {
                     recurrence_token: None,
                     count: document.todos.len(),
                     conflict_retried: attempt > 0,
+                    uploaded: document,
                 });
             }
             if attempt == 0 {
@@ -224,7 +232,11 @@ impl RecurrenceSyncPort for Session<'_> {
         self.check()?;
         let result = s3_sync::upload_document(&self.prepared, &document, &remote.todos).await?;
         self.check()?;
-        Ok(matches!(result, s3_sync::UploadOutcome::Success))
+        let success = matches!(result, s3_sync::UploadOutcome::Success);
+        if success {
+            self.uploaded = Some(document);
+        }
+        Ok(success)
     }
     async fn acknowledge_todos(&mut self, revision: i64) -> Result<bool, String> {
         let db = self
@@ -385,6 +397,7 @@ mod tests {
             prepared,
             rules,
             initial: None,
+            uploaded: None,
         }
     }
 
@@ -490,7 +503,7 @@ mod tests {
     #[test]
     fn polling_rejects_configuration_changes_at_every_head_boundary() {
         tauri::async_runtime::block_on(async {
-            for boundary in 0..4 {
+            for boundary in 0..5 {
                 for status in [200, 503] {
                     let database = std::sync::Arc::new(Database {
                         connection: Mutex::new(recurrence_snapshot::tests::setup(

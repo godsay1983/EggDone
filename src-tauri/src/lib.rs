@@ -36,10 +36,12 @@ mod sync_target;
 mod task_note_link_operation_tests;
 pub mod task_note_link_operations;
 pub mod task_note_link_protocol;
+mod task_note_link_session;
 pub mod task_note_link_store;
 pub mod task_note_link_sync;
 #[cfg(test)]
 mod task_note_link_tests;
+mod task_note_link_transport;
 mod tray;
 #[cfg(target_os = "linux")]
 mod tray_ksni;

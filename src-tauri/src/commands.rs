@@ -10,7 +10,7 @@ use crate::{
     db::{device_id, now_millis, Database},
     i18n::{AppLocale, I18nState},
     note_asset_store::{validate_safe_file_metadata, NoteAssetStore, NoteAttachmentCacheStats},
-    note_attachment_sync, note_attachments, note_sync,
+    note_attachment_sync, note_attachments,
     notes::{self, Note},
     reminders,
     s3_sync::{
@@ -1341,54 +1341,12 @@ async fn sync_now_inner(
     asset_store: State<'_, NoteAssetStore>,
     prepared: &s3_sync::PreparedManualSync,
 ) -> Result<ManualSyncResult, String> {
-    let todo = crate::recurrence_sync_session::sync_todos(&database, prepared.clone()).await?;
+    let entities = crate::task_note_link_session::run(&database, prepared).await?;
+    let todo = entities.todo;
     let todo_count = todo.count;
-    let todo_conflict_retried = todo.conflict_retried;
+    let entity_conflict_retried = entities.conflict_retried;
+    let note_count = entities.note_count;
     ensure_sync_target(&database, prepared)?;
-
-    let mut note_remote = s3_sync::download_note_remote(&prepared)
-        .await
-        .map_err(|error| format!("便签同步失败：{error}"))?;
-    let mut note_conflict_retried = false;
-    let note_count = loop {
-        let (merged, revision) = {
-            let mut connection = lock_database(&database)?;
-            prepared.require_current(&connection)?;
-            let document = match &note_remote.document {
-                Some(document) => {
-                    note_sync::merge_remote_document(&mut connection, document, now_millis())?
-                }
-                None => note_sync::build_document(&connection, now_millis())?,
-            };
-            (
-                document,
-                sync_runtime_state::domain_revision(&connection, SyncDomain::Notes)?,
-            )
-        };
-        ensure_sync_target(&database, prepared)?;
-        match s3_sync::upload_note_document(&prepared, &merged, &note_remote)
-            .await
-            .map_err(|error| format!("便签同步失败：{error}"))?
-        {
-            UploadOutcome::Success => {
-                let connection = lock_database(&database)?;
-                prepared.require_current(&connection)?;
-                sync_runtime_state::mark_domain_synced(&connection, SyncDomain::Notes, revision)?;
-                let _ = app.emit_to("main", "notes-changed", ());
-                break merged.notes.len();
-            }
-            UploadOutcome::Conflict if !note_conflict_retried => {
-                ensure_sync_target(&database, prepared)?;
-                note_conflict_retried = true;
-                note_remote = s3_sync::download_note_remote(&prepared)
-                    .await
-                    .map_err(|error| format!("便签同步失败：{error}"))?;
-            }
-            UploadOutcome::Conflict => {
-                return Err("便签远端文件持续发生变化，已停止上传并保留本地数据".to_string());
-            }
-        }
-    };
     let pending_attachments = {
         let connection = lock_database(&database)?;
         prepared.require_current(&connection)?;
@@ -1545,14 +1503,14 @@ async fn sync_now_inner(
     ensure_sync_target(&database, prepared)?;
     let state = s3_sync::get_remote_state(&prepared, &database).await.ok();
     ensure_sync_target(&database, prepared)?;
-    let conflict_retried =
-        todo_conflict_retried || note_conflict_retried || attachment_conflict_retried;
+    let conflict_retried = entity_conflict_retried || attachment_conflict_retried;
     let sync_message = if conflict_retried {
         "检测到远端更新，重新合并后同步完成".to_string()
     } else {
         "任务、便签和附件同步完成".to_string()
     };
     Ok(ManualSyncResult {
+        link_remote_token: entities.link_token,
         recurrence_remote_token: todo.recurrence_token,
         message: cleanup_summary.append_to(sync_message),
         todo_count,

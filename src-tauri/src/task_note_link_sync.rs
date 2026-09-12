@@ -134,6 +134,28 @@ pub fn acknowledge(
     if etag.trim().is_empty() || etag.len() > 4096 || etag.chars().any(char::is_control) {
         return Err("TASK_NOTE_LINK_INVALID_ETAG".into());
     }
+    acknowledge_value(db, snapshot, Some(etag))
+}
+
+/// A successful GET 404 can acknowledge an empty local domain without creating an empty object.
+pub(crate) fn acknowledge_missing(
+    db: &mut Connection,
+    snapshot: &LinkUploadSnapshot,
+) -> Result<bool, String> {
+    if !protocol::parse_document(&snapshot.links_json)?
+        .links
+        .is_empty()
+    {
+        return Err("TASK_NOTE_LINK_NOT_EMPTY".into());
+    }
+    acknowledge_value(db, snapshot, None)
+}
+
+fn acknowledge_value(
+    db: &mut Connection,
+    snapshot: &LinkUploadSnapshot,
+    etag: Option<&str>,
+) -> Result<bool, String> {
     let tx = db
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(db_error)?;

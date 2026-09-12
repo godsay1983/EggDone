@@ -258,6 +258,36 @@ function deferred<T>() {
 }
 
 describe("independent rule polling", () => {
+  it("uses link PUT receipt and detects link-only peer changes", async () => {
+    vi.useFakeTimers(); configureAutoSync(enabledSettings);
+    vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue({ ...remoteProbe(), linkToken: 'missing' });
+    vi.mocked(syncApi.syncNow).mockResolvedValue({ ...syncResult(), linkRemoteToken: 'etag:"own-link"' });
+    setAutoSyncForeground(true); await vi.advanceTimersByTimeAsync(0);
+    vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue({ ...remoteProbe(), linkToken: 'etag:"own-link"' });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(1);
+    vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue({ ...remoteProbe(), linkToken: 'etag:"peer-link"' });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(2);
+  });
+  it("does not acknowledge a link HEAD when the upload receipt is stale", async () => {
+    vi.useFakeTimers(); configureAutoSync(enabledSettings);
+    vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue({ ...remoteProbe(), linkToken: 'etag:"link"' });
+    vi.mocked(syncApi.syncNow).mockResolvedValue(syncResult());
+    setAutoSyncForeground(true); await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(2);
+  });
+  it("retries link conflict without consuming its remote observation", async () => {
+    vi.useFakeTimers(); configureAutoSync(enabledSettings);
+    vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue({ ...remoteProbe(), linkToken: 'missing' });
+    vi.mocked(syncApi.syncNow).mockRejectedValueOnce(new Error('TASK_NOTE_LINK_SYNC_CONFLICT'))
+      .mockResolvedValue({ ...syncResult(), linkRemoteToken: 'missing' });
+    setAutoSyncForeground(true); await vi.advanceTimersByTimeAsync(0);
+    expect(get(syncStatus).kind).toBe('conflict');
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(2);
+  });
   it("uses the PUT receipt and detects a later peer write", async () => {
     vi.useFakeTimers(); configureAutoSync(enabledSettings);
     vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue(remoteProbe('etag:"before"'));

@@ -1,7 +1,7 @@
 # 任务与便签关联实现方案
 
 更新：2026-09-12。
-状态：L2 已提交（桌面22ca101、鸿蒙e1f1c18）。本轮 L3a 原子快照、回执保护、删除协调和配置失效完成，当前增量未提交，见 [L3a实现与证据](TASK_NOTE_LINK_SYNC_SNAPSHOT.md)。L3b 网络会话、L3c 备份恢复、L3d 真实跨端验收、L4 UI 尚待实现或验证。两端采用同一业务与协议语义。
+状态：L3a 已提交（桌面2342edb、鸿蒙eba3c9e）。L3b 生产会话、独立条件传输和探测、状态汇总与回执保护已实现，当前增量未提交，见[L3b实现与证据](TASK_NOTE_LINK_SYNC_SESSION.md)。下一步 L3c 备份恢复，L3d 真实跨端验收和 L4 UI 继续保留。两端采用同一业务与协议语义。
 权威数据契约见 [TASK_NOTE_LINK_PROTOCOL.md](TASK_NOTE_LINK_PROTOCOL.md)，阶段证据见 [TASK_NOTE_LINK_ROADMAP.md](TASK_NOTE_LINK_ROADMAP.md)。下文未来业务流程是后续设计，不代表已开放。
 
 ## 范围

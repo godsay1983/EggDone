@@ -515,6 +515,7 @@ export const zhCN = {
   "sync.never": "尚无",
   "sync.domainTodos": "任务",
   "sync.domainNotes": "便签",
+  "sync.domainLinks": "任务便签关联",
   "sync.domainAttachments": "附件",
   "sync.runtimeNever": "尚未同步",
   "sync.runtimeSuccess": "成功",

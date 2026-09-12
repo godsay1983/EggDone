@@ -61,17 +61,23 @@ pub fn get_snapshot(connection: &Connection) -> Result<SyncRuntimeSnapshot, Stri
         .query_row(
             "SELECT schema_version, last_attempt_at, last_success_at, dirty_since,
                     dirty_domains, last_result, last_error_code, last_error_message,
-                    pending_attachment_count, updated_at
+                    pending_attachment_count, updated_at,
+                    (SELECT revision>synced_revision FROM task_note_link_sync_state WHERE id=1)
              FROM sync_runtime_state WHERE id = ?1",
             params![STATE_ID],
             |row| {
                 let dirty_json: String = row.get(4)?;
+                let mut domains: Vec<String> =
+                    serde_json::from_str(&dirty_json).unwrap_or_default();
+                if row.get::<_, bool>(10)? {
+                    domains.push("links".into());
+                }
                 Ok(SyncRuntimeSnapshot {
                     schema_version: row.get(0)?,
                     last_attempt_at: row.get(1)?,
                     last_success_at: row.get(2)?,
                     dirty_since: row.get(3)?,
-                    dirty_domains: serde_json::from_str(&dirty_json).unwrap_or_default(),
+                    dirty_domains: domains,
                     last_result: row.get(5)?,
                     last_error_code: row.get(6)?,
                     last_error_message: row.get(7)?,
