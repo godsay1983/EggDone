@@ -79,6 +79,7 @@
     type DefaultListViewMode,
   } from "$lib/utils/viewPreferences";
   import DataManager from "./DataManager.svelte";
+  import TrashDialog from "./TrashDialog.svelte";
   import SettingsPanel from "./SettingsPanel.svelte";
   import TodoItem from "./TodoItem.svelte";
   import { refreshRecurrenceRules } from "$lib/stores/recurrenceStore";
@@ -224,6 +225,22 @@
   let adding = false;
   let showAbout = false;
   let showDataManager = false;
+  let showTrash = false;
+  let trashOpening = false;
+  async function openTrash() {
+    if (showTrash || trashOpening || noteNavigationBusy || noteAttachmentBusy) return;
+    trashOpening = true;
+    try { await flushAllNoteChanges(); summaryMenuOpen = false; showTrash = true; }
+    catch { noteAttachmentError = $translator("trash.saveFailed"); }
+    finally { trashOpening = false; }
+  }
+  async function refreshAfterTrash() {
+    scheduleAutoSync();
+    await Promise.all([todos.refresh(), notes.refresh()]);
+    linkedRevision++;
+    if ($todos.error || $notes.error) throw Error("TRASH_REFRESH_FAILED");
+    await loadAllNoteAttachments();
+  }
   let showSettings = false;
   let showFocus = false;
   let focusDurations: FocusDurations = getFocusDurations();
@@ -1839,6 +1856,7 @@
     if (
       showAbout ||
       showDataManager ||
+      showTrash ||
       showSettings ||
       managingGroup ||
       creatingGroup ||
@@ -2851,6 +2869,7 @@
               {batchMode ? $translator("batch.exit") : $translator("batch.actions")}
             </button>
           {/if}
+          <button type="button" role="menuitem" disabled={trashOpening || noteAttachmentBusy} onclick={() => void openTrash()}>{$translator("trash.title")}</button>
         </div>
       {/if}
     </div>
@@ -3409,6 +3428,10 @@
     </span>
     <button type="button" onclick={() => void undoDelete()}>{$translator("common.undo")}</button>
   </div>
+{/if}
+
+{#if showTrash}
+  <TrashDialog onClose={() => showTrash = false} afterCommit={refreshAfterTrash} />
 {/if}
 
 {#if deletedNote}
