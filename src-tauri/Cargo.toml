@@ -38,6 +38,9 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "png",
 sha2 = "0.10"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 
+[dev-dependencies]
+serde_json = { version = "1", features = ["raw_value"] }
+
 [target.'cfg(target_os = "windows")'.dependencies]
 keyring = { version = "3.6.3", default-features = false, features = ["windows-native"] }
 tauri-winrt-notification = "0.7.2"

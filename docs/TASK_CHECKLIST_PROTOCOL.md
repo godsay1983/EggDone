@@ -3,7 +3,7 @@
 日期：2026-09-14；阶段：P1a。
 这是两端下一步存储/同步实现的冻结契约和可执行参考，不是已经接入产品的网络服务。
 共享样例：fixtures/task-checklist-v1.json；参考校验器：scripts/task-checklist-reference.cjs；测试入口：scripts/test-task-checklist-contract.cjs。
-本阶段不改 SQLite 19 / RDB 20，不改变现有数据导出 v3；P1b/P1c 才实现迁移、生产解析器、事务和网络。
+P1a 冻结时不改 SQLite 19 / RDB 20。2026-09-14 的 P1b-1 已实现 SQLite 20 / RDB 21 迁移、生产解析器及存储事务，见[存储记录](TASK_CHECKLIST_STORAGE.md)；完整编辑/规则分叉与网络尚未接入，生产导出仍为 v3。
 任务模板的 wire schema 留到 P2，不在本阶段提前塞进检查清单对象。
 
 ## 1. 对象与字段

@@ -145,7 +145,7 @@ fn note_history_upgrade_rollback_and_reopen() {
         for sql in cases().seed {
             db.execute_batch(&sql).unwrap();
         }
-        db.execute_batch("DROP TRIGGER notes_capture_history; DROP TRIGGER notes_delete_history; DROP TABLE note_history; DELETE FROM schema_migrations WHERE version=19;
+        db.execute_batch("DROP TRIGGER notes_capture_history; DROP TRIGGER notes_delete_history; DROP TABLE note_history; DELETE FROM schema_migrations WHERE version>=19;
           CREATE TRIGGER fail_migration BEFORE INSERT ON schema_migrations WHEN NEW.version=19 BEGIN SELECT RAISE(ABORT,'injected'); END").unwrap();
         assert!(crate::db::migrate(&mut db).is_err());
         assert_eq!(

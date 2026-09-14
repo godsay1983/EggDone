@@ -40,6 +40,10 @@ mod shortcut_preferences;
 mod sync;
 mod sync_runtime_state;
 mod sync_target;
+pub mod task_checklist_protocol;
+pub mod task_checklist_store;
+#[cfg(test)]
+mod task_checklist_tests;
 mod task_note_link_backup;
 mod task_note_link_commands;
 #[cfg(test)]
