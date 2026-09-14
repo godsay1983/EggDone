@@ -15,6 +15,7 @@ pub(crate) struct EntityLinkResult {
     pub note_count: usize,
     pub conflict_retried: bool,
     pub link_token: Option<String>,
+    pub checklist_token: Option<String>,
 }
 
 fn guard(db: &Database, prepared: &PreparedManualSync) -> Result<(), String> {
@@ -88,8 +89,16 @@ pub(crate) async fn run(
 ) -> Result<EntityLinkResult, String> {
     let transport = prepared.link_transport()?;
     let mut conflict_retried = false;
+    prepared.checklist_transport(crate::task_checklist_sync::Domain::Items)?;
+    prepared.checklist_transport(crate::task_checklist_sync::Domain::Definitions)?;
     for attempt in 0..2 {
         let todo = recurrence_sync_session::sync_todos(db, prepared.clone()).await?;
+        let Some(checklist_token) =
+            crate::task_checklist_session::attempt(db, prepared, &todo.uploaded).await?
+        else {
+            conflict_retried = true;
+            continue;
+        };
         let (notes, note_retry) = sync_notes(db, prepared)
             .await
             .map_err(|e| format!("便签同步失败：{e}"))?;
@@ -151,6 +160,7 @@ pub(crate) async fn run(
             }
         };
         return Ok(EntityLinkResult {
+            checklist_token: Some(checklist_token),
             todo,
             note_count: notes.notes.len(),
             conflict_retried,

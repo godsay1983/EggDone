@@ -1506,6 +1506,7 @@ async fn sync_now_inner(
         "任务、便签和附件同步完成".to_string()
     };
     Ok(ManualSyncResult {
+        checklist_remote_token: entities.checklist_token,
         link_remote_token: entities.link_token,
         recurrence_remote_token: todo.recurrence_token,
         message: cleanup_summary.append_to(sync_message),

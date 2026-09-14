@@ -47,9 +47,14 @@ pub mod task_checklist_inheritance;
 #[cfg(test)]
 mod task_checklist_inheritance_tests;
 pub mod task_checklist_protocol;
+mod task_checklist_session;
 pub mod task_checklist_store;
+pub mod task_checklist_sync;
+#[cfg(test)]
+mod task_checklist_sync_tests;
 #[cfg(test)]
 mod task_checklist_tests;
+mod task_checklist_transport;
 mod task_note_link_backup;
 mod task_note_link_commands;
 #[cfg(test)]

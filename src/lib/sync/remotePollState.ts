@@ -9,11 +9,13 @@ export class RemotePollState {
   private syncSequence: number = 0;
   private ruleToken: string | null = null;
   private linkToken: string | null = null;
+  private checklistToken: string | null = null;
 
   reset(): void {
     this.generation += 1;
     this.ruleToken = null;
     this.linkToken = null;
+    this.checklistToken = null;
   }
 
   beginSync(): number {
@@ -34,6 +36,10 @@ export class RemotePollState {
   isGenerationCurrent(generation: number): boolean { return generation === this.generation; }
 
   rulesChanged(token: string): boolean { return token !== this.ruleToken; }
+  checklistsChanged(token: string | undefined): boolean { return token !== undefined && token !== this.checklistToken; }
+  acknowledgeChecklists(generation: number, token: string): void {
+    if (this.isGenerationCurrent(generation)) this.checklistToken = token;
+  }
   linksChanged(token: string | undefined): boolean { return token !== undefined && token !== this.linkToken; }
   acknowledgeLinks(generation: number, token: string): void {
     if (this.isGenerationCurrent(generation)) this.linkToken = token;

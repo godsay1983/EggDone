@@ -1,0 +1,48 @@
+{
+  "base_item": {
+    "uuid": "123e4567-e89b-42d3-a456-00000000000a",
+    "todo_uuid": "123e4567-e89b-42d3-a456-000000000002",
+    "source_rule_uuid": null,
+    "source_entry_uuid": null,
+    "content": "Compile",
+    "sort_order": 1000,
+    "completed": false,
+    "created_at": 1000,
+    "updated_at": 2000,
+    "updated_by": "device-a",
+    "deleted_at": null
+  },
+  "base_definition": {
+    "rule_uuid": "123e4567-e89b-42d3-a456-426614174000",
+    "first_todo_uuid": "123e4567-e89b-42d3-a456-000000000002",
+    "schedule": {
+      "anchor_date": "2026-09-05",
+      "frequency": "daily",
+      "interval": 1,
+      "weekdays": [],
+      "month_day": null,
+      "end_type": "never",
+      "end_date": null,
+      "max_occurrences": null,
+      "local_time_minutes": null
+    },
+    "timezone_id": null,
+    "applies_from_index": 2,
+    "entries": [
+      {
+        "uuid": "123e4567-e89b-42d3-a456-000000000014",
+        "content": "Compile",
+        "sort_order": 1000
+      },
+      {
+        "uuid": "123e4567-e89b-42d3-a456-000000000015",
+        "content": "Upload",
+        "sort_order": 2000
+      }
+    ],
+    "created_at": 1000,
+    "updated_at": 1000,
+    "updated_by": "device-a",
+    "deleted_at": null
+  }
+}

@@ -646,6 +646,7 @@ export const enUS = {
   "sync.domainTodos": "Todos",
   "sync.domainNotes": "Notes",
   "sync.domainLinks": "Task-note links",
+  "sync.domainChecklists": "Checklists",
   "sync.domainAttachments": "Attachments",
   "sync.runtimeNever": "Not synced yet",
   "sync.runtimeSuccess": "Succeeded",

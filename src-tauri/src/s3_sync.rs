@@ -78,6 +78,22 @@ pub struct PreparedManualSync {
 }
 
 impl PreparedManualSync {
+    pub(crate) fn checklist_transport(
+        &self,
+        domain: crate::task_checklist_sync::Domain,
+    ) -> Result<crate::task_checklist_transport::TaskChecklistTransport, String> {
+        crate::task_checklist_transport::TaskChecklistTransport::new(
+            &self.bucket,
+            &self.object_key,
+            &[
+                self.note_object_key.clone(),
+                self.note_attachment_object_key.clone(),
+                crate::recurrence_protocol::recurrence_object_key(&self.object_key, &[])?,
+                crate::task_note_link_protocol::object_key(&self.object_key, &[])?,
+            ],
+            domain,
+        )
+    }
     pub(crate) fn epoch(&self) -> &str {
         &self.target_epoch
     }
@@ -150,6 +166,7 @@ pub struct RemoteNoteAttachmentSyncObject {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoteSyncState {
+    pub checklist_token: String,
     pub link_token: String,
     pub recurrence_token: String,
     pub todo_object_exists: bool,
@@ -163,6 +180,8 @@ pub struct RemoteSyncState {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ManualSyncResult {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub checklist_remote_token: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub link_remote_token: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -463,7 +482,20 @@ pub async fn get_remote_state(
         let recurrence_token = prepared.recurrence_transport()?.probe().await?;
         guard()?;
         let link_token = prepared.link_transport()?.probe().await?;
+        guard()?;
+        let definitions = prepared
+            .checklist_transport(crate::task_checklist_sync::Domain::Definitions)?
+            .probe()
+            .await?;
+        guard()?;
+        let items = prepared
+            .checklist_transport(crate::task_checklist_sync::Domain::Items)?
+            .probe()
+            .await?;
+        guard()?;
         Ok(RemoteSyncState {
+            checklist_token: serde_json::to_string(&[definitions, items])
+                .map_err(|_| "CHECKLIST_TOKEN_INVALID")?,
             link_token,
             recurrence_token,
             todo_object_exists,

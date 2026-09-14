@@ -258,6 +258,26 @@ function deferred<T>() {
 }
 
 describe("independent rule polling", () => {
+  it("detects checklist-only changes using the complete upload receipt", async () => {
+    vi.useFakeTimers(); configureAutoSync(enabledSettings);
+    vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue({ ...remoteProbe(), checklistToken: 'missing' });
+    vi.mocked(syncApi.syncNow).mockResolvedValue({ ...syncResult(), checklistRemoteToken: 'own' });
+    setAutoSyncForeground(true); await vi.advanceTimersByTimeAsync(0);
+    vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue({ ...remoteProbe(), checklistToken: 'own' });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(1);
+    vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue({ ...remoteProbe(), checklistToken: 'peer' });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(2);
+  });
+  it("does not consume checklist HEAD after incomplete upload acknowledgement", async () => {
+    vi.useFakeTimers(); configureAutoSync(enabledSettings);
+    vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue({ ...remoteProbe(), checklistToken: 'peer' });
+    vi.mocked(syncApi.syncNow).mockResolvedValue(syncResult());
+    setAutoSyncForeground(true); await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(2);
+  });
   it("uses link PUT receipt and detects link-only peer changes", async () => {
     vi.useFakeTimers(); configureAutoSync(enabledSettings);
     vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue({ ...remoteProbe(), linkToken: 'missing' });

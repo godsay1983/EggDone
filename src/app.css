@@ -4150,6 +4150,10 @@ footer button:not(.action-button) {
   justify-content: space-between;
 }
 
+.sync-domain-list {
+  flex-wrap: wrap;
+}
+
 .sync-diagnostics-heading strong {
   color: #554b3d;
   font-size: 10px;

@@ -62,7 +62,8 @@ pub fn get_snapshot(connection: &Connection) -> Result<SyncRuntimeSnapshot, Stri
             "SELECT schema_version, last_attempt_at, last_success_at, dirty_since,
                     dirty_domains, last_result, last_error_code, last_error_message,
                     pending_attachment_count, updated_at,
-                    (SELECT revision>synced_revision FROM task_note_link_sync_state WHERE id=1)
+                    (SELECT revision>synced_revision FROM task_note_link_sync_state WHERE id=1),
+                    EXISTS(SELECT 1 FROM task_checklist_sync_state WHERE revision>synced_revision)
              FROM sync_runtime_state WHERE id = ?1",
             params![STATE_ID],
             |row| {
@@ -71,6 +72,9 @@ pub fn get_snapshot(connection: &Connection) -> Result<SyncRuntimeSnapshot, Stri
                     serde_json::from_str(&dirty_json).unwrap_or_default();
                 if row.get::<_, bool>(10)? {
                     domains.push("links".into());
+                }
+                if row.get::<_, bool>(11)? {
+                    domains.push("checklists".into());
                 }
                 Ok(SyncRuntimeSnapshot {
                     schema_version: row.get(0)?,

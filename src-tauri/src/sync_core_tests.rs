@@ -123,6 +123,8 @@ fn entities(link_status: u16) -> Vec<Reply> {
         Reply::new(404, None, b""),
         Reply::new(404, None, b""),
         Reply::new(200, None, b""),
+        Reply::new(404, None, b""), // checklist definitions
+        Reply::new(404, None, b""), // checklist items
         Reply::new(404, None, b""),
         Reply::new(200, None, b""),
         Reply::new(404, None, b""),
@@ -139,6 +141,8 @@ fn tail() -> Vec<Reply> {
         Reply::new(200, Some("\"attachments\""), b""),
         Reply::new(404, None, b""),
         Reply::new(200, Some("\"link\""), b""),
+        Reply::new(404, None, b""), // checklist definitions HEAD
+        Reply::new(404, None, b""), // checklist items HEAD
     ]
 }
 
@@ -147,6 +151,8 @@ fn assert_entity_order(server: &Server) {
         ("GET", "todos.json"),
         ("GET", "recurrence-rules.json"),
         ("PUT", "todos.json"),
+        ("GET", "task-checklist-definitions.json"),
+        ("GET", "task-checklist-items.json"),
         ("GET", "notes.json"),
         ("PUT", "notes.json"),
         ("GET", "task-note-links.json"),
@@ -200,6 +206,8 @@ fn core_orders_entities_links_attachments_and_final_probes() {
             ("HEAD", "note-attachments.json"),
             ("HEAD", "recurrence-rules.json"),
             ("HEAD", "task-note-links.json"),
+            ("HEAD", "task-checklist-definitions.json"),
+            ("HEAD", "task-checklist-items.json"),
         ] {
             assert!(server
                 .request()
