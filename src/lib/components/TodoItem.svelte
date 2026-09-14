@@ -5,6 +5,13 @@
   import { languageState, translator } from "$lib/i18n";
   import type { TranslationKey } from "$lib/i18n";
   import RecurrenceEditor from "./RecurrenceEditor.svelte";
+  import TaskChecklistDialog from './TaskChecklistDialog.svelte';
+  import { checklistProgress, refreshChecklistProgress } from '$lib/stores/taskChecklistStore';
+  import { todos } from '$lib/stores/todoStore';
+  let checklistOpen = false;
+  $: checklistCount = $checklistProgress?.[todo.uuid];
+  function openChecklist() { actionsOpen=false;checklistOpen=true; }
+  function checklistSaved() { checklistOpen=false;void todos.refresh();void refreshChecklistProgress(); }
   import { recurrenceRules } from "$lib/stores/recurrenceStore";
   import { visibleRecurrenceRule } from "$lib/utils/recurrenceForm";
   import { recurrenceSummary } from "$lib/utils/recurrenceSummary";
@@ -112,7 +119,7 @@
   let repeatChoice: RepeatRule | "none" = "none";
   let groupSaving = false;
   let actionsOpen = false;
-  $: onEditingChange(editing || saving || scheduleOpen || recurrenceOpen || scheduleSaving || noteOpen || noteSaving || groupSaving);
+  $: onEditingChange(checklistOpen || editing || saving || scheduleOpen || recurrenceOpen || scheduleSaving || noteOpen || noteSaving || groupSaving);
   let editInput: HTMLInputElement;
   let noteInput: HTMLTextAreaElement;
   let itemElement: HTMLElement;
@@ -524,7 +531,7 @@
           {notePreview}
         </button>
       {/if}
-      {#if currentGroup || dueLabel || todo.pinned || todo.priority === 1 || todo.reminder_at !== null || todo.repeat_rule !== null || customSummary}
+      {#if checklistCount?.total || currentGroup || dueLabel || todo.pinned || todo.priority === 1 || todo.reminder_at !== null || todo.repeat_rule !== null || customSummary}
         <div class="todo-meta">
           {#if currentGroup}
             <span
@@ -535,6 +542,12 @@
               <span class="group-dot" aria-hidden="true"></span>
               <span>{currentGroup.name}</span>
             </span>
+          {/if}
+          {#if checklistCount?.total}
+            <button type="button" class="checklist-progress" onclick={openChecklist}
+              title={$translator('checklist.title')} aria-label={$translator('checklist.progress',{done:checklistCount.completed,total:checklistCount.total})}>
+              {$translator('checklist.progress',{done:checklistCount.completed,total:checklistCount.total})}
+            </button>
           {/if}
           {#if todo.pinned}
             <button
@@ -733,6 +746,7 @@
     </button>
     {#if actionsOpen}
       <div class="actions-menu" role="menu">
+        <button type="button" role="menuitem" onclick={openChecklist}>{$translator('checklist.title')}</button>
         <button type="button" role="menuitem" onclick={() => { actionsOpen = false; onManageLinks(todo); }}>
           {$translator("links.notes")}
         </button>
@@ -881,3 +895,17 @@
 {#if recurrenceOpen}
   <RecurrenceEditor {todo} onClose={() => recurrenceOpen = false} />
 {/if}
+{#if checklistOpen}
+  <TaskChecklistDialog uuid={todo.uuid} onClose={() => checklistOpen=false} onSaved={checklistSaved}/>
+{/if}
+
+<style>
+  .todo-meta .checklist-progress {
+    display:inline-flex;align-items:center;border:0;border-radius:8px;padding:2px 7px;margin:0;
+    background:#ece9df;color:#615c4e;font:inherit;font-size:11px;line-height:1.4;max-width:100%;white-space:normal;cursor:pointer;
+  }
+  .todo-meta .checklist-progress:hover{background:#e1dac6;}
+  .todo-meta .checklist-progress:focus-visible{outline:2px solid #c5a043;outline-offset:2px;}
+  :global(html[data-theme=dark]) .todo-meta .checklist-progress{background:#38352c;color:#d7ceb7;}
+  :global(html[data-theme=dark]) .todo-meta .checklist-progress:hover{background:#484235;}
+</style>

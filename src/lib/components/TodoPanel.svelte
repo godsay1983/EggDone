@@ -85,6 +85,8 @@
   import { contentSearchApi, type SearchItem, type SearchTarget } from "$lib/api/contentSearchApi";
   import SettingsPanel from "./SettingsPanel.svelte";
   import TodoItem from "./TodoItem.svelte";
+  import { refreshChecklistProgress } from '$lib/stores/taskChecklistStore';
+  $: { $todos.items; void refreshChecklistProgress(); }
   import { refreshRecurrenceRules } from "$lib/stores/recurrenceStore";
   import NoteEditor from "./NoteEditor.svelte";
   import NoteList from "./NoteList.svelte";

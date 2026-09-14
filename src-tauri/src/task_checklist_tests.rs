@@ -102,6 +102,63 @@ const BY: &str = "123e4567-e89b-42d3-a456-000000000003";
 fn parent(db: &Connection) {
     db.execute("INSERT INTO todos(uuid,title,note,sort_order,created_at,updated_at,updated_by,due_date,reminder_at) VALUES(?1,'original','note',0,1,1,?2,'2026-09-20',5000)",[TODO,BY]).unwrap();
 }
+#[test]
+fn checklist_panel_snapshot_progress_and_tombstones() {
+    let mut db = db();
+    parent(&db);
+    let empty = crate::task_checklist_views::read(&mut db, TODO).unwrap();
+    assert_eq!(empty.title, "original");
+    assert!(!empty.read_only);
+    assert!(crate::task_checklist_views::progress(&mut db)
+        .unwrap()
+        .is_empty());
+    let mut r = request();
+    r.items[0].completed = true;
+    store::save(&mut db, &r, 10, BY).unwrap();
+    let counts = crate::task_checklist_views::progress(&mut db).unwrap();
+    assert_eq!((counts[0].total, counts[0].completed), (1, 1));
+    assert_eq!(
+        db.query_row("SELECT completed FROM todos WHERE uuid=?1", [TODO], |r| r
+            .get::<_, i64>(
+            0
+        ))
+        .unwrap(),
+        0
+    );
+    db.execute("UPDATE todos SET archived_at=20 WHERE uuid=?1", [TODO])
+        .unwrap();
+    assert!(
+        crate::task_checklist_views::read(&mut db, TODO)
+            .unwrap()
+            .read_only
+    );
+    db.execute(
+        "UPDATE todos SET archived_at=NULL,deleted_at=20 WHERE uuid=?1",
+        [TODO],
+    )
+    .unwrap();
+    assert!(crate::task_checklist_views::read(&mut db, TODO)
+        .unwrap_err()
+        .contains("MISSING"));
+    assert!(crate::task_checklist_views::progress(&mut db)
+        .unwrap()
+        .is_empty());
+    db.execute("UPDATE todos SET deleted_at=NULL WHERE uuid=?1", [TODO])
+        .unwrap();
+    r.operation_uuid = uuid::Uuid::new_v4().to_string();
+    r.expected_updated_at = 10;
+    r.expected_items = crate::task_checklist_views::read(&mut db, TODO)
+        .unwrap()
+        .items;
+    r.items.clear();
+    store::save(&mut db, &r, 30, BY).unwrap();
+    assert!(crate::task_checklist_views::progress(&mut db)
+        .unwrap()
+        .is_empty());
+    let snapshot = crate::task_checklist_views::read(&mut db, TODO).unwrap();
+    assert_eq!(snapshot.items.items.len(), 1);
+    assert_eq!(snapshot.items.items[0].deleted_at, Some(30));
+}
 fn request() -> store::ChecklistSave {
     store::ChecklistSave {
         operation_uuid: uuid::Uuid::new_v4().to_string(),

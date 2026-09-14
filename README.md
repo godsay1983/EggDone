@@ -1,8 +1,14 @@
 # EggDone（蛋定 Todo）
 
-开发分支更新（2026-09-14）：任务清单备份已升级为数据 v4，支持 v1/v2/v3 恢复并保留本机清单，导入预览增加清单数量摘要。旧应用不能恢复 v4，请保留升级前备份。清单编辑入口尚未开放，详见 [清单备份实现](docs/TASK_CHECKLIST_BACKUP.md) 和 [本轮 roadmap](docs/TASK_PRODUCTIVITY_ROADMAP.md)。此说明不代表已发布或完成真机验收。
+开发分支更新（2026-09-14）：已开放已有任务的“更多 → 检查清单”，支持新增、编辑、勾选、排序和删除子项，保存后任务行显示完成数/总数；取消不保存，失败保留草稿。只影响当前任务，新建清单与以后重复定义将在下一步接入。详见 [入口与验证](docs/TASK_CHECKLIST_UI.md) 和 [本轮 roadmap](docs/TASK_PRODUCTIVITY_ROADMAP.md)。自动化与构建通过，不代表已发布或完成手机/平板验收。
 
-任务效率功能开发（2026-09-14）：已选定“任务内检查清单、任务模板与快捷复制、多行文本批量创建”。P0 草稿基础已提交；P1a 已冻结[检查清单协议与参考样例](docs/TASK_CHECKLIST_PROTOCOL.md)，下一步接两端存储与事务。详见[实现方案](docs/TASK_PRODUCTIVITY_IMPLEMENTATION_PLAN.md)、[共享契约](docs/TASK_PRODUCTIVITY_CONTRACT.md)与[roadmap](docs/TASK_PRODUCTIVITY_ROADMAP.md)。当前没有新界面入口，不改变数据库、生产同步或已发布版本。
+清单界面优化（未发布）：两端任务行的清单计数可直接打开清单；桌面计数改为与分组并排的无边框标签。标题/备注编辑默认折叠，子项排序和删除收进单项“更多”，短清单使用紧凑布局。鸿蒙“检查清单”入口与“关联便签”并排，新增子项后滚动并自动聚焦输入框；保存、取消和同步语义不变，手机/平板实际键盘和外观待验收。
+
+桌面清单尺寸调整（未发布）：清单任务标题和子项统一为主列表的 13px，按钮恢复为常用的 32px 高度，面板宽度与行距相应收紧；触摸点击区域和全局缩放仍保留。
+
+清单备份已升级为数据 v4，旧应用不能恢复 v4，请保留升级前备份；导入 v1/v2/v3 保留本机清单。详见 [清单备份实现](docs/TASK_CHECKLIST_BACKUP.md)。
+
+任务效率功能开发（2026-09-14）：已选定“任务内检查清单、任务模板与快捷复制、多行文本批量创建”。P0/P1a/P1b/P1c 已提交；当前进行 P1d 界面接入，模板与批量创建尚未开放。详见[实现方案](docs/TASK_PRODUCTIVITY_IMPLEMENTATION_PLAN.md)、[共享契约](docs/TASK_PRODUCTIVITY_CONTRACT.md)与[roadmap](docs/TASK_PRODUCTIVITY_ROADMAP.md)。软件版本不变。
 
 最新交接：[1.1.0 升版与 main 合并](.claude/handoffs/2026-09-13-071148-desktop-1-1-0-main.md)。
 

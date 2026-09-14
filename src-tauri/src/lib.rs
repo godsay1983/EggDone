@@ -41,6 +41,7 @@ mod sync;
 mod sync_runtime_state;
 mod sync_target;
 mod task_checklist_backup;
+mod task_checklist_commands;
 pub mod task_checklist_editor;
 #[cfg(test)]
 mod task_checklist_editor_tests;
@@ -56,6 +57,7 @@ mod task_checklist_sync_tests;
 #[cfg(test)]
 mod task_checklist_tests;
 mod task_checklist_transport;
+mod task_checklist_views;
 mod task_note_link_backup;
 mod task_note_link_commands;
 #[cfg(test)]
@@ -174,6 +176,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             task_note_link_commands::list_task_note_links,
+            task_checklist_commands::read_task_checklist,
+            task_checklist_commands::list_task_checklist_progress,
+            task_checklist_commands::save_task_checklist,
             task_note_link_commands::get_task_note_link,
             task_note_link_commands::create_linked_todo,
             task_note_link_commands::change_task_note_link,
