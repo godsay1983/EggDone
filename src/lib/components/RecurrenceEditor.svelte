@@ -9,9 +9,13 @@
   import { timestampToDateTimeLocal } from "$lib/utils/reminderTimes";
   import type { Todo } from "$lib/types";
   import type { RecurrenceRule, RuleEditRequest } from "$lib/types/recurrence";
+  import type { RuleForm } from '$lib/utils/recurrenceForm';
 
   export let todo: Todo;
   export let onClose: () => void;
+  export let draftOnly = false;
+  export let draftForm: RuleForm | null = null;
+  export let onApply: (form: RuleForm) => void = () => {};
   const original = { ...todo };
   const startDate = original.due_date ?? (original.due_at === null ? localDateString(0) : timestampToDateTimeLocal(original.due_at).slice(0, 10));
   let dialog: HTMLDialogElement;
@@ -25,12 +29,13 @@
   let fingerprint = "";
   const days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
   $: text = (key: string) => $translator(("recurrence." + key) as TranslationKey);
-  $: editable = loaded && ruleEditable(rule, original.uuid, original.repeat_series_uuid, original.repeat_rule, original.completed);
+  $: editable = loaded && (draftOnly || ruleEditable(rule, original.uuid, original.repeat_series_uuid, original.repeat_rule, original.completed));
   $: first = preview(form);
   function preview(value: typeof form) {
     try { return formSchedule(value).anchor_date; } catch { return ""; }
   }
   async function load() {
+    if (draftOnly) { form = structuredClone(draftForm ?? form); loaded = true; return; }
     busy = true; error = "";
     try {
       const context = await recurrenceApi.context();
@@ -54,6 +59,7 @@
     busy = true; error = "";
     try {
       const schedule = formSchedule(form);
+      if (draftOnly) { onApply(structuredClone(form)); return; }
       const key = JSON.stringify({ schedule, zone: form.allDay ? null : form.zone.trim() });
       if (request === null || fingerprint !== key) {
         request = { rule: { uuid: crypto.randomUUID(), first_todo_uuid: original.uuid, current_todo_uuid: original.uuid,
@@ -108,7 +114,7 @@
           {#if form.end === "count"}<label>{text("maxCount")}<input type="number" min="1" max="100000" value={form.count} oninput={e => form.count = e.currentTarget.value} required /></label>{/if}
         </fieldset>
         <p class="summary">{text("first")}: {first || text("invalid")}</p>
-        <p>{text("notice")}</p>
+        <p>{draftOnly ? $translator('checklist.ruleDraftNotice') : text("notice")}</p>
         {#if rule}<p>{text("replace")}</p>{/if}
       {/if}
       {#if error}<p role="alert" class="error">{error}</p>{/if}
@@ -116,7 +122,7 @@
     <footer>
       {#if editable && rule}<button class="danger" type="button" disabled={busy} onclick={() => void stop()}>{text("stop")}</button>{/if}
       {#if !loaded && !busy}<button type="button" onclick={() => void load()}>{$translator("common.retry")}</button>{/if}
-      {#if editable}<button class="active" type="submit" disabled={busy || !first}>{$translator("common.save")}</button>{/if}
+      {#if editable}<button class="active" type="submit" disabled={busy || !first}>{$translator(draftOnly ? 'common.done' : 'common.save')}</button>{/if}
     </footer>
   </form>
 </dialog>

@@ -9,6 +9,18 @@ use crate::{
 use tauri::{AppHandle, Emitter, State};
 
 #[tauri::command]
+pub fn resolve_checklist_rule_time(
+    schedule: crate::recurrence::RecurrenceSchedule,
+    timezone: Option<String>,
+) -> Result<Option<i64>, String> {
+    crate::recurrence_time::recurrence_due_at(
+        &schedule.anchor_date,
+        schedule.local_time_minutes,
+        timezone.as_deref(),
+    )
+}
+
+#[tauri::command]
 pub fn read_task_checklist_editor(
     database: State<'_, Database>,
     uuid: String,

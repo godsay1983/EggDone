@@ -2,6 +2,18 @@ import type { TranslationMessage } from "../types";
 import type { zhCN } from "./zh-CN";
 
 export const enUS = {
+  "checklist.settings": "Task settings",
+  "checklist.date": "Task date",
+  "checklist.time": "Time (empty for all day)",
+  "checklist.missingGroup": "Original group unavailable; choose another",
+  "checklist.important": "Important task",
+  "checklist.keepRepeat": "Keep current recurrence",
+  "checklist.weekdays": "Weekdays",
+  "checklist.configureRule": "Configure custom recurrence",
+  "checklist.ruleDraftNotice": "Keep this rule in the draft; save the task and checklist together.",
+  "checklist.ruleChangeNotice": "Recurrence changes apply to this and future tasks. Future items start unchecked. Review the date; the original reminder is kept.",
+  "checklist.stopNotice": "Saving stops future recurrence and keeps history and the existing reminder.",
+  "checklist.settingsInvalid": "Check the date, reminder, group and recurrence. A new reminder must be in the future.",
   "contentSearch.title": "Search everything",
   "contentSearch.category": "Result type",
   "contentSearch.all": "All types",

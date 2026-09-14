@@ -26,6 +26,7 @@ export async function invoke(command,args){
         end_type:'count',end_date:null,max_occurrences:5,local_time_minutes:null},timezone_id:null}]:[]}};
   }
   if(command==='save_task_checklist_editor'){if(window.failSave)throw Error(window.failSave);return {updated_at:2,rule_uuid:null,reminder_changed:false};}
+  if(command==='resolve_checklist_rule_time')return args.schedule.local_time_minutes===null?null:Date.parse(args.schedule.anchor_date+'T00:00:00Z')+args.schedule.local_time_minutes*60000;
   if(command==='list_task_checklist_progress')return [];
   throw Error('Unexpected IPC '+command);
 }`;
@@ -173,5 +174,42 @@ try{
    await page.goto(server.resolvedUrls.local[0]+'__checklist?lang=en-US&theme=dark&recurring&'+flag);
    await page.locator('.scope-choices input').last().waitFor();assert.ok(await page.locator('.scope-choices input').last().isDisabled());
  }
- assert.deepEqual(errors,[]);console.log('Checklist UI: '+cases+' baseline matrices, 8 density and 8 scope matrices plus draft, retry, conflict, limits, read-only and load-failure passed. Screenshots: '+output);
+ for(const lang of ['zh-CN','en-US'])for(const theme of ['light','dark'])for(const width of [320,620]){
+   await page.setViewportSize({width,height:640});
+   await page.goto(server.resolvedUrls.local[0]+'__checklist?lang='+lang+'&theme='+theme+'&scale=1.5');
+   await page.locator('.task-settings summary').click();
+   await page.locator('.task-settings input[type=date]').fill('2026-10-02');
+   await page.locator('.task-settings input[type=time]').fill('16:30');
+   await page.locator('.task-settings input[type=datetime-local]').fill('2099-10-02T16:00');
+   await page.locator('.task-settings input[type=checkbox]').check();
+   await page.locator('.task-settings select').last().selectOption('weekdays');
+   await page.locator('li textarea').first().fill('Full task step');
+   await page.evaluate(()=>window.failSave='offline');await page.locator('button[type=submit]').click();await page.locator('[role=alert]').waitFor();
+   assert.equal(await page.locator('.task-settings select').last().inputValue(),'weekdays');
+   assert.ok(await page.locator('dialog').evaluate(el=>el.scrollWidth<=el.clientWidth));
+   await page.locator('.task-settings summary').scrollIntoViewIfNeeded();
+   await page.screenshot({path:resolve(output,'settings-'+lang+'-'+theme+'-'+width+'.png')});
+   await page.evaluate(()=>window.failSave='');await page.locator('button[type=submit]').click();await page.waitForFunction(()=>window.saved===1);
+   const requests=await page.evaluate(()=>window.calls.filter(c=>c.command==='save_task_checklist_editor').map(c=>c.args.request));
+   assert.deepEqual(requests[0],requests[1]);const r=requests[1];
+   assert.equal(r.mode,'replace');assert.equal(r.fields.priority,1);assert.equal(r.fields.repeat_rule,null);
+   assert.equal(r.replacement.schedule.local_time_minutes,990);assert.equal(r.task.items[0].content,'Full task step');
+ }
+ await page.goto(server.resolvedUrls.local[0]+'__checklist?lang=en-US&theme=dark');
+ await page.locator('.task-settings summary').click();await page.locator('.task-settings select').last().selectOption('custom');
+ await page.getByRole('button',{name:'Configure custom recurrence',exact:true}).click();
+ await page.locator('.recurrence-editor input[type=number]').first().fill('2');
+ await page.keyboard.press('Escape');assert.equal(await page.locator('.recurrence-editor').count(),0);
+ await page.locator('button[type=submit]').click();await page.locator('[role=alert]').waitFor();
+ assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.command==='save_task_checklist_editor').length),0);
+ await page.getByRole('button',{name:'Configure custom recurrence',exact:true}).click();
+ await page.locator('.recurrence-editor input[type=number]').first().fill('2');
+ await page.locator('.recurrence-editor button[type=submit]').click();
+ assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.command==='save_recurrence_rule').length),0);
+ await page.keyboard.press('Escape');await page.waitForFunction(()=>window.cancelled===1);
+ assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.command==='save_task_checklist_editor').length),0);
+ await page.goto(server.resolvedUrls.local[0]+'__checklist?lang=en-US&theme=dark&legacy');
+ await page.locator('.scope-choices input').last().check();await page.locator('button[type=submit]').click();await page.waitForFunction(()=>window.saved===1);
+ assert.equal(await page.evaluate(()=>window.calls.find(c=>c.command==='save_task_checklist_editor').args.request.fields.repeat_rule),null);
+ assert.deepEqual(errors,[]);console.log('Checklist UI: '+cases+' baseline, 8 density, 8 scope and 8 full-settings matrices; draft-only custom cancel and legacy conversion passed. Screenshots: '+output);
 }finally{await browser?.close();await server.close();}

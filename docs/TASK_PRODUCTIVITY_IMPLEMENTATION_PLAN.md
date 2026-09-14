@@ -98,4 +98,5 @@ P1c-3 已完成备份 v4、恢复预览和整笔事务，经过双端实际导�
 P1d-1 保存失败保留草稿，取消不落库；鸿蒙标题变更后的未来提醒在提交后刷新，失败不重复保存。此阶段勾选仍在草稿中，必须点击保存。
 P1d-2a 已完成同事务完整快照、命令/store 与提交会话接线；共享会话和隔离数据库测试通过，尚未接产品界面，见 [TASK_CHECKLIST_EDITOR_GATEWAY.md](TASK_CHECKLIST_EDITOR_GATEWAY.md)。
 P1d-2b-1 已接两端自定义重复清单的仅本次/以后选择，当前与后续定义同事务保存，按剩余次数分叉，未来子项默认未完成。见 [TASK_CHECKLIST_SCOPE_UI.md](TASK_CHECKLIST_SCOPE_UI.md)。
-下一步 P1d-2b-2 接完整字段与清单统一草稿及普通重复继承转换；P1d-2c 接原子新建，P1d-2d 接已保存详情即时勾选。之后 P1e 验收，不将范围选择视为整体 P1d 完成。
+P1d-2b-2 已在清单面板接完整字段与清单统一草稿、普通重复继承转换和提交后提醒刷新，见 [TASK_CHECKLIST_FULL_DRAFT_UI.md](TASK_CHECKLIST_FULL_DRAFT_UI.md)。原有快捷编辑入口仍保留。
+下一步 P1d-2c 接原子新建，P1d-2d 接已保存详情即时勾选。之后 P1e 验收，不将现有界面视为整体 P1d 完成。

@@ -179,6 +179,7 @@ pub fn run() {
             task_checklist_commands::read_task_checklist,
             task_checklist_commands::read_task_checklist_editor,
             task_checklist_commands::save_task_checklist_editor,
+            task_checklist_commands::resolve_checklist_rule_time,
             task_checklist_commands::list_task_checklist_progress,
             task_checklist_commands::save_task_checklist,
             task_note_link_commands::get_task_note_link,

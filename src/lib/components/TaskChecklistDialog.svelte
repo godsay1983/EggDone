@@ -1,18 +1,41 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
-  import { translator } from '$lib/i18n';
+  import { translator, type TranslationKey } from '$lib/i18n';
+  import { recurrenceSummary } from '$lib/utils/recurrenceSummary';
+  import { associatedRule } from '$lib/utils/recurrenceForm';
   import { createTaskChecklistEditorSession } from '$lib/stores/taskChecklistEditorStore';
-  import { ChecklistScopeDraft, checklistFutureRule } from '$lib/utils/checklistScopeDraft';
+  import { checklistFutureRule } from '$lib/utils/checklistScopeDraft';
+  import { ChecklistTaskDraft, checklistCanChangeRepeat, checklistLegacyFuture, checklistRuleForm } from '$lib/utils/checklistTaskDraft';
+  import { taskChecklistEditorApi } from '$lib/api/taskChecklistEditorApi';
+  import ChecklistTaskFields from './ChecklistTaskFields.svelte';
+  import RecurrenceEditor from './RecurrenceEditor.svelte';
+  import type { RuleForm } from '$lib/utils/recurrenceForm';
+  import { formSchedule } from '$lib/utils/recurrenceForm';
+  import type { TaskEditorFields } from '$lib/types/taskChecklistEditor';
+  import type { Todo, TodoGroup } from '$lib/types';
   import type { ChecklistEditorSnapshot } from '$lib/types/taskChecklistEditor';
   import type { ChecklistEdit } from '$lib/types/taskChecklist';
   export let uuid: string;
+  export let groups: TodoGroup[] = [];
   export let onClose: () => void;
   export let onSaved: () => void;
   const session = createTaskChecklistEditorSession();
   let snapshot: ChecklistEditorSnapshot | null = null;
-  let scopeDraft = new ChecklistScopeDraft(() => crypto.randomUUID());
+  let scopeDraft = new ChecklistTaskDraft(() => crypto.randomUUID());
+  let fields: TaskEditorFields = {due_date:null,due_at:null,reminder_at:null,group_uuid:null,priority:0,repeat_rule:null};
+  let choice = 'keep', ruleOpen = false;
+  let ruleForm: RuleForm | null = null;
+  let ruleEditorForm: RuleForm | null = null;
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  $: currentRule = snapshot ? associatedRule(snapshot.rules.rules,uuid,snapshot.repeat_series_uuid) : null;
+  $: repeatSummary = snapshot?.fields.repeat_rule ? $translator(('todo.repeat'+snapshot.fields.repeat_rule[0].toUpperCase()+snapshot.fields.repeat_rule.slice(1)) as TranslationKey) :
+    currentRule ? recurrenceSummary(currentRule,k=>$translator(('recurrence.'+k) as TranslationKey)) : $translator('todo.noRepeat');
+  function ruleTodo(): Todo {
+    return {id:0,uuid,title,note,...fields,repeat_rule:null,repeat_series_uuid:null,repeat_next_due_date:null,
+      completed:false,pinned:false,sort_order:0,created_at:0,updated_at:0,completed_at:null,deleted_at:null,archived_at:null};
+  }
   let future = false;
-  $: futureAvailable = snapshot !== null && checklistFutureRule(snapshot) !== null;
+  $: futureAvailable = snapshot !== null && (checklistFutureRule(snapshot) !== null || checklistLegacyFuture(snapshot));
   $: repeating = snapshot !== null && (snapshot.repeat_series_uuid !== null || snapshot.fields.repeat_rule !== null ||
     snapshot.rules.rules.some(rule => rule.current_todo_uuid === uuid));
   let dialog: HTMLDialogElement;
@@ -29,12 +52,13 @@
     const frame = requestAnimationFrame(resize);
     return { update: resize, destroy: () => { observer.disconnect(); cancelAnimationFrame(frame); } };
   }
-  let error: 'loadFailed' | 'saveFailed' | 'conflict' | 'invalid' | 'scheduleMismatch' | ''='';
+  let error: 'loadFailed' | 'saveFailed' | 'conflict' | 'invalid' | 'scheduleMismatch' | 'settingsInvalid' | ''='';
   $: done=items.filter(i=>i.completed).length;
   async function load() {
-    loading=true;loaded=false;snapshot=null;error='';future=false;scopeDraft=new ChecklistScopeDraft(() => crypto.randomUUID());
+    loading=true;loaded=false;snapshot=null;error='';future=false;choice='keep';ruleForm=null;scopeDraft=new ChecklistTaskDraft(() => crypto.randomUUID());
     try {
       snapshot=await session.load(uuid);const s=snapshot.task;title=s.title;note=s.note;readOnly=s.read_only;
+      fields=structuredClone(snapshot.fields);
       items=s.items.items.filter(i=>i.deleted_at===null).sort((a,b)=>a.sort_order-b.sort_order||a.uuid.localeCompare(b.uuid))
         .map(i=>({uuid:i.uuid,content:i.content,completed:i.completed,sort_order:i.sort_order}));
       loaded=true;
@@ -55,9 +79,10 @@
       error='invalid';if(!title.trim())detailsOpen=true;return;
     }
     busy=true;error='';
-    try {await session.save(scopeDraft.build(snapshot,title,note,
-      items.map((i,n)=>({...i,content:i.content.trim(),sort_order:(n+1)*1000})),future));}
-    catch(e){error=String(e).includes('STALE')?'conflict':String(e).includes('SCHEDULE_MISMATCH')?'scheduleMismatch':'saveFailed';busy=false;return;}
+    try {await session.save(await scopeDraft.build(snapshot,title,note,
+      items.map((i,n)=>({...i,content:i.content.trim(),sort_order:(n+1)*1000})),fields,choice,ruleForm,future,zone,taskChecklistEditorApi.resolveTime));}
+    catch(e){error=String(e).includes('STALE')?'conflict':String(e).includes('SCHEDULE_MISMATCH')?'scheduleMismatch':
+      /REMINDER_PAST|GROUP_MISSING|DATE_REQUIRED|CONFIGURE_RULE|INVALID_RECURRENCE|TIMEZONE/.test(String(e))?'settingsInvalid':'saveFailed';busy=false;return;}
     busy=false;onSaved();
   }
 </script>
@@ -66,7 +91,7 @@
   oncancel={e=>{e.preventDefault();if(!busy)onClose();}}>
   <form onsubmit={e=>{e.preventDefault();void save();}}>
     <header><h2>{$translator('checklist.title')}</h2>
-      <span class="scope">{$translator(future?'checklist.future':'checklist.scope')}</span></header>
+      <span class="scope">{$translator((choice!=='keep'&&choice!=='none')||(choice==='keep'&&future)?'checklist.future':'checklist.scope')}</span></header>
     <div class="fields">
       {#if loading}<p role="status">{$translator('common.loading')}</p>{/if}
       {#if error}<p role="alert">{$translator(`checklist.${error}`)}</p>{/if}
@@ -79,7 +104,11 @@
             <label>{$translator('todo.note')}<textarea bind:value={note} maxlength="1000" rows="2" disabled={busy||readOnly}></textarea></label>
           </div>
         </details>
-        {#if repeating && !readOnly}
+        <ChecklistTaskFields bind:fields bind:choice {groups} {repeatSummary} disabled={busy||readOnly}
+          repeatEnabled={snapshot!==null&&checklistCanChangeRepeat(snapshot)}
+          customSummary={ruleForm ? formSchedule(ruleForm).anchor_date : ''}
+          onCustom={()=>{if(snapshot){ruleEditorForm=structuredClone(ruleForm??checklistRuleForm(snapshot,fields,'custom',zone));ruleOpen=true;}}}/>
+        {#if repeating && !readOnly && choice==='keep'}
           <fieldset class="scope-options" disabled={busy}>
             <legend>{$translator('checklist.applyTo')}</legend>
             <div class="scope-choices">
@@ -124,6 +153,10 @@
     </footer>
   </form>
 </dialog>
+{#if ruleOpen}
+  <RecurrenceEditor todo={ruleTodo()} draftOnly={true} draftForm={ruleEditorForm}
+    onClose={()=>ruleOpen=false} onApply={form=>{ruleForm=form;ruleOpen=false;}}/>
+{/if}
 <style>
   dialog {
     --line:#e4dccb; --muted:#746853; --panel:#fffdf8; --field:#f4f0e7; --ink:#443d31;

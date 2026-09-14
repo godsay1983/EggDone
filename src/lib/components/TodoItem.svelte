@@ -896,7 +896,7 @@
   <RecurrenceEditor {todo} onClose={() => recurrenceOpen = false} />
 {/if}
 {#if checklistOpen}
-  <TaskChecklistDialog uuid={todo.uuid} onClose={() => checklistOpen=false} onSaved={checklistSaved}/>
+  <TaskChecklistDialog uuid={todo.uuid} {groups} onClose={() => checklistOpen=false} onSaved={checklistSaved}/>
 {/if}
 
 <style>
