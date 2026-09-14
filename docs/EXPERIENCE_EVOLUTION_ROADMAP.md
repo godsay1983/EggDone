@@ -194,7 +194,7 @@ E6d已本地提交：桌面8c42ba9、鸿蒙1af2bf3。本轮按用户要求继续
 
 ## E9：按需立项
 
-2026-09-14：用户选定任务检查清单、模板与快捷复制、多行批量创建，进入独立[实现方案](TASK_PRODUCTIVITY_IMPLEMENTATION_PLAN.md)和[roadmap](TASK_PRODUCTIVITY_ROADMAP.md)。当前为 P0 草稿基础，不表示功能已经开放；其余 E9 候选不在本轮范围。
+2026-09-14：用户选定任务检查清单、模板与快捷复制、多行批量创建，进入独立[实现方案](TASK_PRODUCTIVITY_IMPLEMENTATION_PLAN.md)和[roadmap](TASK_PRODUCTIVITY_ROADMAP.md)。P0 已提交，P1a 协议与参考样例已完成；下一步 P1b 存储/事务。生产功能尚未开放，其余 E9 候选不在本轮范围。
 
 - [ ] 模板与单层检查清单分开冻结。
 - [ ] 专注历史与本地统计，不改变实况窗核心。
