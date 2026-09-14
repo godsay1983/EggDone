@@ -3,7 +3,7 @@
 日期：2026-09-14；阶段：P1a。
 这是两端下一步存储/同步实现的冻结契约和可执行参考，不是已经接入产品的网络服务。
 共享样例：fixtures/task-checklist-v1.json；参考校验器：scripts/task-checklist-reference.cjs；测试入口：scripts/test-task-checklist-contract.cjs。
-P1a 冻结时不改 SQLite 19 / RDB 20。2026-09-14 的 P1b-1 已实现 SQLite 20 / RDB 21 迁移、生产解析器及存储事务，见[存储记录](TASK_CHECKLIST_STORAGE.md)；完整编辑/规则分叉与网络尚未接入，生产导出仍为 v3。
+P1a 冻结时不改 SQLite 19 / RDB 20。2026-09-14 的 P1b-1 已实现 SQLite 20 / RDB 21 迁移、生产解析器及存储事务，见[存储记录](TASK_CHECKLIST_STORAGE.md)；P1b-2 已实现内部完整编辑/规则分叉事务，见[编辑事务记录](TASK_CHECKLIST_EDITOR.md)。网络和 UI 尚未接入，生产导出仍为 v3。
 任务模板的 wire schema 留到 P2，不在本阶段提前塞进检查清单对象。
 
 ## 1. 对象与字段
@@ -101,7 +101,7 @@ updated_by="checklist-seed-v1"，deleted_at=null。设备无关，不取当前�
 
 ## 5. 同步与持久化门槛
 
-P1b 拟增量迁移：桌面 20，鸿蒙 21；实施时先重读当前 schema，若已有其他迁移占号则顺延，不能覆盖。
+P1b-1 已增量迁移至桌面 20、鸿蒙 21；P1b-2 复用现有表，无新迁移。后续迁移先重读当前 schema，若已有其他迁移占号则顺延，不能覆盖。
 独立实例表、定义表、分领域 revision/synced_revision/ETag/配置世代，不把 UI rowKey 写成 UUID。
 父任务+清单保存、规则分叉+定义、墓碑、标脏与操作回执须同事务；写前比对期望版本，失败全部回滚。
 仅正文/勾选真的变化时标脏；远端合并中的只读/隐藏状态不反写用户数据。

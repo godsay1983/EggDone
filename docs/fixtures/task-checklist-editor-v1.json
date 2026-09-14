@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "todo_uuid": "123e4567-e89b-42d3-a456-000000000002",
+  "by": "123e4567-e89b-42d3-a456-000000000003",
+  "rule_uuid": "123e4567-e89b-42d3-a456-000000000004",
+  "replacement_uuid": "123e4567-e89b-42d3-a456-000000000005",
+  "item_uuid": "123e4567-e89b-42d3-a456-000000000006",
+  "entry_uuid": "123e4567-e89b-42d3-a456-000000000007",
+  "operation_uuid": "123e4567-e89b-42d3-a456-000000000008",
+  "schedule": {
+    "anchor_date": "2026-09-20",
+    "frequency": "daily",
+    "interval": 1,
+    "weekdays": [],
+    "month_day": null,
+    "end_type": "never",
+    "end_date": null,
+    "max_occurrences": null,
+    "local_time_minutes": null
+  },
+  "fields": {
+    "due_date": "2026-09-20",
+    "due_at": null,
+    "reminder_at": 5000,
+    "group_uuid": null,
+    "priority": 0,
+    "repeat_rule": null
+  },
+  "original_updated_at": 10,
+  "now": 100,
+  "expected": {
+    "reminder_unchanged": 5000,
+    "stopped_rule_count": 1,
+    "new_definition_count": 1,
+    "unchanged_rule_count": 1,
+    "timed_due_at": 1789869600000
+  },
+  "invalid_fields": [
+    {
+      "name": "past-reminder",
+      "field": "reminder_at",
+      "value": 50
+    },
+    {
+      "name": "missing-group",
+      "field": "group_uuid",
+      "value": "123e4567-e89b-42d3-a456-000000000009"
+    },
+    {
+      "name": "invalid-priority",
+      "field": "priority",
+      "value": 2
+    },
+    {
+      "name": "invalid-calendar-date",
+      "field": "due_date",
+      "value": "2026-02-30"
+    },
+    {
+      "name": "conflicting-dates",
+      "field": "due_at",
+      "value": 1234
+    }
+  ],
+  "failure_triggers": [
+    "BEFORE UPDATE ON todos",
+    "BEFORE INSERT ON task_checklist_items",
+    "BEFORE UPDATE ON recurrence_rules",
+    "BEFORE INSERT ON recurrence_rules",
+    "BEFORE INSERT ON task_checklist_definitions",
+    "BEFORE INSERT ON task_checklist_operations",
+    "BEFORE INSERT ON app_metadata WHEN NEW.key LIKE 'checklist.editor.v1:%'"
+  ]
+}
