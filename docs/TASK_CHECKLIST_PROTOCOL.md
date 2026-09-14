@@ -115,7 +115,7 @@ P1c-2 已使用生产客户端与隔离 HTTP 服务执行网络验证，不访�
 
 ## 6. 备份 v4
 
-仅冻结将来的 data.json/普通 JSON 数据格式，生产导出目前仍为 v3。
+P1c-3 已接入 data.json/普通 JSON 的生产备份 v4；完整实现与验证边界见 [TASK_CHECKLIST_BACKUP.md](TASK_CHECKLIST_BACKUP.md)。
 v4 在有效 v3 全部字段基础上，必需增加：
 - task_checklist_items：完整 items v1 文档（含墓碑）。
 - task_checklist_definitions：完整 definitions v1 文档（含空定义和墓碑）。

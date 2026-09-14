@@ -552,6 +552,8 @@ export const zhCN = {
   "data.confirmImportFile": "确认导入 {name}？",
   "data.previewSummary": "任务 {tasks} 项，便签 {notes} 项，附件 {attachments} 项",
   "data.recurrenceSummary": "自定义重复规则 {count} 项（含已停止规则）。保留本地较新进度；恢复时不生成任务。",
+  "data.checklistSummary": "备份内清单子项 {count} 条，其中已删除 {deleted} 条；重复清单定义 {definitions} 条，备份中缺少的父任务 {missing} 个。按合并规则恢复，并非全部新增。",
+  "data.checklistsLegacy": "旧版备份不含清单，本机已有清单和重复清单定义将保留。",
   "data.linkSummary": "备份内关联记录 {count} 条，其中已解除 {deleted} 条。不会自动重连本机已解除的关联。",
   "data.linksLegacy": "此旧版备份没有关联信息；保留现有关联，仅在本次导入删除任务或便签时解除对应关联。",
   "data.restoreLinksFailed": "关联数据恢复失败。请检查备份版本和完整性后重试，本次导入未应用。",

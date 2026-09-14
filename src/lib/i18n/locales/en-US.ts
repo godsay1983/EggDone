@@ -573,6 +573,8 @@ export const enUS = {
   "data.confirmImportFile": "Import {name}?",
   "data.previewSummary": "{tasks} tasks, {notes} notes, {attachments} attachments",
   "data.recurrenceSummary": "{count} custom recurrence rules (including stopped rules). Local progress is preserved; restore does not generate tasks.",
+  "data.checklistSummary": "Backup contains {count} checklist items ({deleted} deleted), {definitions} recurring definitions, and {missing} missing parent tasks. Records are merged, not all added as new.",
+  "data.checklistsLegacy": "This older backup has no checklist data. Local items and recurring definitions are preserved.",
   "data.linkSummary": "{count} task-note link records in backup, including {deleted} unlinked records. Local unlink decisions are preserved.",
   "data.linksLegacy": "This older backup has no link metadata. Existing links are preserved unless an endpoint is deleted by this import.",
   "data.restoreLinksFailed": "Link data could not be restored. Check the backup version and integrity, then retry. The import was not applied.",

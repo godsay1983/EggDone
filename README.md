@@ -1,5 +1,7 @@
 # EggDone（蛋定 Todo）
 
+开发分支更新（2026-09-14）：任务清单备份已升级为数据 v4，支持 v1/v2/v3 恢复并保留本机清单，导入预览增加清单数量摘要。旧应用不能恢复 v4，请保留升级前备份。清单编辑入口尚未开放，详见 [清单备份实现](docs/TASK_CHECKLIST_BACKUP.md) 和 [本轮 roadmap](docs/TASK_PRODUCTIVITY_ROADMAP.md)。此说明不代表已发布或完成真机验收。
+
 任务效率功能开发（2026-09-14）：已选定“任务内检查清单、任务模板与快捷复制、多行文本批量创建”。P0 草稿基础已提交；P1a 已冻结[检查清单协议与参考样例](docs/TASK_CHECKLIST_PROTOCOL.md)，下一步接两端存储与事务。详见[实现方案](docs/TASK_PRODUCTIVITY_IMPLEMENTATION_PLAN.md)、[共享契约](docs/TASK_PRODUCTIVITY_CONTRACT.md)与[roadmap](docs/TASK_PRODUCTIVITY_ROADMAP.md)。当前没有新界面入口，不改变数据库、生产同步或已发布版本。
 
 最新交接：[1.1.0 升版与 main 合并](.claude/handoffs/2026-09-13-071148-desktop-1-1-0-main.md)。

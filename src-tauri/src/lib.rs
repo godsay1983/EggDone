@@ -40,6 +40,7 @@ mod shortcut_preferences;
 mod sync;
 mod sync_runtime_state;
 mod sync_target;
+mod task_checklist_backup;
 pub mod task_checklist_editor;
 #[cfg(test)]
 mod task_checklist_editor_tests;

@@ -22,7 +22,7 @@ use crate::{
     tray::PanelState,
 };
 
-const FORMAT_VERSION: u32 = 3;
+const FORMAT_VERSION: u32 = 4;
 const BACKUP_FORMAT_VERSION: u32 = 1;
 const BACKUP_MAX_ENTRY_COUNT: usize = 10_000;
 const BACKUP_MAX_TOTAL_BYTES: u64 = 512 * 1024 * 1024;
@@ -98,6 +98,20 @@ struct TodoExport {
         deserialize_with = "crate::task_note_link_backup::deserialize"
     )]
     task_note_links: Option<crate::task_note_link_protocol::LinkDocument>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::task_checklist_backup::deserialize_items"
+    )]
+    task_checklist_items: Option<crate::task_checklist_protocol::ItemsDocument>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::task_checklist_backup::deserialize_definitions"
+    )]
+    task_checklist_definitions: Option<crate::task_checklist_protocol::DefinitionsDocument>,
+    #[serde(flatten)]
+    extra: std::collections::BTreeMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -140,6 +154,11 @@ pub struct ImportPreview {
     link_total: usize,
     link_deleted: usize,
     link_metadata_included: bool,
+    checklist_total: usize,
+    checklist_deleted: usize,
+    checklist_definition_total: usize,
+    checklist_missing_parent_total: usize,
+    checklist_metadata_included: bool,
     attachment_added: usize,
     attachment_updated: usize,
     attachment_unchanged: usize,
@@ -190,20 +209,9 @@ pub fn export_todos(
         return Ok(None);
     };
 
-    let connection = lock_database(&database)?;
-    let exported_at = now_millis();
-    let export = TodoExport {
-        format_version: FORMAT_VERSION,
-        exported_at,
-        groups: read_all_groups(&connection)?,
-        todos: read_all_todos(&connection)?,
-        notes: note_sync::build_document(&connection, exported_at)?.notes,
-        note_attachments: note_attachment_sync::build_document(&connection, exported_at)?
-            .attachments,
-        attachment_files_included: false,
-        recurrence: Some(crate::recurrence_backup::export(&connection)?),
-        task_note_links: Some(crate::task_note_link_store::snapshot(&connection)?.document),
-    };
+    let mut connection = lock_database(&database)?;
+    let export = capture_export(&mut connection, false, now_millis())?;
+    drop(connection);
     let json = serde_json::to_string_pretty(&export)
         .map_err(|error| format!("生成导出文件失败：{error}"))?;
     fs::write(&path, json).map_err(|error| format!("写入导出文件失败：{error}"))?;
@@ -229,20 +237,8 @@ pub fn export_full_backup(
     };
 
     let exported_at = now_millis();
-    let connection = lock_database(&database)?;
-    let attachment_document =
-        note_attachment_sync::build_backup_document(&connection, exported_at)?;
-    let export = TodoExport {
-        format_version: FORMAT_VERSION,
-        exported_at,
-        groups: read_all_groups(&connection)?,
-        todos: read_all_todos(&connection)?,
-        notes: note_sync::build_document(&connection, exported_at)?.notes,
-        note_attachments: attachment_document.attachments.clone(),
-        attachment_files_included: true,
-        recurrence: Some(crate::recurrence_backup::export(&connection)?),
-        task_note_links: Some(crate::task_note_link_store::snapshot(&connection)?.document),
-    };
+    let mut connection = lock_database(&database)?;
+    let export = capture_export(&mut connection, true, exported_at)?;
     drop(connection);
 
     let data_bytes = serde_json::to_vec_pretty(&export)
@@ -250,8 +246,8 @@ pub fn export_full_backup(
     let asset_store = NoteAssetStore::from_app(&app)?;
     let mut assets = Vec::<(BackupManifestEntry, PathBuf)>::new();
     let mut total_bytes = data_bytes.len() as u64;
-    for attachment in attachment_document
-        .attachments
+    for attachment in export
+        .note_attachments
         .iter()
         .filter(|attachment| attachment.deleted_at.is_none())
     {
@@ -345,8 +341,8 @@ pub fn export_full_backup(
 
     Ok(Some(FullBackupExportResult {
         path: path.to_string_lossy().into_owned(),
-        attachment_count: attachment_document
-            .attachments
+        attachment_count: export
+            .note_attachments
             .iter()
             .filter(|attachment| attachment.deleted_at.is_none())
             .count(),
@@ -1047,6 +1043,37 @@ fn set_restored_attachment_paths(
     Ok(())
 }
 
+fn capture_export(
+    connection: &mut Connection,
+    full: bool,
+    exported_at: i64,
+) -> Result<TodoExport, String> {
+    let tx = connection.transaction().map_err(database_error)?;
+    let checklist = crate::task_checklist_store::read_in_transaction(&tx)?;
+    let attachments = if full {
+        note_attachment_sync::build_backup_document(&tx, exported_at)?
+    } else {
+        note_attachment_sync::build_document(&tx, exported_at)?
+    };
+    let export = TodoExport {
+        format_version: FORMAT_VERSION,
+        exported_at,
+        groups: read_all_groups(&tx)?,
+        todos: read_all_todos(&tx)?,
+        notes: note_sync::build_document(&tx, exported_at)?.notes,
+        note_attachments: attachments.attachments,
+        attachment_files_included: full,
+        recurrence: Some(crate::recurrence_backup::export(&tx)?),
+        task_note_links: Some(crate::task_note_link_store::snapshot(&tx)?.document),
+        task_checklist_items: Some(checklist.items),
+        task_checklist_definitions: Some(checklist.definitions),
+        extra: Default::default(),
+    };
+    validate_import_mode(&export, full)?;
+    tx.commit().map_err(database_error)?;
+    Ok(export)
+}
+
 fn read_import_file(path: &Path) -> Result<TodoExport, String> {
     let contents =
         fs::read_to_string(path).map_err(|error| format!("读取导入文件失败：{error}"))?;
@@ -1067,7 +1094,7 @@ fn validate_complete_import(import: &TodoExport) -> Result<(), String> {
 fn validate_import_mode(import: &TodoExport, expect_attachment_files: bool) -> Result<(), String> {
     match (import.format_version, &import.recurrence) {
         (1, None) => {}
-        (2 | 3, Some(backup)) => {
+        (2 | 3 | 4, Some(backup)) => {
             crate::recurrence_backup::validate(backup)?;
             if backup
                 .instances
@@ -1081,10 +1108,22 @@ fn validate_import_mode(import: &TodoExport, expect_attachment_files: bool) -> R
     }
     match (import.format_version, &import.task_note_links) {
         (1 | 2, None) => {}
-        (3, Some(links)) => {
+        (3 | 4, Some(links)) => {
             crate::task_note_link_protocol::encode_document(links)?;
         }
         _ => return Err("INVALID_TASK_NOTE_LINK_BACKUP_VERSION".into()),
+    }
+    match (
+        import.format_version,
+        &import.task_checklist_items,
+        &import.task_checklist_definitions,
+    ) {
+        (1..=3, None, None) => {}
+        (4, Some(items), Some(definitions)) if import.extra.is_empty() => {
+            crate::task_checklist_protocol::encode_items(items)?;
+            crate::task_checklist_protocol::encode_definitions(definitions)?;
+        }
+        _ => return Err("INVALID_CHECKLIST_BACKUP_VERSION".into()),
     }
     if import.format_version > FORMAT_VERSION {
         return Err(format!(
@@ -1292,6 +1331,7 @@ fn build_preview(
     let (note_added, note_updated, note_unchanged) = count_note_changes(connection, &import.notes)?;
     let (attachment_added, attachment_updated, attachment_unchanged) =
         count_attachment_changes(connection, &import.note_attachments)?;
+    let parent_uuids: HashSet<&str> = import.todos.iter().map(|todo| todo.uuid.as_str()).collect();
 
     Ok(ImportPreview {
         path: path.to_string_lossy().into_owned(),
@@ -1314,6 +1354,26 @@ fn build_preview(
             d.links.iter().filter(|l| l.deleted_at.is_some()).count()
         }),
         link_metadata_included: import.task_note_links.is_some(),
+        checklist_total: import
+            .task_checklist_items
+            .as_ref()
+            .map_or(0, |d| d.items.len()),
+        checklist_deleted: import.task_checklist_items.as_ref().map_or(0, |d| {
+            d.items.iter().filter(|i| i.deleted_at.is_some()).count()
+        }),
+        checklist_definition_total: import
+            .task_checklist_definitions
+            .as_ref()
+            .map_or(0, |d| d.definitions.len()),
+        checklist_missing_parent_total: import.task_checklist_items.as_ref().map_or(0, |d| {
+            d.items
+                .iter()
+                .filter(|i| !parent_uuids.contains(i.todo_uuid.as_str()))
+                .map(|i| &i.todo_uuid)
+                .collect::<HashSet<_>>()
+                .len()
+        }),
+        checklist_metadata_included: import.task_checklist_items.is_some(),
         recurrence_total: import
             .recurrence
             .as_ref()
@@ -1427,6 +1487,11 @@ fn merge_import_in_transaction(
         connection,
         import.task_note_links.as_ref(),
         now_millis(),
+    )?;
+    crate::task_checklist_backup::restore(
+        connection,
+        import.task_checklist_items.as_ref(),
+        import.task_checklist_definitions.as_ref(),
     )?;
     Ok(result)
 }
@@ -1798,6 +1863,10 @@ mod recurrence_backup_tests;
 mod task_note_link_backup_tests;
 
 #[cfg(test)]
+#[path = "task_checklist_backup_tests.rs"]
+mod task_checklist_backup_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::db::{configure_connection, migrate};
@@ -1943,6 +2012,9 @@ mod tests {
             attachment_files_included: false,
             recurrence: None,
             task_note_links: None,
+            task_checklist_items: None,
+            task_checklist_definitions: None,
+            extra: Default::default(),
         };
         let json = serde_json::to_string(&export).unwrap();
         let exported: TodoExport = serde_json::from_str(&json).unwrap();
@@ -2024,6 +2096,9 @@ mod tests {
             attachment_files_included: false,
             recurrence: None,
             task_note_links: None,
+            task_checklist_items: None,
+            task_checklist_definitions: None,
+            extra: Default::default(),
         };
         assert!(validate_import(&future).is_err());
 
@@ -2037,6 +2112,9 @@ mod tests {
             attachment_files_included: false,
             recurrence: None,
             task_note_links: None,
+            task_checklist_items: None,
+            task_checklist_definitions: None,
+            extra: Default::default(),
         };
         assert!(validate_import(&duplicated).is_err());
 
@@ -2050,6 +2128,9 @@ mod tests {
             attachment_files_included: true,
             recurrence: None,
             task_note_links: None,
+            task_checklist_items: None,
+            task_checklist_definitions: None,
+            extra: Default::default(),
         };
         assert!(validate_import(&falsely_complete).is_err());
     }
@@ -2114,6 +2195,9 @@ mod tests {
                 attachment_files_included: false,
                 recurrence: None,
                 task_note_links: None,
+                task_checklist_items: None,
+                task_checklist_definitions: None,
+                extra: Default::default(),
             },
         )
         .unwrap();
@@ -2189,6 +2273,9 @@ mod tests {
             attachment_files_included: true,
             recurrence: None,
             task_note_links: None,
+            task_checklist_items: None,
+            task_checklist_definitions: None,
+            extra: Default::default(),
         };
         let data = serde_json::to_vec(&export).unwrap();
         let asset_path = directory.join("original");

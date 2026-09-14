@@ -15,6 +15,11 @@ export interface ImportPreview {
   attachment_total: number;
   recurrence_total: number;
   link_total: number;
+  checklist_total: number;
+  checklist_deleted: number;
+  checklist_definition_total: number;
+  checklist_missing_parent_total: number;
+  checklist_metadata_included: boolean;
   link_deleted: number;
   link_metadata_included: boolean;
   attachment_added: number;

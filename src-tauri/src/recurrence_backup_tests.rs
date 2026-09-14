@@ -65,6 +65,9 @@ fn export(db: &Connection) -> TodoExport {
         attachment_files_included: false,
         recurrence: Some(recurrence_backup::export(db).unwrap()),
         task_note_links: None,
+        task_checklist_items: None,
+        task_checklist_definitions: None,
+        extra: Default::default(),
     }
 }
 fn roundtrip(doc: TodoExport) -> TodoExport {
