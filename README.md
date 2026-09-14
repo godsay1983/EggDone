@@ -1,5 +1,7 @@
 # EggDone（蛋定 Todo）
 
+任务效率功能开发（2026-09-14）：已选定“任务内检查清单、任务模板与快捷复制、多行文本批量创建”。本轮新增两端[实现方案](docs/TASK_PRODUCTIVITY_IMPLEMENTATION_PLAN.md)、[共享契约](docs/TASK_PRODUCTIVITY_CONTRACT.md)与[roadmap](docs/TASK_PRODUCTIVITY_ROADMAP.md)，开始纯草稿基础实现；当前没有新界面入口，不改变数据库、同步或已发布版本。验证结果与下一阶段以新 roadmap 为准。
+
 最新交接：[1.1.0 升版与 main 合并](.claude/handoffs/2026-09-13-071148-desktop-1-1-0-main.md)。
 
 当前本地候选版本：**1.1.0**（2026-09-13），配套鸿蒙 1.2.0。本批体验优化与内容管理已纳入版本，尚未正式发布；主要变化见 [更新日志](CHANGELOG.md)，新旧端混用、备份 v3 与升级注意事项见 [双端升级指南](docs/EXPERIENCE_UPGRADE_GUIDE.md)。以下“未升版/未提交/旧候选版本”等为历史阶段记录，以本段及最新 handoff 为准，不代表所有验收已通过。

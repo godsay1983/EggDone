@@ -1,0 +1,240 @@
+{
+  "version": 1,
+  "source": {
+    "title": "  发布版本  ",
+    "note": "测试通过\r\n上传安装包",
+    "groupUuid": "123e4567-e89b-42d3-a456-426614174000",
+    "checklist": [
+      {
+        "content": "  编译  ",
+        "completed": true
+      },
+      {
+        "content": "提交审核",
+        "completed": false
+      }
+    ],
+    "uuid": "old-task",
+    "dueAt": 1789430400000,
+    "reminderAt": 1789426800000,
+    "repeatRule": "daily",
+    "completed": true,
+    "isPinned": true,
+    "priority": 2,
+    "links": [
+      "old-note"
+    ],
+    "archivedAt": 123,
+    "deletedAt": 124
+  },
+  "parses": [
+    {
+      "id": "empty",
+      "input": " \r\n\t\n",
+      "titles": [],
+      "lines": [],
+      "duplicates": [],
+      "issues": []
+    },
+    {
+      "id": "line-endings",
+      "input": "买牛奶\r\n\n交电费\r提交报告 整理材料 备份",
+      "titles": [
+        "买牛奶",
+        "交电费",
+        "提交报告",
+        "整理材料",
+        "备份"
+      ],
+      "lines": [
+        1,
+        3,
+        4,
+        5,
+        6
+      ],
+      "duplicates": [
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "issues": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "id": "list-prefixes",
+      "input": "- [x] 买牛奶\n* [ ] 交电费\n+ [X] 提交报告\n1. 出发\n2) 到达\n3、 返程",
+      "titles": [
+        "买牛奶",
+        "交电费",
+        "提交报告",
+        "出发",
+        "到达",
+        "返程"
+      ],
+      "lines": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "duplicates": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "issues": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "id": "preserve-literals",
+      "input": "2026-09-14 报告\n1.1.0\n-5 元\n3.14\n- [ ] - 保留正文减号\n1.无空格",
+      "titles": [
+        "2026-09-14 报告",
+        "1.1.0",
+        "-5 元",
+        "3.14",
+        "- 保留正文减号",
+        "1.无空格"
+      ],
+      "lines": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "duplicates": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "issues": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "id": "duplicates",
+      "input": "买牛奶\n 买牛奶 \nBuy milk\nbuy milk",
+      "titles": [
+        "买牛奶",
+        "买牛奶",
+        "Buy milk",
+        "buy milk"
+      ],
+      "lines": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "duplicates": [
+        true,
+        true,
+        false,
+        false
+      ],
+      "issues": [
+        null,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "id": "empty-markers",
+      "input": "- [ ]\n- \n2. \n买牛奶",
+      "titles": [
+        "",
+        "",
+        "",
+        "买牛奶"
+      ],
+      "lines": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "duplicates": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "issues": [
+        "EMPTY_TITLE",
+        "EMPTY_TITLE",
+        "EMPTY_TITLE",
+        null
+      ]
+    },
+    {
+      "id": "no-time-parser",
+      "input": "明天15:00提交报告\n周五提醒买牛奶",
+      "titles": [
+        "明天15:00提交报告",
+        "周五提醒买牛奶"
+      ],
+      "lines": [
+        1,
+        2
+      ],
+      "duplicates": [
+        false,
+        false
+      ],
+      "issues": [
+        null,
+        null
+      ]
+    },
+    {
+      "id": "unicode",
+      "input": "Review 🥚\n测试‮隐藏",
+      "titles": [
+        "Review 🥚",
+        "测试‮隐藏"
+      ],
+      "lines": [
+        1,
+        2
+      ],
+      "duplicates": [
+        false,
+        false
+      ],
+      "issues": [
+        null,
+        "INVALID_TITLE"
+      ]
+    }
+  ]
+}
