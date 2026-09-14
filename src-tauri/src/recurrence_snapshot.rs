@@ -72,6 +72,7 @@ pub fn prepare_snapshot(
             advanced_count += 1;
             continue;
         }
+        crate::task_checklist_inheritance::repair_in_transaction(&tx, None)?;
         let todo = sync::build_document(&tx, now)?;
         sync::validate_document(&todo)?;
         let rules = recurrence_store::snapshot(&tx)?;

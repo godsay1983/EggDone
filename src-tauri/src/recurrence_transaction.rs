@@ -377,6 +377,9 @@ pub(crate) fn advance_in_transaction(
     )
     .map_err(db_error)?;
     recurrence_store::snapshot(&tx)?;
+    if let Some(next) = &plan.next {
+        crate::task_checklist_inheritance::repair_in_transaction(tx, Some(&next.uuid))?;
+    }
     if let Some(key) = receipt_key {
         tx.execute(
             "INSERT INTO app_metadata(key,value) VALUES(?1,?2)",

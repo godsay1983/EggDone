@@ -185,6 +185,22 @@ fn allowed(schedule: &RecurrenceSchedule, date: &str, index: u32) -> bool {
         && schedule.max_occurrences.is_none_or(|max| index <= max)
 }
 
+// Recover an occurrence from a civil date using the same identity rules as generation.
+pub fn recurrence_on_date(
+    schedule: &RecurrenceSchedule,
+    date: &str,
+) -> Result<RecurrenceOccurrence, String> {
+    validate_recurrence(schedule)?;
+    let index = occurrence_index(schedule, parse_date(date)?)?;
+    if !allowed(schedule, date, index) {
+        return Err(invalid());
+    }
+    Ok(RecurrenceOccurrence {
+        date: date.into(),
+        index,
+    })
+}
+
 pub fn next_recurrence(
     schedule: &RecurrenceSchedule,
     current_date: &str,

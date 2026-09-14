@@ -43,6 +43,9 @@ mod sync_target;
 pub mod task_checklist_editor;
 #[cfg(test)]
 mod task_checklist_editor_tests;
+pub mod task_checklist_inheritance;
+#[cfg(test)]
+mod task_checklist_inheritance_tests;
 pub mod task_checklist_protocol;
 pub mod task_checklist_store;
 #[cfg(test)]

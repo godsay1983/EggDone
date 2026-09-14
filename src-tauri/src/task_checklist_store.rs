@@ -1,4 +1,4 @@
-//! P1b storage API. UI, recurrence materialization and transport are wired in later phases.
+//! Checklist storage API. Inheritance is a separate repository; UI and transport remain gated.
 use crate::task_checklist_protocol::*;
 use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
 use serde::{Deserialize, Serialize};

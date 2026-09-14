@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "base_fixture": "task-checklist-editor-v1.json",
+  "definition_created_at": 100,
+  "entries": [
+    { "uuid": "123e4567-e89b-42d3-a456-000000000007", "content": "Pack charger", "sort_order": 0 },
+    { "uuid": "123e4567-e89b-42d3-a456-000000000006", "content": "Check documents", "sort_order": 1 }
+  ],
+  "occurrences": [
+    { "date": "2026-09-21", "index": 2, "todo": "6515aabe-456d-52e6-975a-dd99fe9cd420", "items": ["94f77f50-0cef-593e-a9bb-a41d1d27c0ed", "c1d482d6-c633-5c24-9075-4c305dbdaca4"] },
+    { "date": "2026-09-22", "index": 3, "todo": "ef330d47-729e-5cc3-8d70-e69d7792e2cc", "items": ["b95ae6b8-442a-50e3-b0f9-8fd76c0561f3", "5ce2c44a-6d4f-5c10-9e58-6ffeebb32e56"] }
+  ],
+  "suppressed_states": ["deleted", "archived", "wrong-series", "legacy"],
+  "failure_triggers": [
+    "BEFORE INSERT ON task_checklist_items",
+    "BEFORE UPDATE ON task_checklist_sync_state"
+  ]
+}
