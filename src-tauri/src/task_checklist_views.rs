@@ -29,6 +29,7 @@ pub struct ChecklistEditorSnapshot {
     pub repeat_series_uuid: Option<String>,
     pub rules: RecurrenceDocument,
     pub definitions: protocol::DefinitionsDocument,
+    pub next_occurrence_date: Option<String>,
 }
 
 // Every editable field and conflict baseline belongs to this same SQLite snapshot.
@@ -53,6 +54,19 @@ pub fn read_editor(db: &mut Connection, uuid: &str) -> Result<ChecklistEditorSna
         .filter(|i| i.todo_uuid == uuid)
         .collect();
     let rules = recurrence_store::snapshot(&tx)?.document;
+    let active: Vec<_> = rules
+        .rules
+        .iter()
+        .filter(|rule| {
+            rule.current_todo_uuid == uuid && rule.deleted_at.is_none() && !rule.exhausted
+        })
+        .collect();
+    let next_occurrence_date = if active.len() == 1 {
+        crate::recurrence::next_recurrence(&active[0].schedule, &active[0].current_date)?
+            .map(|next| next.date)
+    } else {
+        None
+    };
     let result = ChecklistEditorSnapshot {
         task,
         fields,
@@ -60,6 +74,7 @@ pub fn read_editor(db: &mut Connection, uuid: &str) -> Result<ChecklistEditorSna
         repeat_series_uuid: series,
         rules,
         definitions: checklist.definitions,
+        next_occurrence_date,
     };
     tx.commit().map_err(|e| e.to_string())?;
     Ok(result)

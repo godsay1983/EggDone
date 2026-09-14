@@ -28,6 +28,7 @@ export interface ChecklistEditorSnapshot {
   repeat_series_uuid: string | null;
   rules: RecurrenceDocument;
   definitions: DefinitionsDocument;
+  next_occurrence_date: string | null;
 }
 export interface ChecklistEditorDraft {
   title: string;

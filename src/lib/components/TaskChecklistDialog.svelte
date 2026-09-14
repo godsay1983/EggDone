@@ -1,12 +1,20 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import { translator } from '$lib/i18n';
-  import { createChecklistSession } from '$lib/stores/taskChecklistStore';
+  import { createTaskChecklistEditorSession } from '$lib/stores/taskChecklistEditorStore';
+  import { ChecklistScopeDraft, checklistFutureRule } from '$lib/utils/checklistScopeDraft';
+  import type { ChecklistEditorSnapshot } from '$lib/types/taskChecklistEditor';
   import type { ChecklistEdit } from '$lib/types/taskChecklist';
   export let uuid: string;
   export let onClose: () => void;
   export let onSaved: () => void;
-  const session = createChecklistSession();
+  const session = createTaskChecklistEditorSession();
+  let snapshot: ChecklistEditorSnapshot | null = null;
+  let scopeDraft = new ChecklistScopeDraft(() => crypto.randomUUID());
+  let future = false;
+  $: futureAvailable = snapshot !== null && checklistFutureRule(snapshot) !== null;
+  $: repeating = snapshot !== null && (snapshot.repeat_series_uuid !== null || snapshot.fields.repeat_rule !== null ||
+    snapshot.rules.rules.some(rule => rule.current_todo_uuid === uuid));
   let dialog: HTMLDialogElement;
   let title='', note='', items: ChecklistEdit[]=[], busy=false, loading=true, loaded=false, readOnly=false;
   let expandedItem = '';
@@ -21,12 +29,12 @@
     const frame = requestAnimationFrame(resize);
     return { update: resize, destroy: () => { observer.disconnect(); cancelAnimationFrame(frame); } };
   }
-  let error: 'loadFailed' | 'saveFailed' | 'conflict' | 'invalid' | ''='';
+  let error: 'loadFailed' | 'saveFailed' | 'conflict' | 'invalid' | 'scheduleMismatch' | ''='';
   $: done=items.filter(i=>i.completed).length;
   async function load() {
-    loading=true;error='';
+    loading=true;loaded=false;snapshot=null;error='';future=false;scopeDraft=new ChecklistScopeDraft(() => crypto.randomUUID());
     try {
-      const s=await session.load(uuid);title=s.title;note=s.note;readOnly=s.read_only;
+      snapshot=await session.load(uuid);const s=snapshot.task;title=s.title;note=s.note;readOnly=s.read_only;
       items=s.items.items.filter(i=>i.deleted_at===null).sort((a,b)=>a.sort_order-b.sort_order||a.uuid.localeCompare(b.uuid))
         .map(i=>({uuid:i.uuid,content:i.content,completed:i.completed,sort_order:i.sort_order}));
       loaded=true;
@@ -42,13 +50,14 @@
     const next=[...items];[next[index],next[index+offset]]=[next[index+offset],next[index]];items=next;
   }
   async function save() {
-    if(busy||loading||!loaded||readOnly)return;
+    if(busy||loading||!loaded||readOnly||snapshot===null)return;
     if(!title.trim()||items.some(i=>!i.content.trim()||i.content.trim().length>200||/[\u0000-\u001f\u007f]/.test(i.content.trim()))){
       error='invalid';if(!title.trim())detailsOpen=true;return;
     }
     busy=true;error='';
-    try {await session.save(title,note,items.map((i,n)=>({...i,content:i.content.trim(),sort_order:(n+1)*1000})));}
-    catch(e){error=String(e).includes('STALE')?'conflict':'saveFailed';busy=false;return;}
+    try {await session.save(scopeDraft.build(snapshot,title,note,
+      items.map((i,n)=>({...i,content:i.content.trim(),sort_order:(n+1)*1000})),future));}
+    catch(e){error=String(e).includes('STALE')?'conflict':String(e).includes('SCHEDULE_MISMATCH')?'scheduleMismatch':'saveFailed';busy=false;return;}
     busy=false;onSaved();
   }
 </script>
@@ -57,7 +66,7 @@
   oncancel={e=>{e.preventDefault();if(!busy)onClose();}}>
   <form onsubmit={e=>{e.preventDefault();void save();}}>
     <header><h2>{$translator('checklist.title')}</h2>
-      <span class="scope" title={$translator('checklist.currentOnly')}>{$translator('checklist.scope')}</span></header>
+      <span class="scope">{$translator(future?'checklist.future':'checklist.scope')}</span></header>
     <div class="fields">
       {#if loading}<p role="status">{$translator('common.loading')}</p>{/if}
       {#if error}<p role="alert">{$translator(`checklist.${error}`)}</p>{/if}
@@ -70,6 +79,16 @@
             <label>{$translator('todo.note')}<textarea bind:value={note} maxlength="1000" rows="2" disabled={busy||readOnly}></textarea></label>
           </div>
         </details>
+        {#if repeating && !readOnly}
+          <fieldset class="scope-options" disabled={busy}>
+            <legend>{$translator('checklist.applyTo')}</legend>
+            <div class="scope-choices">
+              <label class:chosen={!future}><input type="radio" name="checklist-scope" checked={!future} onchange={()=>future=false}/>{$translator('checklist.current')}</label>
+              <label class:chosen={future}><input type="radio" name="checklist-scope" checked={future} disabled={!futureAvailable||items.length>20} onchange={()=>future=true}/>{$translator('checklist.future')}</label>
+            </div>
+            <p class="scope-hint">{$translator(future?'checklist.futureHint':futureAvailable?'checklist.singleHint':'checklist.futureUnavailable')}</p>
+          </fieldset>
+        {/if}
         {#if readOnly}<p>{$translator('checklist.readOnly')}</p>{/if}
         <div class="section-head"><strong>{$translator('checklist.progress',{done,total:items.length})}</strong>
           <button type="button" class="action-button add-item" disabled={busy||readOnly||items.length>=20} onclick={add}>+ {$translator('checklist.add')}</button></div>
@@ -124,8 +143,16 @@
   summary>span:first-child{flex:1;min-width:0;font-size:13px;font-weight:500;overflow-wrap:anywhere;}
   .edit-label{font-size:12px;color:var(--muted);flex-shrink:0;}
   .task-fields{display:grid;gap:8px;padding-top:8px;}
+  .scope-options{border:0;margin:0;padding:0;min-width:0;}
+  .scope-options legend{font-size:12px;color:var(--muted);padding:0;margin-bottom:6px;}
+  .scope-choices{display:flex;flex-wrap:wrap;gap:6px;}
+  .scope-choices label{display:flex;align-items:center;gap:6px;min-height:32px;padding:0 8px;border-radius:6px;background:var(--field);cursor:pointer;}
+  .scope-choices .chosen{box-shadow:inset 0 0 0 1px #b28a19;}
+  .scope-choices input{accent-color:#b28a19;margin:0;}
+  .scope-choices label:has(input:disabled){opacity:.55;cursor:default;}
+  .scope-hint{color:var(--muted);margin-top:6px;}
   label{display:grid;gap:4px;font-size:12px;}
-  input:not([type=checkbox]),textarea{min-width:0;width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid var(--line);
+  input:not([type=checkbox]):not([type=radio]),textarea{min-width:0;width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid var(--line);
     border-radius:6px;font:inherit;color:inherit;background:var(--field);resize:none;}
   ol{list-style:none;margin:0;padding:0;}
   li{display:grid;grid-template-columns:32px minmax(0,1fr) 32px;gap:4px;align-items:start;padding:3px 0;border-bottom:1px solid var(--line);}

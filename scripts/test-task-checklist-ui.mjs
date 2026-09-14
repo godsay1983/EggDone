@@ -14,12 +14,18 @@ const output=resolve(tmpdir(),'eggdone-checklist-ui-'+Date.now());mkdirSync(outp
 const native=`export const isTauri=()=>false;
 export async function invoke(command,args){
   window.calls.push({command,args});
-  if(command==='read_task_checklist'){
+  if(command==='read_task_checklist_editor'){
     if(window.failLoad) throw Error('read');
-    return {todo_uuid:'123e4567-e89b-42d3-a456-000000000001',title:'Task',note:'Keep note',updated_at:1,read_only:window.readOnly,
-      items:{format_version:1,items:Array.from({length:window.count},(_,i)=>({uuid:'item-'+i,content:'Step '+i,completed:false,sort_order:i*1000,deleted_at:null}))}};
+    const uuid='123e4567-e89b-42d3-a456-000000000001';
+    return {task:{todo_uuid:uuid,title:'Task',note:'Keep note',updated_at:1,read_only:window.readOnly,
+      items:{format_version:1,items:Array.from({length:window.count},(_,i)=>({uuid:'item-'+i,content:'Step '+i,completed:false,sort_order:i*1000,deleted_at:null}))}},
+      fields:{due_date:'2026-09-20',due_at:null,reminder_at:5000,group_uuid:null,priority:0,repeat_rule:window.legacy?'daily':null},
+      completed:window.completed,repeat_series_uuid:window.recurring?'root':null,definitions:{format_version:1,definitions:[]},next_occurrence_date:'2026-09-21',
+      rules:{format_version:1,rules:window.recurring?[{uuid:'old-rule',first_todo_uuid:'root',current_todo_uuid:uuid,current_date:'2026-09-20',generated_count:3,
+        exhausted:false,deleted_at:window.stopped?1:null,schedule:{anchor_date:'2026-09-18',frequency:'daily',interval:1,weekdays:[],month_day:null,
+        end_type:'count',end_date:null,max_occurrences:5,local_time_minutes:null},timezone_id:null}]:[]}};
   }
-  if(command==='save_task_checklist'){if(window.failSave)throw Error(window.failSave);return 2;}
+  if(command==='save_task_checklist_editor'){if(window.failSave)throw Error(window.failSave);return {updated_at:2,rule_uuid:null,reminder_changed:false};}
   if(command==='list_task_checklist_progress')return [];
   throw Error('Unexpected IPC '+command);
 }`;
@@ -33,6 +39,7 @@ import '/src/app.css';
 const p=new URLSearchParams(location.search);setLanguageMode(p.get('lang'));document.documentElement.dataset.theme=p.get('theme');
 document.documentElement.style.zoom=p.get('scale')||'1';
 window.calls=[];window.saved=0;window.cancelled=0;window.failLoad=p.has('failLoad');window.failSave='';window.readOnly=p.has('readOnly');window.count=Number(p.get('count')||2);
+window.recurring=p.has('recurring');window.completed=p.has('completed');window.stopped=p.has('stopped');window.legacy=p.has('legacy');
 window.openPanel=()=>{let dialog=mount(Dialog,{target:document.body,props:{uuid:'123e4567-e89b-42d3-a456-000000000001',
  onClose:()=>{window.cancelled++;void unmount(dialog);},onSaved:()=>{window.saved++;void unmount(dialog);}}});};
 if(p.has('row')){
@@ -70,10 +77,10 @@ try{
   await page.evaluate(()=>window.failSave='offline');await page.locator('button[type=submit]').click();await page.locator('[role=alert]').waitFor();
   assert.equal(await page.locator('li textarea').first().inputValue(),'Updated step');
   await page.evaluate(()=>window.failSave='');await page.locator('button[type=submit]').click();await page.waitForFunction(()=>window.saved===1);
-  const calls=await page.evaluate(()=>window.calls.filter(c=>c.command==='save_task_checklist'));
-  assert.equal(calls.length,2);assert.deepEqual(calls[0].args.request,calls[1].args.request);assert.equal(calls[1].args.request.items[0].completed,true);
+  const calls=await page.evaluate(()=>window.calls.filter(c=>c.command==='save_task_checklist_editor'));
+  assert.equal(calls.length,2);assert.deepEqual(calls[0].args.request,calls[1].args.request);assert.equal(calls[1].args.request.task.items[0].completed,true);
   await page.evaluate(()=>window.openPanel());await page.locator('li textarea').first().waitFor();await page.keyboard.press('Escape');await page.waitForFunction(()=>window.cancelled===1);
-  assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.command==='save_task_checklist').length),2);cases++;
+  assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.command==='save_task_checklist_editor').length),2);cases++;
  }
  await page.setViewportSize({width:360,height:640});
  await page.goto(server.resolvedUrls.local[0]+'__checklist?lang=en-US&theme=dark&count=24');
@@ -87,9 +94,9 @@ try{
  await page.locator('.section-head button').click();assert.equal(await page.locator('li').count(),1);
  assert.ok(await page.locator('li textarea').evaluate(el=>el===document.activeElement));
  await page.locator('button[type=submit]').click();await page.locator('[role=alert]').waitFor();
- assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.command==='save_task_checklist').length),0);
+ assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.command==='save_task_checklist_editor').length),0);
  await page.locator('li textarea').fill('One\nTwo');await page.locator('button[type=submit]').click();
- assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.command==='save_task_checklist').length),0);
+ assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.command==='save_task_checklist_editor').length),0);
  await page.locator('li textarea').fill('One');
  await page.evaluate(()=>window.failSave='CHECKLIST_STALE');await page.locator('button[type=submit]').click();
  await page.waitForFunction(()=>document.querySelector('[role=alert]')?.textContent.includes('changed elsewhere'));
@@ -115,7 +122,7 @@ try{
  assert.equal(await page.locator('li textarea').first().inputValue(),'Step 1');
  assert.equal(await page.locator('.item-tools').count(),1);
  await page.locator('button[type=submit]').click();await page.waitForFunction(()=>window.saved===1);
- const edited=await page.evaluate(()=>window.calls.find(c=>c.command==='save_task_checklist').args.request);
+ const edited=await page.evaluate(()=>window.calls.find(c=>c.command==='save_task_checklist_editor').args.request.task);
  assert.equal(edited.title,'Changed task');assert.equal(edited.note,'Changed note');
  assert.equal(edited.items[0].content,'Step 1');
  for(const theme of ['light','dark'])for(const size of [{width:320,height:480},{width:620,height:720}])for(const scale of [1,1.5]){
@@ -141,5 +148,30 @@ try{
    assert.equal(sizes.button,12);assert.equal(sizes.buttonHeight,32);
    await page.screenshot({path:resolve(output,'density-'+theme+'-'+size.width+'-'+scale+'.png')});
  }
- assert.deepEqual(errors,[]);console.log('Checklist UI: '+cases+' responsive/locale/theme/scale cases plus draft, retry, conflict, limits, read-only and load-failure passed. Screenshots: '+output);
+ for(const lang of ['zh-CN','en-US'])for(const theme of ['light','dark'])for(const width of [320,620]){
+   await page.setViewportSize({width,height:640});
+   await page.goto(server.resolvedUrls.local[0]+'__checklist?lang='+lang+'&theme='+theme+'&scale=1.5&recurring');
+   const choices=page.locator('.scope-choices input');await choices.first().waitFor();
+   assert.ok(await choices.first().isChecked());await choices.last().check();
+   await page.locator('li input[type=checkbox]').first().check();
+   await page.evaluate(()=>window.failSave='offline');await page.locator('button[type=submit]').click();await page.locator('[role=alert]').waitFor();
+   assert.ok(await choices.last().isChecked());
+   assert.ok(await page.locator('dialog').evaluate(el=>el.scrollWidth<=el.clientWidth));
+   await page.screenshot({path:resolve(output,'scope-'+lang+'-'+theme+'-'+width+'.png')});
+   await page.evaluate(()=>window.failSave='');await page.locator('button[type=submit]').click();await page.waitForFunction(()=>window.saved===1);
+   const requests=await page.evaluate(()=>window.calls.filter(c=>c.command==='save_task_checklist_editor').map(c=>c.args.request));
+   assert.deepEqual(requests[0],requests[1]);const r=requests[1];
+   assert.equal(r.mode,'replace');assert.equal(r.replaces_uuid,'old-rule');
+   assert.equal(r.replacement.schedule.anchor_date,'2026-09-20');assert.equal(r.replacement.schedule.max_occurrences,3);
+   assert.equal(r.fields.reminder_at,5000);assert.equal(r.fields.due_date,'2026-09-20');
+   assert.equal(r.future_entries.length,2);assert.equal('completed' in r.future_entries[0],false);
+   await page.evaluate(()=>window.openPanel());await page.locator('.scope-choices input').last().check();
+   await page.keyboard.press('Escape');await page.waitForFunction(()=>window.cancelled===1);
+   assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.command==='save_task_checklist_editor').length),2);
+ }
+ for(const flag of ['completed','stopped','legacy']){
+   await page.goto(server.resolvedUrls.local[0]+'__checklist?lang=en-US&theme=dark&recurring&'+flag);
+   await page.locator('.scope-choices input').last().waitFor();assert.ok(await page.locator('.scope-choices input').last().isDisabled());
+ }
+ assert.deepEqual(errors,[]);console.log('Checklist UI: '+cases+' baseline matrices, 8 density and 8 scope matrices plus draft, retry, conflict, limits, read-only and load-failure passed. Screenshots: '+output);
 }finally{await browser?.close();await server.close();}

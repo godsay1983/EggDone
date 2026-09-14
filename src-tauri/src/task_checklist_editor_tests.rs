@@ -129,6 +129,7 @@ fn checklist_editor_snapshot_roundtrip_preserves_fields_and_future_definition() 
     assert_eq!(s.fields, r.fields);
     assert_eq!(s.task.updated_at, first.updated_at);
     assert_eq!(s.rules.rules.len(), 2);
+    assert_eq!(s.next_occurrence_date.as_deref(), Some("2026-09-21"));
     assert_eq!(
         s.definitions.definitions[0].entries[0].content,
         "future step"
