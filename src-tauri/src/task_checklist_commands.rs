@@ -1,3 +1,5 @@
+use crate::task_checklist_editor::{self, EditorRequest, EditorResult};
+use crate::task_checklist_views::ChecklistEditorSnapshot;
 use crate::{
     commands::lock_database,
     db::{device_id, now_millis, Database},
@@ -5,6 +7,30 @@ use crate::{
     task_checklist_views::{self, ChecklistPanelSnapshot, ChecklistProgress},
 };
 use tauri::{AppHandle, Emitter, State};
+
+#[tauri::command]
+pub fn read_task_checklist_editor(
+    database: State<'_, Database>,
+    uuid: String,
+) -> Result<ChecklistEditorSnapshot, String> {
+    let mut db = lock_database(&database)?;
+    task_checklist_views::read_editor(&mut db, &uuid)
+}
+
+#[tauri::command]
+pub fn save_task_checklist_editor(
+    database: State<'_, Database>,
+    app: AppHandle,
+    request: EditorRequest,
+) -> Result<EditorResult, String> {
+    let result = {
+        let mut db = lock_database(&database)?;
+        let by = device_id(&db).map_err(|e| e.to_string())?;
+        task_checklist_editor::save(&mut db, &request, now_millis(), &by)?
+    };
+    let _ = app.emit_to("main", "todos-changed", ());
+    Ok(result)
+}
 
 #[tauri::command]
 pub fn read_task_checklist(

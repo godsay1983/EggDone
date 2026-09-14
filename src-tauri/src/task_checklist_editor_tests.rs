@@ -85,6 +85,130 @@ fn replacement(r: &mut EditorRequest) {
         sort_order: 0,
     }];
 }
+
+fn request_from_editor_snapshot(
+    s: crate::task_checklist_views::ChecklistEditorSnapshot,
+) -> EditorRequest {
+    EditorRequest {
+        task: checklist::ChecklistSave {
+            operation_uuid: uuid::Uuid::new_v4().to_string(),
+            todo_uuid: s.task.todo_uuid,
+            expected_updated_at: s.task.updated_at,
+            expected_items: s.task.items.clone(),
+            title: s.task.title,
+            note: s.task.note,
+            items: s
+                .task
+                .items
+                .items
+                .into_iter()
+                .filter(|i| i.deleted_at.is_none())
+                .map(|i| checklist::ChecklistEdit {
+                    uuid: i.uuid,
+                    content: i.content,
+                    sort_order: i.sort_order,
+                    completed: i.completed,
+                })
+                .collect(),
+        },
+        fields: s.fields,
+        expected_rules: s.rules,
+        mode: "keep".into(),
+        replaces_uuid: None,
+        replacement: None,
+        future_entries: vec![],
+    }
+}
+
+#[test]
+fn checklist_editor_snapshot_roundtrip_preserves_fields_and_future_definition() {
+    let (mut db, mut r, by) = setup(true);
+    replacement(&mut r);
+    let first = save(&mut db, &r, 100, &by).unwrap();
+    let s = crate::task_checklist_views::read_editor(&mut db, &r.task.todo_uuid).unwrap();
+    assert_eq!(s.fields, r.fields);
+    assert_eq!(s.task.updated_at, first.updated_at);
+    assert_eq!(s.rules.rules.len(), 2);
+    assert_eq!(
+        s.definitions.definitions[0].entries[0].content,
+        "future step"
+    );
+    assert!(!s.completed);
+    assert!(!s.task.read_only);
+    assert_eq!(
+        s.repeat_series_uuid.as_deref(),
+        Some(r.task.todo_uuid.as_str())
+    );
+    let request = request_from_editor_snapshot(s);
+    let result = save(&mut db, &request, 9000, &by).unwrap();
+    assert_eq!(result.updated_at, first.updated_at);
+    assert!(!result.reminder_changed);
+    let next = crate::task_checklist_views::read_editor(&mut db, &r.task.todo_uuid).unwrap();
+    assert_eq!(next.fields.reminder_at, Some(5000));
+    assert_eq!(next.definitions.definitions.len(), 1);
+}
+
+#[test]
+fn checklist_editor_snapshot_exposes_readonly_and_rejects_deleted_missing_corrupt() {
+    let (mut db, r, _) = setup(true);
+    let id = &r.task.todo_uuid;
+    db.execute(
+        "UPDATE todos SET completed=1,archived_at=20 WHERE uuid=?1",
+        [id],
+    )
+    .unwrap();
+    let s = crate::task_checklist_views::read_editor(&mut db, id).unwrap();
+    assert!(s.completed && s.task.read_only);
+    db.execute("UPDATE todos SET deleted_at=30 WHERE uuid=?1", [id])
+        .unwrap();
+    assert!(crate::task_checklist_views::read_editor(&mut db, id)
+        .unwrap_err()
+        .contains("PARENT_MISSING"));
+    assert!(crate::task_checklist_views::read_editor(&mut db, "invalid").is_err());
+    assert!(
+        crate::task_checklist_views::read_editor(&mut db, &uuid::Uuid::new_v4().to_string())
+            .is_err()
+    );
+    db.execute("UPDATE todos SET deleted_at=NULL WHERE uuid=?1", [id])
+        .unwrap();
+    db.execute("UPDATE recurrence_rules SET record_json='broken'", [])
+        .unwrap();
+    assert!(crate::task_checklist_views::read_editor(&mut db, id).is_err());
+}
+
+#[test]
+fn checklist_editor_snapshot_detects_parent_rule_and_child_conflicts() {
+    for domain in ["parent", "rule", "child"] {
+        let (mut db, r, by) = setup(true);
+        save(&mut db, &r, 100, &by).unwrap();
+        let s = crate::task_checklist_views::read_editor(&mut db, &r.task.todo_uuid).unwrap();
+        let mut request = request_from_editor_snapshot(s);
+        request.task.title = "stale draft".into();
+        match domain {
+            "parent" => {
+                db.execute(
+                    "UPDATE todos SET title='remote',updated_at=updated_at+1",
+                    [],
+                )
+                .unwrap();
+            }
+            "rule" => {
+                let mut rules = request.expected_rules.clone();
+                rules.rules[0].updated_at += 1;
+                recurrence_store::merge(&mut db, &rules).unwrap();
+            }
+            _ => {
+                let mut items = request.task.expected_items.clone();
+                items.items[0].completed = true;
+                items.items[0].updated_at += 1;
+                checklist::merge(&mut db, &items, &DefinitionsDocument::default()).unwrap();
+            }
+        }
+        let before = dump(&db);
+        assert!(save(&mut db, &request, 200, &by).is_err(), "{domain}");
+        assert_eq!(dump(&db), before, "{domain}");
+    }
+}
 fn dump(db: &Connection) -> String {
     let mut out = vec![];
     for table in [

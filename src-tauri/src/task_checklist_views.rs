@@ -1,3 +1,6 @@
+use crate::{
+    recurrence_protocol::RecurrenceDocument, recurrence_store, task_checklist_editor::TaskFields,
+};
 use crate::{task_checklist_protocol as protocol, task_checklist_store as store};
 use rusqlite::{Connection, OptionalExtension};
 use serde::Serialize;
@@ -17,6 +20,49 @@ pub struct ChecklistProgress {
     pub todo_uuid: String,
     pub total: usize,
     pub completed: usize,
+}
+#[derive(Debug, Serialize)]
+pub struct ChecklistEditorSnapshot {
+    pub task: ChecklistPanelSnapshot,
+    pub fields: TaskFields,
+    pub completed: bool,
+    pub repeat_series_uuid: Option<String>,
+    pub rules: RecurrenceDocument,
+    pub definitions: protocol::DefinitionsDocument,
+}
+
+// Every editable field and conflict baseline belongs to this same SQLite snapshot.
+pub fn read_editor(db: &mut Connection, uuid: &str) -> Result<ChecklistEditorSnapshot, String> {
+    if !protocol::valid_uuid(uuid) {
+        return Err("INVALID_CHECKLIST_SAVE".into());
+    }
+    let tx = db.transaction().map_err(|e| e.to_string())?;
+    let (mut task, fields, completed, series) = tx.query_row(
+        "SELECT title,COALESCE(note,''),updated_at,archived_at,due_date,due_at,reminder_at,group_uuid,priority,repeat_rule,completed,repeat_series_uuid FROM todos WHERE uuid=?1 AND deleted_at IS NULL",
+        [uuid], |r| Ok((
+            ChecklistPanelSnapshot { todo_uuid: uuid.into(), title: r.get(0)?, note: r.get(1)?, updated_at: r.get(2)?,
+                read_only: r.get::<_, Option<i64>>(3)?.is_some(), items: Default::default() },
+            TaskFields { due_date: r.get(4)?, due_at: r.get(5)?, reminder_at: r.get(6)?, group_uuid: r.get(7)?, priority: r.get(8)?, repeat_rule: r.get(9)? },
+            r.get::<_, bool>(10)?, r.get::<_, Option<String>>(11)?
+        ))).optional().map_err(|e| e.to_string())?.ok_or("CHECKLIST_PARENT_MISSING")?;
+    let checklist = store::read_in_transaction(&tx)?;
+    task.items.items = checklist
+        .items
+        .items
+        .into_iter()
+        .filter(|i| i.todo_uuid == uuid)
+        .collect();
+    let rules = recurrence_store::snapshot(&tx)?.document;
+    let result = ChecklistEditorSnapshot {
+        task,
+        fields,
+        completed,
+        repeat_series_uuid: series,
+        rules,
+        definitions: checklist.definitions,
+    };
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(result)
 }
 pub fn read(db: &mut Connection, uuid: &str) -> Result<ChecklistPanelSnapshot, String> {
     if !protocol::valid_uuid(uuid) {

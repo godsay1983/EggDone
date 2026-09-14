@@ -1,3 +1,12 @@
+import type { RecurrenceSchedule } from './recurrence';
+
+export interface DefinitionEntry { uuid: string; content: string; sort_order: number; }
+export interface ChecklistDefinition {
+  rule_uuid: string; first_todo_uuid: string; schedule: RecurrenceSchedule; timezone_id: string | null;
+  applies_from_index: number; entries: DefinitionEntry[];
+  created_at: number; updated_at: number; updated_by: string; deleted_at: number | null;
+}
+export interface DefinitionsDocument { format_version: number; definitions: ChecklistDefinition[]; }
 export interface ChecklistItem {
   uuid: string; todo_uuid: string; source_rule_uuid: string | null; source_entry_uuid: string | null;
   content: string; sort_order: number; completed: boolean;

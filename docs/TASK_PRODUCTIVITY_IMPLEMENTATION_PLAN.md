@@ -96,4 +96,5 @@ P1c-1 已在重复生成事务与同步前本地准备中接入清单继承/补�
 P1c-2 已完成清单网络同步与状态汇总，经过隔离 HTTP 服务的 Rust/ArkTS 双向交换与失败重试验证，见 [TASK_CHECKLIST_SYNC.md](TASK_CHECKLIST_SYNC.md)。
 P1c-3 已完成备份 v4、恢复预览和整笔事务，经过双端实际导出/导入交换验证，见 [TASK_CHECKLIST_BACKUP.md](TASK_CHECKLIST_BACKUP.md)。
 P1d-1 保存失败保留草稿，取消不落库；鸿蒙标题变更后的未来提醒在提交后刷新，失败不重复保存。此阶段勾选仍在草稿中，必须点击保存。
-下一步 P1d-2 接新建、完整字段编辑、仅本次/以后选择和已保存详情即时勾选；之后 P1e 验收，不将本轮垂直切片视为整体 P1d 完成。
+P1d-2a 已完成同事务完整快照、命令/store 与提交会话接线；共享会话和隔离数据库测试通过，尚未接产品界面，见 [TASK_CHECKLIST_EDITOR_GATEWAY.md](TASK_CHECKLIST_EDITOR_GATEWAY.md)。
+下一步 P1d-2b 接完整字段与清单统一草稿、仅本次/以后选择；P1d-2c 接原子新建，P1d-2d 接已保存详情即时勾选。之后 P1e 验收，不将内部接线视为整体 P1d 完成。
