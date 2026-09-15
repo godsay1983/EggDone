@@ -17,6 +17,7 @@
   import type { ChecklistEdit } from '$lib/types/taskChecklist';
   export let uuid: string;
   export let creation: ChecklistEditorSnapshot | null = null;
+  export let initialItems: ChecklistEdit[] = [];
   export let initialRepeat = 'none';
   export let groups: TodoGroup[] = [];
   export let onClose: () => void;
@@ -64,6 +65,7 @@
       if(creation){detailsOpen=true;choice=initialRepeat;}
       items=s.items.items.filter(i=>i.deleted_at===null).sort((a,b)=>a.sort_order-b.sort_order||a.uuid.localeCompare(b.uuid))
         .map(i=>({uuid:i.uuid,content:i.content,completed:i.completed,sort_order:i.sort_order}));
+      if(creation) items=structuredClone(initialItems);
       loaded=true;
     } catch {error='loadFailed';} finally {loading=false;}
   }

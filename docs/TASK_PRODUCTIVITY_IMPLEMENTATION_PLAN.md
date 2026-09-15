@@ -4,6 +4,7 @@
 范围：任务内检查清单、任务模板与快捷复制、多行文本批量创建任务。
 基线：桌面 1.1.0 / SQLite 19，鸿蒙 1.2.0 / RDB 20。
 状态：P0/P1a/P1b/P1c 已提交；当前 SQLite 20 / RDB 21，清单网络传输与备份 v4 已接入。P1d-1/P1d-2a/P1d-2b 已实现已有任务清单、完整字段和以后定义；P1d-2c 已接[新建任务与清单](TASK_CHECKLIST_CREATION_UI.md)，P1d-2d 已接[详情即时勾选](TASK_CHECKLIST_DETAIL_UI.md)。完整原生验收尚未完成。
+P2a 已接入两端[任务快捷复制](TASK_QUICK_COPY.md)，生成独立新草稿并复用原子创建；原生验收待进行。模板管理和批量创建尚未交付。
 旧版体验升级不再纳入本轮功能范围。阶段状态见 [roadmap](TASK_PRODUCTIVITY_ROADMAP.md)，规则见 [共享契约](TASK_PRODUCTIVITY_CONTRACT.md)。
 
 ## 产品目标

@@ -1,17 +1,33 @@
 <script lang="ts">
-  import { onMount, tick } from "svelte";
+  import { onMount, onDestroy, tick } from "svelte";
   import { fly } from "svelte/transition";
 
   import { languageState, translator } from "$lib/i18n";
   import type { TranslationKey } from "$lib/i18n";
   import RecurrenceEditor from "./RecurrenceEditor.svelte";
   import TaskChecklistDetails from './TaskChecklistDetails.svelte';
+  import TaskChecklistDialog from './TaskChecklistDialog.svelte';
+  import { readTaskCopyDraft } from '$lib/stores/taskChecklistEditorStore';
+  import type { TaskCopyDraft } from '$lib/utils/taskCopyDraft';
   import { checklistProgress, refreshChecklistProgress } from '$lib/stores/taskChecklistStore';
   import { todos } from '$lib/stores/todoStore';
   let checklistOpen = false;
   $: checklistCount = $checklistProgress?.[todo.uuid];
   function openChecklist() { actionsOpen=false;checklistOpen=true; }
   function checklistSaved() { void todos.refresh();void refreshChecklistProgress(); }
+  let copyDraft: TaskCopyDraft | null = null;
+  let copyLoading = false, copyError = '', alive = true;
+  onDestroy(() => { alive = false; });
+  async function copyTask() {
+    if(copyLoading || copyDraft) return;
+    actionsOpen=false;copyLoading=true;copyError='';
+    try {
+      const draft=await readTaskCopyDraft(todo.uuid,groups.map(group=>group.uuid));
+      if(alive) copyDraft=draft;
+    } catch(error) {
+      if(alive) copyError=$translator(String(error).includes('TOO_MANY_ITEMS')?'todo.copyLimit':'todo.copyFailed');
+    } finally { if(alive) copyLoading=false; }
+  }
   import { recurrenceRules } from "$lib/stores/recurrenceStore";
   import { visibleRecurrenceRule } from "$lib/utils/recurrenceForm";
   import { recurrenceSummary } from "$lib/utils/recurrenceSummary";
@@ -119,7 +135,7 @@
   let repeatChoice: RepeatRule | "none" = "none";
   let groupSaving = false;
   let actionsOpen = false;
-  $: onEditingChange(checklistOpen || editing || saving || scheduleOpen || recurrenceOpen || scheduleSaving || noteOpen || noteSaving || groupSaving);
+  $: onEditingChange(copyLoading || copyDraft!==null || checklistOpen || editing || saving || scheduleOpen || recurrenceOpen || scheduleSaving || noteOpen || noteSaving || groupSaving);
   let editInput: HTMLInputElement;
   let noteInput: HTMLTextAreaElement;
   let itemElement: HTMLElement;
@@ -746,6 +762,7 @@
     </button>
     {#if actionsOpen}
       <div class="actions-menu" role="menu">
+        <button type="button" role="menuitem" disabled={copyLoading} onclick={()=>void copyTask()}>{$translator('todo.copy')}</button>
         <button type="button" role="menuitem" onclick={openChecklist}>{$translator('checklist.title')}</button>
         <button type="button" role="menuitem" onclick={() => { actionsOpen = false; onManageLinks(todo); }}>
           {$translator("links.notes")}
@@ -892,6 +909,12 @@
     {/if}
   </div>
 </article>
+{#if copyLoading}<p class="copy-status" role="status">{$translator('common.loading')}</p>{/if}
+{#if copyError}<p class="copy-status" role="alert">{copyError}</p>{/if}
+{#if copyDraft}
+  <TaskChecklistDialog uuid={copyDraft.creation.task.todo_uuid} creation={copyDraft.creation} initialItems={copyDraft.items}
+    {groups} onClose={()=>copyDraft=null} onSaved={()=>{copyDraft=null;checklistSaved();}}/>
+{/if}
 {#if recurrenceOpen}
   <RecurrenceEditor {todo} onClose={() => recurrenceOpen = false} />
 {/if}
@@ -900,6 +923,7 @@
 {/if}
 
 <style>
+  .copy-status { font-size:12px; margin:4px 12px; overflow-wrap:anywhere; }
   .todo-meta .checklist-progress {
     display:inline-flex;align-items:center;border:0;border-radius:8px;padding:2px 7px;margin:0;
     background:#ece9df;color:#615c4e;font:inherit;font-size:11px;line-height:1.4;max-width:100%;white-space:normal;cursor:pointer;

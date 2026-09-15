@@ -51,6 +51,7 @@ export async function invoke(command,args){
   if(command==='save_task_checklist_editor'||command==='create_task_checklist_editor'){if(window.failSave)throw Error(window.failSave);return {updated_at:2,rule_uuid:null,reminder_changed:false};}
   if(command==='resolve_checklist_rule_time')return args.schedule.local_time_minutes===null?null:Date.parse(args.schedule.anchor_date+'T00:00:00Z')+args.schedule.local_time_minutes*60000;
   if(command==='list_task_checklist_progress')return [];
+  if(command==='list_todos'||command==='list_groups')return [];
   throw Error('Unexpected IPC '+command);
 }`;
 const html=`<!doctype html><html><head><meta charset="utf-8"></head><body><script type="module">
@@ -286,7 +287,11 @@ try{
    assert.ok(await checks.first().isChecked());assert.equal(await page.locator('dialog[open]').count(),1,'save stays in detail');
    const first=await page.evaluate(()=>window.calls.find(c=>c.command==='save_task_checklist').args.request);
    assert.equal(first.title,'Task with checklist');assert.equal(first.note,'Keep note');assert.equal(first.items[1].completed,false);
-   await page.evaluate(()=>window.failSave='offline');await checks.last().click();await page.locator('[role=alert]').waitFor();
+   await page.evaluate(()=>window.failSave='offline');await checks.last().click();
+   try { await page.locator('[role=alert]').waitFor(); } catch(error) {
+     console.error('Detail failure case',lang,theme,size,scale,await page.evaluate(()=>window.calls));
+     await page.screenshot({path:resolve(output,'detail-failure.png')});throw error;
+   }
    assert.equal(await checks.last().isChecked(),false,'failure restores visible checkbox');
    assert.ok(await page.locator('header .edit').isDisabled());
    await page.evaluate(()=>window.failSave='');await page.locator('.recovery button').first().click();
@@ -321,5 +326,37 @@ try{
  assert.equal(await page.locator('.recovery button').count(),1,'conflict only offers reload');
  await page.goto(server.resolvedUrls.local[0]+'__checklist?details&lang=en-US&theme=dark&readOnly');
  await page.locator('dialog li input').first().waitFor();assert.ok(await page.locator('dialog li input').first().isDisabled());assert.ok(await page.locator('header .edit').isDisabled());
- assert.deepEqual(errors,[]);console.log('Checklist UI: '+cases+' baseline, 8 density, 8 scope, 8 full-settings, 8 creation and '+detailCases+' detail matrices; immediate save/retry/reload and edit isolation passed. Screenshots: '+output);
+ for(const lang of ['zh-CN','en-US'])for(const theme of ['light','dark'])for(const width of [320,640]){
+   await page.setViewportSize({width,height:720});
+   await page.goto(server.resolvedUrls.local[0]+'__checklist?row&lang='+lang+'&theme='+theme+'&scale=1.5');
+   const openCopy=async()=>{await page.locator('.more-button').click();await page.getByRole('menuitem',{name:lang==='zh-CN'?'复制任务':'Copy task',exact:true}).click();};
+   await openCopy();await page.locator('.task-fields input').waitFor();
+   assert.equal(await page.locator('.task-fields input').inputValue(),'Task','copy reads saved title, not stale row title');
+   assert.equal(await page.locator('li textarea').first().inputValue(),'Step 0');
+   assert.ok(await page.locator('li input[type=checkbox]').first().isDisabled());
+   assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.command.startsWith('create_')).length),0);
+   await page.keyboard.press('Escape');await page.locator('dialog').waitFor({state:'detached'});
+   assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.command.startsWith('create_')).length),0);
+   await openCopy();await page.locator('.task-fields input').fill('Edited copy');
+   await page.evaluate(()=>window.failSave='offline');await page.locator('button[type=submit]').click();await page.locator('dialog [role=alert]').waitFor();
+   assert.equal(await page.locator('.task-fields input').inputValue(),'Edited copy');
+   assert.ok(await page.locator('dialog').evaluate(el=>el.scrollWidth<=el.clientWidth));
+   await page.screenshot({path:resolve(output,'copy-'+lang+'-'+theme+'-'+width+'.png')});
+   await page.evaluate(()=>window.failSave='');await page.locator('button[type=submit]').click();await page.locator('dialog').waitFor({state:'detached'});
+   const requests=await page.evaluate(()=>window.calls.filter(c=>c.command==='create_task_checklist_editor').map(c=>c.args.request));
+   assert.equal(requests.length,2);assert.deepEqual(requests[0],requests[1]);
+   const r=requests[1];assert.deepEqual(r.task.expected_items.items,[]);assert.equal(r.task.expected_updated_at,0);
+   assert.notEqual(r.task.todo_uuid,'123e4567-e89b-42d3-a456-000000000001');
+   assert.ok(r.task.items.every(i=>!i.uuid.startsWith('item-')&&!i.completed));
+   assert.equal(r.fields.due_date,null);assert.equal(r.fields.reminder_at,null);assert.equal(r.fields.repeat_rule,null);assert.equal(r.mode,'keep');
+   assert.equal(r.replaces_uuid,null);assert.deepEqual(r.future_entries,[]);
+   assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.command==='save_task_checklist_editor').length),0);
+ }
+ for(const [query,message] of [['&failLoad','Could not load this task to copy. Please retry.'],['&count=21','This checklist has more than 20 items and cannot be copied.']]){
+   await page.goto(server.resolvedUrls.local[0]+'__checklist?row&lang=en-US&theme=dark'+query);
+   await page.locator('.more-button').click();await page.getByRole('menuitem',{name:'Copy task',exact:true}).click();
+   await page.getByRole('alert').waitFor();assert.equal(await page.getByRole('alert').innerText(),message);
+   assert.equal(await page.locator('dialog').count(),0);assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.command.startsWith('create_')).length),0);
+ }
+ assert.deepEqual(errors,[]);console.log('Checklist UI: '+cases+' baseline, 8 density, 8 scope, 8 full-settings, 8 creation, 8 copy and '+detailCases+' detail matrices; immediate save/retry/reload and edit isolation passed. Screenshots: '+output);
 }finally{await browser?.close();await server.close();}
