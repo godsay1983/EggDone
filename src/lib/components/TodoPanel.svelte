@@ -2,6 +2,10 @@
   import { invoke, isTauri } from "@tauri-apps/api/core";
   import CaptureDialog from "./CaptureDialog.svelte";
   import TaskChecklistDialog from "./TaskChecklistDialog.svelte";
+  import TaskTemplateDialog from "./TaskTemplateDialog.svelte";
+  import type { TaskCopyDraft } from '$lib/utils/taskCopyDraft';
+  let templatesOpen = false;
+  let templateTaskDraft: TaskCopyDraft | null = null;
   import { newChecklistDraft } from "$lib/utils/taskChecklistCreation";
   import type { ChecklistEditorSnapshot } from "$lib/types/taskChecklistEditor";
   import LinkedTodoDialog from "./LinkedTodoDialog.svelte";
@@ -2613,6 +2617,15 @@
     <TaskChecklistDialog uuid={checklistCreation.task.todo_uuid} creation={checklistCreation} initialRepeat={checklistInitialRepeat}
       groups={$todos.groups} onClose={()=>checklistCreation=null} onSaved={()=>void afterChecklistCreated()}/>
   {/if}
+  {#if templatesOpen}
+    <TaskTemplateDialog groups={$todos.groups} onClose={()=>templatesOpen=false}
+      onUse={draft=>{templatesOpen=false;templateTaskDraft=draft;}}/>
+  {/if}
+  {#if templateTaskDraft}
+    <TaskChecklistDialog uuid={templateTaskDraft.creation.task.todo_uuid} creation={templateTaskDraft.creation}
+      initialItems={templateTaskDraft.items} groups={$todos.groups} onClose={()=>templateTaskDraft=null}
+      onSaved={()=>{templateTaskDraft=null;void todos.refresh();}}/>
+  {/if}
   {#if quickAddPreview && listView !== "notes"}
     <div class="quick-add-preview" role="status">
       <span>
@@ -2962,6 +2975,7 @@
             {/each}
             <hr />
           {/if}
+          <button type="button" role="menuitem" onclick={()=>{summaryMenuOpen=false;templatesOpen=true;}}>{$translator('templates.title')}</button>
           <button
             class:active={showSearch}
             type="button"

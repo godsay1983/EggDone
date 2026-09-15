@@ -7,6 +7,8 @@
   import RecurrenceEditor from "./RecurrenceEditor.svelte";
   import TaskChecklistDetails from './TaskChecklistDetails.svelte';
   import TaskChecklistDialog from './TaskChecklistDialog.svelte';
+  import TaskTemplateDialog from './TaskTemplateDialog.svelte';
+  let templateOpen = false;
   import { readTaskCopyDraft } from '$lib/stores/taskChecklistEditorStore';
   import type { TaskCopyDraft } from '$lib/utils/taskCopyDraft';
   import { checklistProgress, refreshChecklistProgress } from '$lib/stores/taskChecklistStore';
@@ -135,7 +137,7 @@
   let repeatChoice: RepeatRule | "none" = "none";
   let groupSaving = false;
   let actionsOpen = false;
-  $: onEditingChange(copyLoading || copyDraft!==null || checklistOpen || editing || saving || scheduleOpen || recurrenceOpen || scheduleSaving || noteOpen || noteSaving || groupSaving);
+  $: onEditingChange(templateOpen || copyLoading || copyDraft!==null || checklistOpen || editing || saving || scheduleOpen || recurrenceOpen || scheduleSaving || noteOpen || noteSaving || groupSaving);
   let editInput: HTMLInputElement;
   let noteInput: HTMLTextAreaElement;
   let itemElement: HTMLElement;
@@ -762,7 +764,8 @@
     </button>
     {#if actionsOpen}
       <div class="actions-menu" role="menu">
-        <button type="button" role="menuitem" disabled={copyLoading} onclick={()=>void copyTask()}>{$translator('todo.copy')}</button>
+          <button type="button" role="menuitem" disabled={copyLoading} onclick={()=>void copyTask()}>{$translator('todo.copy')}</button>
+          <button type="button" role="menuitem" onclick={()=>{actionsOpen=false;templateOpen=true;}}>{$translator('templates.saveAs')}</button>
         <button type="button" role="menuitem" onclick={openChecklist}>{$translator('checklist.title')}</button>
         <button type="button" role="menuitem" onclick={() => { actionsOpen = false; onManageLinks(todo); }}>
           {$translator("links.notes")}
@@ -914,6 +917,10 @@
 {#if copyDraft}
   <TaskChecklistDialog uuid={copyDraft.creation.task.todo_uuid} creation={copyDraft.creation} initialItems={copyDraft.items}
     {groups} onClose={()=>copyDraft=null} onSaved={()=>{copyDraft=null;checklistSaved();}}/>
+{/if}
+{#if templateOpen}
+  <TaskTemplateDialog sourceUuid={todo.uuid} {groups} onClose={()=>templateOpen=false}
+    onUse={draft=>{templateOpen=false;copyDraft=draft;}}/>
 {/if}
 {#if recurrenceOpen}
   <RecurrenceEditor {todo} onClose={() => recurrenceOpen = false} />

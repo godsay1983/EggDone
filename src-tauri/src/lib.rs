@@ -72,6 +72,7 @@ mod task_note_link_tests;
 mod task_note_link_transport;
 mod task_note_link_views;
 mod task_template_backup;
+mod task_template_commands;
 pub mod task_template_protocol;
 mod task_template_session;
 pub mod task_template_store;
@@ -185,6 +186,8 @@ pub fn run() {
             task_note_link_commands::list_task_note_links,
             task_checklist_commands::read_task_checklist,
             task_checklist_commands::read_task_checklist_editor,
+            task_template_commands::list_task_templates,
+            task_template_commands::save_task_template,
             task_checklist_commands::save_task_checklist_editor,
             task_checklist_commands::create_task_checklist_editor,
             task_checklist_commands::resolve_checklist_rule_time,
