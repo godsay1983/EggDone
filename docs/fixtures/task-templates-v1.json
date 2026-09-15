@@ -1,0 +1,1160 @@
+{
+  "base": {
+    "uuid": "123e4567-e89b-42d3-a456-000000000010",
+    "content": {
+      "name": "Release checklist",
+      "title": "Prepare release",
+      "note": "Keep\nnotes",
+      "group_uuid": null,
+      "checklist": [
+        "Build",
+        "Verify"
+      ]
+    },
+    "created_at": 1,
+    "updated_at": 10,
+    "updated_by": "device-a",
+    "deleted_at": null
+  },
+  "valid": [
+    {
+      "id": "empty",
+      "document": {
+        "format_version": 1,
+        "templates": []
+      }
+    },
+    {
+      "id": "base",
+      "document": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "Release checklist",
+              "title": "Prepare release",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 10,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "unicode",
+      "document": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "模板",
+              "title": "任务",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                "😀",
+                ""
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 10,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "deleted",
+      "document": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "Release checklist",
+              "title": "Prepare release",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 10,
+            "updated_by": "device-a",
+            "deleted_at": 10
+          }
+        ]
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "id": "version",
+      "document": {
+        "format_version": 2,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "Release checklist",
+              "title": "Prepare release",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 10,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "unknown-root",
+      "document": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "Release checklist",
+              "title": "Prepare release",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 10,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ],
+        "extra": 1
+      }
+    },
+    {
+      "id": "unknown-content",
+      "document": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "Release checklist",
+              "title": "Prepare release",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                "Build",
+                "Verify"
+              ],
+              "extra": 1
+            },
+            "created_at": 1,
+            "updated_at": 10,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "missing-null",
+      "document": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "Release checklist",
+              "title": "Prepare release",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 10,
+            "updated_by": "device-a"
+          }
+        ]
+      }
+    },
+    {
+      "id": "missing-group",
+      "document": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "Release checklist",
+              "title": "Prepare release",
+              "note": "Keep\nnotes",
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 10,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "bad-uuid",
+      "document": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "x",
+            "content": {
+              "name": "Release checklist",
+              "title": "Prepare release",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 10,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "name-blank",
+      "document": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": " ",
+              "title": "Prepare release",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 10,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "untrimmed",
+      "document": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "Release checklist",
+              "title": " x",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 10,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "name-long",
+      "document": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "title": "Prepare release",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 10,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "item-long",
+      "document": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "Release checklist",
+              "title": "Prepare release",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 10,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "item-control",
+      "document": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "Release checklist",
+              "title": "Prepare release",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                "a\nb"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 10,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "note-control",
+      "document": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "Release checklist",
+              "title": "Prepare release",
+              "note": "\u0000",
+              "group_uuid": null,
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 10,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "group-invalid",
+      "document": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "Release checklist",
+              "title": "Prepare release",
+              "note": "Keep\nnotes",
+              "group_uuid": "bad",
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 10,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "float-clock",
+      "document": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "Release checklist",
+              "title": "Prepare release",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 1.5,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "past-clock",
+      "document": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "Release checklist",
+              "title": "Prepare release",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 0,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "unsafe-clock",
+      "document": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "Release checklist",
+              "title": "Prepare release",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 9007199254740992,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "delete-after-update",
+      "document": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "Release checklist",
+              "title": "Prepare release",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 10,
+            "updated_by": "device-a",
+            "deleted_at": 11
+          }
+        ]
+      }
+    },
+    {
+      "id": "invalid-device",
+      "document": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "Release checklist",
+              "title": "Prepare release",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 10,
+            "updated_by": "中文",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "duplicate-id",
+      "document": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "Release checklist",
+              "title": "Prepare release",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 10,
+            "updated_by": "device-a",
+            "deleted_at": null
+          },
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "Release checklist",
+              "title": "Prepare release",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 10,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "null-checklist",
+      "document": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "Release checklist",
+              "title": "Prepare release",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": null
+            },
+            "created_at": 1,
+            "updated_at": 10,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "extra-item-field",
+      "document": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "Release checklist",
+              "title": "Prepare release",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                {
+                  "content": "x",
+                  "completed": true
+                }
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 10,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    }
+  ],
+  "merges": [
+    {
+      "id": "newer",
+      "left": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "Release checklist",
+              "title": "Prepare release",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 10,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "Release checklist",
+              "title": "New",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 20,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      },
+      "expected": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "Release checklist",
+              "title": "New",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 20,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "delete-wins-newer-live",
+      "left": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "Release checklist",
+              "title": "Prepare release",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 10,
+            "updated_by": "device-a",
+            "deleted_at": 10
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "Release checklist",
+              "title": "New",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 20,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      },
+      "expected": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "Release checklist",
+              "title": "Prepare release",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 10,
+            "updated_by": "device-a",
+            "deleted_at": 10
+          }
+        ]
+      }
+    },
+    {
+      "id": "device-tiebreak",
+      "left": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "Release checklist",
+              "title": "Prepare release",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 10,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "Release checklist",
+              "title": "Prepare release",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 10,
+            "updated_by": "device-z",
+            "deleted_at": null
+          }
+        ]
+      },
+      "expected": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "Release checklist",
+              "title": "Prepare release",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 10,
+            "updated_by": "device-z",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "payload-tiebreak",
+      "left": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "Release checklist",
+              "title": "Prepare release",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 10,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "Release checklist",
+              "title": "Prepare release",
+              "note": "zz",
+              "group_uuid": null,
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 10,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      },
+      "expected": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "Release checklist",
+              "title": "Prepare release",
+              "note": "zz",
+              "group_uuid": null,
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 10,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "utf8-order",
+      "left": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "😀",
+              "title": "Prepare release",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 10,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "",
+              "title": "Prepare release",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 10,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      },
+      "expected": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "😀",
+              "title": "Prepare release",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 10,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "identity-conflict",
+      "left": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "Release checklist",
+              "title": "Prepare release",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 1,
+            "updated_at": 10,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "templates": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000010",
+            "content": {
+              "name": "Release checklist",
+              "title": "Prepare release",
+              "note": "Keep\nnotes",
+              "group_uuid": null,
+              "checklist": [
+                "Build",
+                "Verify"
+              ]
+            },
+            "created_at": 2,
+            "updated_at": 10,
+            "updated_by": "device-a",
+            "deleted_at": null
+          }
+        ]
+      },
+      "error": true
+    }
+  ],
+  "variants": [
+    {
+      "uuid": "123e4567-e89b-42d3-a456-000000000010",
+      "content": {
+        "name": "Release checklist",
+        "title": "Prepare release",
+        "note": "Keep\nnotes",
+        "group_uuid": null,
+        "checklist": [
+          "Build",
+          "Verify"
+        ]
+      },
+      "created_at": 1,
+      "updated_at": 10,
+      "updated_by": "device-a",
+      "deleted_at": null
+    },
+    {
+      "uuid": "123e4567-e89b-42d3-a456-000000000010",
+      "content": {
+        "name": "Release checklist",
+        "title": "New",
+        "note": "Keep\nnotes",
+        "group_uuid": null,
+        "checklist": [
+          "Build",
+          "Verify"
+        ]
+      },
+      "created_at": 1,
+      "updated_at": 20,
+      "updated_by": "device-a",
+      "deleted_at": null
+    },
+    {
+      "uuid": "123e4567-e89b-42d3-a456-000000000010",
+      "content": {
+        "name": "Release checklist",
+        "title": "Prepare release",
+        "note": "Keep\nnotes",
+        "group_uuid": null,
+        "checklist": [
+          "Build",
+          "Verify"
+        ]
+      },
+      "created_at": 1,
+      "updated_at": 10,
+      "updated_by": "device-z",
+      "deleted_at": null
+    },
+    {
+      "uuid": "123e4567-e89b-42d3-a456-000000000010",
+      "content": {
+        "name": "Release checklist",
+        "title": "Prepare release",
+        "note": "Keep\nnotes",
+        "group_uuid": null,
+        "checklist": [
+          "Build",
+          "Verify"
+        ]
+      },
+      "created_at": 1,
+      "updated_at": 10,
+      "updated_by": "device-a",
+      "deleted_at": 10
+    },
+    {
+      "uuid": "123e4567-e89b-42d3-a456-000000000010",
+      "content": {
+        "name": "Release checklist",
+        "title": "Prepare release",
+        "note": "zz",
+        "group_uuid": null,
+        "checklist": [
+          "Build",
+          "Verify"
+        ]
+      },
+      "created_at": 1,
+      "updated_at": 10,
+      "updated_by": "device-a",
+      "deleted_at": null
+    },
+    {
+      "uuid": "123e4567-e89b-42d3-a456-000000000010",
+      "content": {
+        "name": "😀",
+        "title": "Prepare release",
+        "note": "Keep\nnotes",
+        "group_uuid": null,
+        "checklist": [
+          "Build",
+          "Verify"
+        ]
+      },
+      "created_at": 1,
+      "updated_at": 10,
+      "updated_by": "device-a",
+      "deleted_at": null
+    },
+    {
+      "uuid": "123e4567-e89b-42d3-a456-000000000010",
+      "content": {
+        "name": "",
+        "title": "Prepare release",
+        "note": "Keep\nnotes",
+        "group_uuid": null,
+        "checklist": [
+          "Build",
+          "Verify"
+        ]
+      },
+      "created_at": 1,
+      "updated_at": 10,
+      "updated_by": "device-a",
+      "deleted_at": null
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "empty": "{\"format_version\":1,\"templates\":[]}",
+  "base": "{\"format_version\":1,\"templates\":[{\"uuid\":\"123e4567-e89b-42d3-a456-000000000010\",\"content\":{\"name\":\"Release checklist\",\"title\":\"Prepare release\",\"note\":\"Keep\\nnotes\",\"group_uuid\":null,\"checklist\":[\"Build\",\"Verify\"]},\"created_at\":1,\"updated_at\":10,\"updated_by\":\"device-a\",\"deleted_at\":null}]}",
+  "unicode": "{\"format_version\":1,\"templates\":[{\"uuid\":\"123e4567-e89b-42d3-a456-000000000010\",\"content\":{\"name\":\"模板\",\"title\":\"任务\",\"note\":\"Keep\\nnotes\",\"group_uuid\":null,\"checklist\":[\"😀\",\"\"]},\"created_at\":1,\"updated_at\":10,\"updated_by\":\"device-a\",\"deleted_at\":null}]}",
+  "deleted": "{\"format_version\":1,\"templates\":[{\"uuid\":\"123e4567-e89b-42d3-a456-000000000010\",\"content\":{\"name\":\"Release checklist\",\"title\":\"Prepare release\",\"note\":\"Keep\\nnotes\",\"group_uuid\":null,\"checklist\":[\"Build\",\"Verify\"]},\"created_at\":1,\"updated_at\":10,\"updated_by\":\"device-a\",\"deleted_at\":10}]}"
+}
