@@ -37,6 +37,58 @@ fn invalid() -> String {
 fn db_error(e: rusqlite::Error) -> String {
     format!("BATCH_DATABASE: {e}")
 }
+const PENDING_KEY: &str = "task.batch.pending.v1";
+
+pub fn pending(db: &Connection) -> Result<Option<BatchRequest>, String> {
+    let raw: Option<String> = db
+        .query_row(
+            "SELECT value FROM app_metadata WHERE key=?1",
+            [PENDING_KEY],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(db_error)?;
+    raw.map(|text| parse(&text).map_err(|_| "BATCH_RECOVERY_INVALID".to_string()))
+        .transpose()
+}
+
+// Commit the recovery record before the task transaction can start.
+pub fn prepare(db: &mut Connection, request: &BatchRequest) -> Result<(), String> {
+    validate(request)?;
+    let tx = db
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(db_error)?;
+    if let Some(current) = pending(&tx)? {
+        if current != *request {
+            return Err("BATCH_RECOVERY_CONFLICT".into());
+        }
+    } else {
+        tx.execute(
+            "INSERT INTO app_metadata(key,value) VALUES(?1,?2)",
+            params![
+                PENDING_KEY,
+                serde_json::to_string(request).map_err(|_| invalid())?
+            ],
+        )
+        .map_err(db_error)?;
+    }
+    tx.commit().map_err(db_error)
+}
+
+pub fn forget(db: &mut Connection, request: &BatchRequest) -> Result<(), String> {
+    validate(request)?;
+    let tx = db
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(db_error)?;
+    if let Some(current) = pending(&tx)? {
+        if current != *request {
+            return Err("BATCH_RECOVERY_CONFLICT".into());
+        }
+        tx.execute("DELETE FROM app_metadata WHERE key=?1", [PENDING_KEY])
+            .map_err(db_error)?;
+    }
+    tx.commit().map_err(db_error)
+}
 pub fn validate(r: &BatchRequest) -> Result<(), String> {
     if !valid_uuid(&r.operation_uuid)
         || r.group_uuid.as_deref().is_some_and(|g| !valid_uuid(g))

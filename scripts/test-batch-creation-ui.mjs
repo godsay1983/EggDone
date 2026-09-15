@@ -21,10 +21,18 @@ import '/src/app.css';
 const p=new URLSearchParams(location.search);setLanguageMode(p.get('lang')||'en-US');document.documentElement.dataset.theme=p.get('theme')||'light';
 document.documentElement.style.zoom=p.get('scale')||'1';window.calls=[];window.refreshes=0;window.failRefresh=false;window.failSave='';window.loseReply=false;window.receipts=new Map();
 window.pastes=0;Object.defineProperty(navigator,'clipboard',{value:{readText:async()=>{window.pastes++;if(window.denyPaste)throw Error('denied');return 'Pasted task';}},configurable:true});
-const session=new BatchCreationSession({create:async r=>{
+const durable=p.has('recovery');
+const recovery=durable?{
+ load:async()=>{if(sessionStorage.getItem('readFail'))throw Error('read');return JSON.parse(sessionStorage.getItem('pending')||'null');},
+ forget:async()=>{if(window.failCleanup)throw Error('cleanup');sessionStorage.removeItem('pending');}
+}:{};
+const session=new BatchCreationSession({...recovery,create:async r=>{
+  if(durable)sessionStorage.setItem('pending',JSON.stringify(r));
   window.calls.push(structuredClone(r));if(window.failSave)throw Error(window.failSave);
+  if(durable&&sessionStorage.getItem(r.operation_uuid))return JSON.parse(sessionStorage.getItem(r.operation_uuid));
   if(window.receipts.has(r.operation_uuid))return structuredClone(window.receipts.get(r.operation_uuid));
   const result={operation_uuid:r.operation_uuid,task_uuids:r.items.map(i=>i.uuid),created_at:100};window.receipts.set(r.operation_uuid,result);
+  if(durable)sessionStorage.setItem(r.operation_uuid,JSON.stringify(result));
   if(window.loseReply){window.loseReply=false;throw Error('lost reply');}return result;
 }},()=>crypto.randomUUID());
 let panel;window.openPanel=()=>{panel=mount(Dialog,{target:document.body,props:{session,groups:[],onClose:()=>void unmount(panel)}});};window.openPanel();
@@ -68,7 +76,7 @@ try{
   await page.evaluate(()=>window.loseReply=true);
   await button(lang==='en-US'?'Create 2 tasks':'创建 2 项').click();await page.locator('[role=alert]').waitFor();
   assert.ok(await page.locator('.rows textarea').first().isDisabled());
-  await button(lang==='en-US'?'Retry same request':'原样重试').click();await page.locator('[role=status]').waitFor();
+  await button(lang==='en-US'?'Retry same request':'原样重试').click();await page.getByText(lang==='en-US'?'Created 2 tasks':'已创建 2 项任务',{exact:true}).waitFor();
   const calls=await page.evaluate(()=>window.calls);assert.equal(calls.length,2);assert.deepEqual(calls[0],calls[1]);
   assert.deepEqual(calls[0].items.map(i=>i.title),['milk','Edited task']);count++;
  }
@@ -87,5 +95,26 @@ try{
  await go();await page.locator('#batch-text').fill(Array(51).fill('a').join('\n'));await button('Preview').click();await page.getByText('Use at most 50 non-empty lines per batch.').waitFor();
  await page.locator('#batch-text').fill(Array(50).fill('a').join('\n'));await button('Preview').click();assert.equal(await page.locator('.rows li').count(),50);
  assert.equal(await page.evaluate(()=>window.calls.length),0);await button('Deselect all').click();assert.ok(await button('Create 0 tasks').isDisabled());
- assert.deepEqual(errors,[]);console.log(count+' batch UI matrix cases plus paste/cancel/reopen/invalid/refresh/limits passed. Screenshots: '+output);
+ await go('recovery=1');await page.locator('#batch-text').fill('Recover after restart');await button('Preview').click();
+ await page.evaluate(()=>window.loseReply=true);await button('Create 1 tasks').click();await page.locator('[role=alert]').waitFor();
+ const original=await page.evaluate(()=>JSON.parse(sessionStorage.getItem('pending')));
+ await page.reload();await button('Retry same request').waitFor();assert.equal(await page.evaluate(()=>window.calls.length),0);
+ assert.equal(await page.locator('.rows textarea').inputValue(),'Recover after restart');
+ await page.screenshot({path:resolve(output,'recovery.png')});
+ await button('Retry same request').click();await page.getByText('Created 1 tasks',{exact:true}).waitFor();
+ assert.deepEqual(await page.evaluate(()=>window.calls[0]),original);assert.equal(await page.evaluate(()=>sessionStorage.getItem('pending')),null);
+ await go('recovery=1');await page.locator('#batch-text').fill('Keep existing task');await button('Preview').click();
+ await page.evaluate(()=>window.loseReply=true);await button('Create 1 tasks').click();await page.locator('[role=alert]').waitFor();
+ await page.reload();await button('End recovery').click();await button('Keep recovery').click();assert.notEqual(await page.evaluate(()=>sessionStorage.getItem('pending')),null);
+ await button('End recovery').click();await button('Confirm end recovery').click();await page.waitForFunction(()=>!document.querySelector('dialog'));
+ assert.equal(await page.evaluate(()=>window.calls.length),0);assert.equal(await page.evaluate(()=>sessionStorage.getItem('pending')),null);
+ await page.evaluate(()=>sessionStorage.setItem('readFail','1'));await go('recovery=1');await button('Reload recovery').waitFor();
+ assert.equal(await page.locator('#batch-text').count(),0);await page.evaluate(()=>sessionStorage.removeItem('readFail'));
+ await button('Reload recovery').click();await page.locator('#batch-text').waitFor();
+ await page.locator('#batch-text').fill('Cleanup retry');await button('Preview').click();await page.evaluate(()=>window.failCleanup=true);
+ await button('Create 1 tasks').click();await page.getByText('Tasks were created, but local recovery cleanup failed.',{exact:false}).waitFor();
+ await page.waitForFunction(()=>window.refreshes===1);assert.equal(await page.evaluate(()=>window.calls.length),1);
+ await page.evaluate(()=>window.failCleanup=false);await button('Retry same request').click();await page.getByText('Created 1 tasks',{exact:true}).waitFor();
+ assert.equal(await page.evaluate(()=>window.calls.length),1);
+ assert.deepEqual(errors,[]);console.log(count+' batch UI matrix cases plus paste/cancel/reopen/invalid/refresh/limits/reload recovery passed. Screenshots: '+output);
 }finally{await browser?.close();await server.close();}

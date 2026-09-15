@@ -9,6 +9,7 @@
   export let onClose: () => void;
   let dialog: HTMLDialogElement;
   let error = '', refreshing = false, refreshFailed = false, pasting = false, alive = true;
+  let confirmDiscard = false;
   $: text = (key: string) => $translator(('batch.' + key) as TranslationKey);
   $: locked = session.locked();
   $: missing = session.group !== '' && !groups.some(g => g.uuid === session.group);
@@ -19,7 +20,20 @@
     session = session;
   }
   function close() { if (!session.busy && !refreshing && !pasting) onClose(); }
-  onMount(() => { if (session.locked() && !session.done) error = 'failed'; dialog.showModal(); return () => { alive = false; dialog.close(); }; });
+  onMount(() => { dialog.showModal(); void initialize(); return () => { alive = false; dialog.close(); }; });
+  async function initialize() {
+    error = '';
+    const pending = session.initialize(); session = session;
+    try { await pending; } catch { if (alive) error = 'recoveryFailed'; }
+    finally { if (alive) session = session; }
+  }
+  async function discard() {
+    error = '';
+    const pending = session.discard(); session = session;
+    try { await pending; if (alive) onClose(); }
+    catch { if (alive) error = 'recoveryFailed'; }
+    finally { if (alive) session = session; }
+  }
   async function paste() {
     if (locked || pasting) return;
     pasting = true;
@@ -39,11 +53,11 @@
     finally { if (alive) refreshing = false; }
   }
   async function submit() {
-    if (session.busy || session.done) return;
+    if (session.busy || session.done || refreshing) return;
     error = '';
     const pending = session.submit(groups.map(g => g.uuid)); session = session;
     try { await pending; session = session; if (alive) await refresh(); }
-    catch (e) { if (alive) error = batchError(String(e)); }
+    catch (e) { if (alive) { error = batchError(String(e)); if (session.creationConfirmed()) await refresh(); } }
     finally { if (alive) session = session; }
   }
 </script>
@@ -51,11 +65,26 @@
 <dialog bind:this={dialog} aria-label={text('title')} onkeydown={e => e.stopPropagation()} oncancel={e => { e.preventDefault(); close(); }}>
   <header><h2>{text('title')}</h2><button class="action-button" disabled={session.busy || refreshing || pasting} onclick={close}>{text(session.done ? 'close' : 'cancel')}</button></header>
   <section>
-    {#if session.done}
+    {#if refreshFailed}<p role="alert">{text('refreshFailed')}</p><button class="action-button" disabled={refreshing} onclick={() => void refresh()}>{text('refresh')}</button>{/if}
+    {#if !session.ready}
+      <p role="status">{text(session.busy ? 'loading' : 'recoveryFailed')}</p>
+      <button class="action-button" disabled={session.busy} onclick={() => void initialize()}>{text('reload')}</button>
+    {:else if session.done}
       <p role="status">{text('saved').replace('{count}', String(count))}</p>
-      {#if refreshFailed}<p role="alert">{text('refreshFailed')}</p><button class="action-button" disabled={refreshing} onclick={() => void refresh()}>{text('refresh')}</button>{/if}
     {:else}
-      {#if error}<p role="alert">{text(error)}</p>{/if}
+      {#if error && error !== 'cleanupFailed'}<p role="alert">{text(error)}</p>{/if}
+      {#if locked}
+        <p role="status">{text(session.creationConfirmed() ? 'cleanupFailed' : 'recovered')}</p>
+        {#if confirmDiscard}
+          <p>{text('discardWarning')}</p>
+          <div class="tools">
+            <button class="action-button" disabled={session.busy} onclick={() => confirmDiscard = false}>{text('keep')}</button>
+            <button class="action-button" disabled={session.busy} onclick={() => void discard()}>{text('confirmDiscard')}</button>
+          </div>
+        {:else}
+          <button class="text-button" disabled={session.busy} onclick={() => confirmDiscard = true}>{text('discard')}</button>
+        {/if}
+      {/if}
       {#if !session.reviewing}
         <label for="batch-text">{text('input')}</label>
         <textarea id="batch-text" rows="8" value={session.text} placeholder={text('placeholder')} disabled={pasting}
@@ -86,10 +115,10 @@
       {/if}
     {/if}
   </section>
-  {#if !session.done}<footer>
+  {#if session.ready && !session.done}<footer>
     {#if session.reviewing}
       <button class="action-button" disabled={locked} onclick={() => update(() => session.back())}>{text('back')}</button>
-      <button class="action-button" data-tone="primary" disabled={session.busy || (!locked && (missing || !!session.issue()))} onclick={() => void submit()}>
+      <button class="action-button" data-tone="primary" disabled={session.busy || refreshing || (!locked && (missing || !!session.issue()))} onclick={() => void submit()}>
         {text(locked ? 'retry' : 'create').replace('{count}', String(count))}</button>
     {:else}<button class="action-button" data-tone="primary" disabled={pasting || !session.text.trim()} onclick={() => update(() => session.review())}>{text('preview')}</button>{/if}
   </footer>{/if}

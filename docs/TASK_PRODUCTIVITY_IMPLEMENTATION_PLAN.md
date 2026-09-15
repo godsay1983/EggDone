@@ -4,7 +4,7 @@
 范围：任务内检查清单、任务模板与快捷复制、多行文本批量创建任务。
 基线：桌面 1.1.0 / SQLite 19，鸿蒙 1.2.0 / RDB 20。
 状态：P0/P1a/P1b/P1c 已提交；当前 SQLite 20 / RDB 21，清单网络传输与备份 v4 已接入。P1d-1/P1d-2a/P1d-2b 已实现已有任务清单、完整字段和以后定义；P1d-2c 已接[新建任务与清单](TASK_CHECKLIST_CREATION_UI.md)，P1d-2d 已接[详情即时勾选](TASK_CHECKLIST_DETAIL_UI.md)。完整原生验收尚未完成。
-P2a 两端[任务快捷复制](TASK_QUICK_COPY.md)已由用户反馈验收通过。P2b-1 已完成[模板协议与内部存储](TASK_TEMPLATE_STORAGE.md)，当前 SQLite 21 / RDB 22；P2b-2 已接[模板同步与备份 v5](TASK_TEMPLATE_SYNC_BACKUP.md)。P2c [模板界面](TASK_TEMPLATE_UI.md)已提交，P2d 人工验收仍待确认。P3a [批量事务层](TASK_BATCH_CREATION.md)已提交，P3b [批量预览与确认界面](TASK_BATCH_UI.md)已接入双端并完成隔离验证。下一步 P3c 结果刷新、同步和错误恢复收尾，设备验收仍待完成。
+P2a 两端[任务快捷复制](TASK_QUICK_COPY.md)已由用户反馈验收通过。P2b-1 已完成[模板协议与内部存储](TASK_TEMPLATE_STORAGE.md)，当前 SQLite 21 / RDB 22；P2b-2 已接[模板同步与备份 v5](TASK_TEMPLATE_SYNC_BACKUP.md)。P2c [模板界面](TASK_TEMPLATE_UI.md)已提交，P2d 人工验收仍待确认。P3a [批量事务层](TASK_BATCH_CREATION.md)与 P3b [批量预览与确认界面](TASK_BATCH_UI.md)已提交。P3c-1 [重启恢复与错误处理](TASK_BATCH_RECOVERY.md)已实现，下一步 P3c-2 设备键盘、平板和真实批次同步验收，再进入 P3d 收口。
 旧版体验升级不再纳入本轮功能范围。阶段状态见 [roadmap](TASK_PRODUCTIVITY_ROADMAP.md)，规则见 [共享契约](TASK_PRODUCTIVITY_CONTRACT.md)。
 
 ## 产品目标

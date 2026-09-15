@@ -1,7 +1,11 @@
 import type { BatchRequest, BatchResult, BatchItem } from '../types/taskBatch';
 import { type BatchTaskPreview, type BatchTaskRow, type CompositionIssueCode, parseBatchTaskText, batchPreviewToDrafts, titleIssue } from './taskComposition';
 
-export interface BatchApi { create: (request: BatchRequest) => Promise<BatchResult>; }
+export interface BatchApi {
+  create: (request: BatchRequest) => Promise<BatchResult>;
+  load?: () => Promise<BatchRequest | null>;
+  forget?: (request: BatchRequest) => Promise<void>;
+}
 export class BatchCreationSession {
   text: string = '';
   preview: BatchTaskPreview = { rows: [], error: null };
@@ -9,12 +13,45 @@ export class BatchCreationSession {
   reviewing: boolean = false;
   busy: boolean = false;
   done: boolean = false;
+  ready: boolean = false;
+  recovered: boolean = false;
+  private confirmed: BatchResult | null = null;
   private api: BatchApi;
   private uuid: () => string;
   private pending: BatchRequest | null = null;
   private parsedText: string | null = null;
-  constructor(api: BatchApi, uuid: () => string) { this.api = api; this.uuid = uuid; }
-  locked(): boolean { return this.busy || this.pending !== null || this.done; }
+  constructor(api: BatchApi, uuid: () => string) { this.api = api; this.uuid = uuid; this.ready = api.load === undefined; }
+  locked(): boolean { return !this.ready || this.busy || this.pending !== null || this.done; }
+  creationConfirmed(): boolean { return this.confirmed !== null; }
+  async initialize(): Promise<void> {
+    if (this.ready || this.busy) return;
+    this.busy = true;
+    try {
+      const request = this.api.load === undefined ? null : await this.api.load();
+      if (request !== null) {
+        if (!Array.isArray(request.items) || request.items.length === 0 || request.items.length > 50 ||
+          typeof request.operation_uuid !== 'string' || !request.operation_uuid ||
+          request.items.some((item: BatchItem): boolean => typeof item.title !== 'string' || titleIssue(item.title) !== null)) {
+          throw new Error('BATCH_RECOVERY_INVALID');
+        }
+        this.pending = JSON.parse(JSON.stringify(request)) as BatchRequest;
+        this.group = request.group_uuid ?? '';
+        this.preview = { error: null, rows: request.items.map((item: BatchItem, i: number): BatchTaskRow => ({
+          lineNumber: i + 1, title: item.title, selected: true, duplicate: false, issue: null
+        })) };
+        this.reviewing = true; this.recovered = true;
+      }
+      this.ready = true;
+    } finally { this.busy = false; }
+  }
+  async discard(): Promise<void> {
+    if (!this.ready || this.busy || this.done || this.pending === null) throw new Error('BATCH_LOCKED');
+    this.busy = true;
+    try {
+      if (this.api.forget !== undefined) await this.api.forget(JSON.parse(JSON.stringify(this.pending)) as BatchRequest);
+      this.pending = null; this.confirmed = null; this.done = true;
+    } finally { this.busy = false; }
+  }
   private editable(): void { if (this.locked()) throw new Error('BATCH_LOCKED'); }
   input(text: string): void { this.editable(); this.text = text; this.reviewing = false; }
   review(): void {
@@ -53,7 +90,7 @@ export class BatchCreationSession {
     return bad === undefined ? null : titleIssue(bad.title);
   }
   async submit(groupIds: string[]): Promise<BatchResult> {
-    if (this.busy || this.done || !this.reviewing) throw new Error('BATCH_LOCKED');
+    if (!this.ready || this.busy || this.done || !this.reviewing) throw new Error('BATCH_LOCKED');
     if (this.pending === null) {
       if (this.group.length > 0 && !groupIds.includes(this.group)) throw new Error('BATCH_GROUP_MISSING');
       const operation = this.uuid();
@@ -64,19 +101,27 @@ export class BatchCreationSession {
     this.busy = true;
     try {
       const request = JSON.parse(JSON.stringify(this.pending)) as BatchRequest;
-      const result = await this.api.create(request);
+      const result = this.confirmed ?? await this.api.create(request);
       if (result.operation_uuid !== request.operation_uuid || !Array.isArray(result.task_uuids) ||
         JSON.stringify(result.task_uuids) !== JSON.stringify(request.items.map((item: BatchItem): string => item.uuid)) ||
         !Number.isSafeInteger(result.created_at) || result.created_at < 0) throw new Error('BATCH_INVALID_RESPONSE');
+      this.confirmed = result;
+      if (this.api.forget !== undefined) await this.api.forget(request);
       this.done = true; return result;
     } catch (error) {
+      if (this.confirmed !== null) throw new Error('BATCH_RECOVERY_CLEANUP');
       // These rejections happen before inserts; all other failures keep the exact request for retry.
-      if (/BATCH_GROUP_MISSING|INVALID_BATCH_REQUEST|BATCH_ORDER_OVERFLOW/.test(String(error))) this.pending = null;
+      if (this.confirmed === null && /BATCH_GROUP_MISSING|INVALID_BATCH_REQUEST|BATCH_ORDER_OVERFLOW/.test(String(error))) {
+        if (this.api.forget !== undefined) await this.api.forget(JSON.parse(JSON.stringify(this.pending)) as BatchRequest);
+        this.pending = null; this.recovered = false;
+      }
       throw error as Error;
     } finally { this.busy = false; }
   }
 }
 export function batchError(error: string): string {
+  if (error.includes('RECOVERY_CLEANUP')) return 'cleanupFailed';
+  if (error.includes('RECOVERY_')) return 'recoveryFailed';
   for (const code of ['INPUT_TOO_LONG', 'TOO_MANY_TASKS', 'NO_TASKS_SELECTED', 'EMPTY_TITLE', 'TITLE_TOO_LONG', 'INVALID_TITLE']) {
     if (error.includes(code)) return code;
   }

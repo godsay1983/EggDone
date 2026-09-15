@@ -3,6 +3,81 @@ use rusqlite::Connection;
 use uuid::Uuid;
 
 const BY: &str = "11111111-1111-4111-8111-111111111111";
+
+#[test]
+fn batch_recovery_reopens_without_duplicates_and_keeps_dirty_revision() {
+    let file = std::env::temp_dir().join(format!("eggdone-batch-recovery-{}.db", Uuid::new_v4()));
+    let r = request(2);
+    {
+        let mut db = Connection::open(&file).unwrap();
+        crate::db::migrate(&mut db).unwrap();
+        b::prepare(&mut db, &r).unwrap();
+        assert_eq!(count(&db), 0);
+        b::create(&mut db, &r, 100, BY).unwrap();
+    }
+    let mut db = Connection::open(&file).unwrap();
+    crate::db::migrate(&mut db).unwrap();
+    assert_eq!(b::pending(&db).unwrap(), Some(r.clone()));
+    let revision = dirty(&db);
+    b::prepare(&mut db, &r).unwrap();
+    b::create(&mut db, &r, 200, BY).unwrap();
+    b::forget(&mut db, &r).unwrap();
+    assert_eq!(count(&db), 2);
+    assert_eq!(dirty(&db), revision);
+    assert!(b::pending(&db).unwrap().is_none());
+    drop(db);
+    std::fs::remove_file(file).unwrap();
+}
+
+#[test]
+fn batch_recovery_compare_and_clear_never_changes_tasks_or_receipts() {
+    let mut db = db();
+    let r = request(2);
+    b::prepare(&mut db, &r).unwrap();
+    let other = request(1);
+    assert!(b::prepare(&mut db, &other)
+        .unwrap_err()
+        .contains("RECOVERY_CONFLICT"));
+    assert!(b::forget(&mut db, &other)
+        .unwrap_err()
+        .contains("RECOVERY_CONFLICT"));
+    b::create(&mut db, &r, 100, BY).unwrap();
+    db.execute("UPDATE todos SET deleted_at=200", []).unwrap();
+    assert!(b::create(&mut db, &r, 300, BY)
+        .unwrap_err()
+        .contains("STALE"));
+    let revision = dirty(&db);
+    b::forget(&mut db, &r).unwrap();
+    assert_eq!(count(&db), 2);
+    assert_eq!(dirty(&db), revision);
+    assert!(b::create(&mut db, &r, 400, BY)
+        .unwrap_err()
+        .contains("STALE"));
+}
+
+#[test]
+fn batch_recovery_corruption_and_storage_failure_are_not_silenced() {
+    let mut db = db();
+    let r = request(1);
+    db.execute(
+        "INSERT INTO app_metadata(key,value) VALUES('task.batch.pending.v1','broken')",
+        [],
+    )
+    .unwrap();
+    assert!(b::pending(&db).unwrap_err().contains("RECOVERY_INVALID"));
+    assert!(b::prepare(&mut db, &r).is_err());
+    assert!(b::forget(&mut db, &r).is_err());
+    assert_eq!(count(&db), 0);
+    db.execute(
+        "DELETE FROM app_metadata WHERE key='task.batch.pending.v1'",
+        [],
+    )
+    .unwrap();
+    db.execute_batch("CREATE TRIGGER fail_pending BEFORE INSERT ON app_metadata WHEN NEW.key='task.batch.pending.v1' BEGIN SELECT RAISE(ABORT,'full'); END;").unwrap();
+    assert!(b::prepare(&mut db, &r).is_err());
+    assert!(b::pending(&db).unwrap().is_none());
+    assert_eq!(count(&db), 0);
+}
 fn db() -> Connection {
     let mut db = Connection::open_in_memory().unwrap();
     crate::db::migrate(&mut db).unwrap();

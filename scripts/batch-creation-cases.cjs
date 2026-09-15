@@ -6,6 +6,49 @@ module.exports = ({ BatchCreationSession, batchError }) => {
     const s=new BatchCreationSession(api,randomUUID);s.input(text);s.review();return s;
   };
   return [
+
+    {name:'reopened session loads exact identities without invoking create',run:async()=>{
+      let pending=null,calls=0,lose=true;
+      const api={load:async()=>structuredClone(pending),forget:async()=>{pending=null;},
+        create:async r=>{calls++;if(pending)assert.deepEqual(r,pending);pending=structuredClone(r);if(lose){lose=false;throw Error('lost');}return result(r);}};
+      const a=new BatchCreationSession(api,randomUUID);assert.throws(()=>a.input('blocked'),/LOCKED/);
+      await a.initialize();a.input('1. literal prefix\n2. report');a.review();
+      await assert.rejects(a.submit([]),/lost/);const original=structuredClone(pending);
+      const b=new BatchCreationSession(api,randomUUID);await b.initialize();
+      assert.equal(calls,1);assert.equal(b.locked(),true);assert.equal(b.count(),2);
+      assert.deepEqual(b.preview.rows.map(r=>r.title),original.items.map(i=>i.title));
+      await b.submit([]);assert.equal(calls,2);assert.equal(pending,null);assert.equal(b.done,true);
+    }},
+    {name:'read failure blocks new tasks and can be retried',run:async()=>{
+      let fail=true,calls=0;
+      const s=new BatchCreationSession({load:async()=>{if(fail)throw Error('read');return null;},create:async r=>{calls++;return result(r);}},randomUUID);
+      await assert.rejects(s.initialize(),/read/);assert.equal(s.ready,false);assert.throws(()=>s.input('a'),/LOCKED/);
+      await assert.rejects(s.submit([]),/LOCKED/);assert.equal(calls,0);
+      fail=false;await s.initialize();s.input('a');s.review();await s.submit([]);
+    }},
+    {name:'cleanup failure retries only cleanup after confirmed creation',run:async()=>{
+      let calls=0,clears=0;
+      const s=start({create:async r=>{calls++;return result(r);},forget:async()=>{if(++clears===1)throw Error('cleanup');}});
+      await assert.rejects(s.submit([]),/RECOVERY_CLEANUP/);assert.equal(s.creationConfirmed(),true);assert.equal(s.done,false);assert.equal(s.locked(),true);
+      await s.submit([]);assert.equal(calls,1);assert.equal(clears,2);assert.equal(s.done,true);
+    }},
+    {name:'ending recovery never calls create and failed cleanup preserves request',run:async()=>{
+      const req={operation_uuid:randomUUID(),group_uuid:null,items:[{uuid:randomUUID(),title:'1. literal'}]};
+      let clears=0;const s=new BatchCreationSession({load:async()=>req,forget:async r=>{assert.deepEqual(r,req);if(++clears===1)throw Error('cleanup');},create:async()=>{throw Error('must not create');}},randomUUID);
+      await s.initialize();assert.equal(s.preview.rows[0].title,'1. literal');
+      await assert.rejects(s.discard(),/cleanup/);assert.equal(s.locked(),true);assert.equal(s.done,false);
+      await s.discard();assert.equal(s.done,true);
+    }},
+    {name:'failed prewrite cleanup cannot unlock a durable pending request',run:async()=>{
+      let clearFails=true;
+      const s=start({create:async()=>{throw Error('BATCH_GROUP_MISSING');},forget:async()=>{if(clearFails)throw Error('cleanup');}});
+      await assert.rejects(s.submit([]),/cleanup/);assert.equal(s.locked(),true);
+      clearFails=false;await assert.rejects(s.submit([]),/GROUP_MISSING/);assert.equal(s.locked(),false);
+    }},
+    {name:'corrupt recovered payload stays blocked',run:async()=>{
+      const s=new BatchCreationSession({load:async()=>({operation_uuid:'bad',items:[]}),create:async()=>{throw Error('unexpected');}},randomUUID);
+      await assert.rejects(s.initialize(),/RECOVERY_INVALID/);assert.equal(s.ready,false);
+    }},
     {name:'preview is read only; duplicates and line identities survive editing and back',run:async()=>{
       let calls=0;const s=start({create:async r=>{calls++;return result(r);}});
       assert.equal(calls,0);assert.deepEqual(s.preview.rows.map(r=>r.lineNumber),[1,3,4]);

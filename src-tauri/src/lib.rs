@@ -192,6 +192,8 @@ pub fn run() {
             task_checklist_commands::read_task_checklist_editor,
             task_template_commands::list_task_templates,
             task_batch_commands::create_task_batch,
+            task_batch_commands::load_task_batch_recovery,
+            task_batch_commands::forget_task_batch_recovery,
             task_template_commands::save_task_template,
             task_checklist_commands::save_task_checklist_editor,
             task_checklist_commands::create_task_checklist_editor,
