@@ -30,7 +30,7 @@
 
 任务效率功能开发（2026-09-15）：P1d-2c 已接“新建任务与清单”，两端任务设置及子项一次保存，取消不创建、重试不重复。桌面从输入框右侧清单图标进入，鸿蒙从新增任务“选项”进入，见[入口与验收](docs/TASK_CHECKLIST_CREATION_UI.md)。下一步为详情独立即时勾选；模板与批量创建尚未开放。详见[实现方案](docs/TASK_PRODUCTIVITY_IMPLEMENTATION_PLAN.md)、[共享契约](docs/TASK_PRODUCTIVITY_CONTRACT.md)与[roadmap](docs/TASK_PRODUCTIVITY_ROADMAP.md)。软件版本不变。
 
-最新交接：[检查清单完整任务草稿 P1d-2b-2](.claude/handoffs/2026-09-14-181404-desktop-checklist-full-draft.md)，记录上一阶段。当前仍在 codex/task-productivity 开发分支；最新 P1d-2c 进度以上方说明与 roadmap 为准，模板与批量创建尚未实现。
+最新交接：[任务效率功能与批量恢复 P3c-1](.claude/handoffs/2026-09-15-175701-desktop-batch-recovery-p3c.md)。当前仍在 codex/task-productivity 分支；检查清单、模板与批量创建入口已经实现，P3c-1 功能提交：桌面 96b9874 / 鸿蒙 5c41b09。下一步为 P3c-2 真机/平板及真实批次同步验收，不代表已完成发布验收。
 
 当前本地候选版本：**1.1.0**（2026-09-13），配套鸿蒙 1.2.0。本批体验优化与内容管理已纳入版本，尚未正式发布；主要变化见 [更新日志](CHANGELOG.md)，新旧端混用、备份 v3 与升级注意事项见 [双端升级指南](docs/EXPERIENCE_UPGRADE_GUIDE.md)。以下“未升版/未提交/旧候选版本”等为历史阶段记录，以本段及最新 handoff 为准，不代表所有验收已通过。
 
