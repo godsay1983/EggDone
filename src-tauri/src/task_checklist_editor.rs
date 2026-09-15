@@ -90,6 +90,25 @@ pub fn save(
     now: i64,
     by: &str,
 ) -> Result<EditorResult, String> {
+    persist(db, request, now, by, false)
+}
+
+pub fn create(
+    db: &mut Connection,
+    request: &EditorRequest,
+    now: i64,
+    by: &str,
+) -> Result<EditorResult, String> {
+    persist(db, request, now, by, true)
+}
+
+fn persist(
+    db: &mut Connection,
+    request: &EditorRequest,
+    now: i64,
+    by: &str,
+    creating: bool,
+) -> Result<EditorResult, String> {
     let r = canonical(request)?;
     validate_fields(&r.fields)?;
     if !valid_uuid(&r.task.operation_uuid)
@@ -105,7 +124,42 @@ pub fn save(
         return Err(invalid());
     }
     let fingerprint = serde_json::to_string(&(&r, by)).map_err(|_| invalid())?;
-    let key = format!("checklist.editor.v1:{}", r.task.operation_uuid);
+    if creating
+        && (!valid_uuid(&r.task.todo_uuid)
+            || r.task.expected_updated_at != 0
+            || !r.task.expected_items.items.is_empty()
+            || !r.expected_rules.rules.is_empty()
+            || r.replaces_uuid.is_some()
+            || r.mode == "stop"
+            || r.fields.repeat_rule.is_some()
+            || r.task.items.len() > 20
+            || r.task.items.iter().any(|item| item.completed))
+    {
+        return Err(invalid());
+    }
+    let key = format!(
+        "checklist.{}.v1:{}",
+        if creating { "create" } else { "editor" },
+        r.task.operation_uuid
+    );
+    if creating && r.mode == "replace" {
+        let mut items: Vec<_> = r
+            .task
+            .items
+            .iter()
+            .map(|i| (&i.content, i.sort_order))
+            .collect();
+        let mut entries: Vec<_> = r
+            .future_entries
+            .iter()
+            .map(|e| (&e.content, e.sort_order))
+            .collect();
+        items.sort();
+        entries.sort();
+        if items != entries {
+            return Err(invalid());
+        }
+    }
     let tx = db
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(db_error)?;
@@ -124,6 +178,22 @@ pub fn save(
         }
         tx.commit().map_err(db_error)?;
         return Ok(receipt.result);
+    }
+    if creating {
+        let exists: bool = tx
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM todos WHERE uuid=?1)",
+                [&r.task.todo_uuid],
+                |row| row.get(0),
+            )
+            .map_err(db_error)?;
+        if exists {
+            return Err("CHECKLIST_CREATE_EXISTS".into());
+        }
+        // The provisional parent is invisible outside this transaction, including on any validation failure.
+        tx.execute("INSERT INTO todos(uuid,title,note,sort_order,created_at,updated_at,updated_by)
+            VALUES(?1,?4,'',(SELECT COALESCE(MIN(sort_order),1024)-1024 FROM todos WHERE deleted_at IS NULL AND completed=0),?2,0,?3)",
+            params![r.task.todo_uuid, now, by, r.task.title]).map_err(db_error)?;
     }
     let (before,series,completed):(TaskFields,Option<String>,bool)=tx.query_row(
       "SELECT due_date,due_at,reminder_at,group_uuid,priority,repeat_rule,repeat_series_uuid,completed FROM todos WHERE uuid=?1",[&r.task.todo_uuid],
@@ -145,7 +215,19 @@ pub fn save(
         }
     }
     let current = recurrence_store::snapshot(&tx)?.document;
-    if rules::encode_document(&current)? != rules::encode_document(&r.expected_rules)? {
+    if creating
+        && (current.rules.iter().any(|rule| {
+            rule.first_todo_uuid == r.task.todo_uuid || rule.current_todo_uuid == r.task.todo_uuid
+        }) || checklist::read_in_transaction(&tx)?
+            .definitions
+            .definitions
+            .iter()
+            .any(|d| d.first_todo_uuid == r.task.todo_uuid))
+    {
+        return Err("CHECKLIST_CREATE_EXISTS".into());
+    }
+    if !creating && rules::encode_document(&current)? != rules::encode_document(&r.expected_rules)?
+    {
         return Err("CHECKLIST_RULE_STALE".into());
     }
     let active: Vec<_> = current
@@ -226,7 +308,7 @@ pub fn save(
         return Err("CHECKLIST_EDITOR_RECEIPT_CONFLICT".into());
     }
     let body_clock = checklist::save_in_transaction(&tx, &body, clock, by)?;
-    let fields_changed = r.fields != before || r.mode != "keep";
+    let fields_changed = creating || r.fields != before || r.mode != "keep";
     let updated = if fields_changed {
         body_clock.max(clock)
     } else {

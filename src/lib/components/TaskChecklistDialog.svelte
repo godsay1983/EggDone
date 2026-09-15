@@ -16,10 +16,12 @@
   import type { ChecklistEditorSnapshot } from '$lib/types/taskChecklistEditor';
   import type { ChecklistEdit } from '$lib/types/taskChecklist';
   export let uuid: string;
+  export let creation: ChecklistEditorSnapshot | null = null;
+  export let initialRepeat = 'none';
   export let groups: TodoGroup[] = [];
   export let onClose: () => void;
   export let onSaved: () => void;
-  const session = createTaskChecklistEditorSession();
+  const session = createTaskChecklistEditorSession(creation);
   let snapshot: ChecklistEditorSnapshot | null = null;
   let scopeDraft = new ChecklistTaskDraft(() => crypto.randomUUID());
   let fields: TaskEditorFields = {due_date:null,due_at:null,reminder_at:null,group_uuid:null,priority:0,repeat_rule:null};
@@ -59,6 +61,7 @@
     try {
       snapshot=await session.load(uuid);const s=snapshot.task;title=s.title;note=s.note;readOnly=s.read_only;
       fields=structuredClone(snapshot.fields);
+      if(creation){detailsOpen=true;choice=initialRepeat;}
       items=s.items.items.filter(i=>i.deleted_at===null).sort((a,b)=>a.sort_order-b.sort_order||a.uuid.localeCompare(b.uuid))
         .map(i=>({uuid:i.uuid,content:i.content,completed:i.completed,sort_order:i.sort_order}));
       loaded=true;
@@ -81,30 +84,30 @@
     busy=true;error='';
     try {await session.save(await scopeDraft.build(snapshot,title,note,
       items.map((i,n)=>({...i,content:i.content.trim(),sort_order:(n+1)*1000})),fields,choice,ruleForm,future,zone,taskChecklistEditorApi.resolveTime));}
-    catch(e){error=String(e).includes('STALE')?'conflict':String(e).includes('SCHEDULE_MISMATCH')?'scheduleMismatch':
+    catch(e){error=/STALE|CREATE_EXISTS|OPERATION_REUSED/.test(String(e))?'conflict':String(e).includes('SCHEDULE_MISMATCH')?'scheduleMismatch':
       /REMINDER_PAST|GROUP_MISSING|DATE_REQUIRED|CONFIGURE_RULE|INVALID_RECURRENCE|TIMEZONE/.test(String(e))?'settingsInvalid':'saveFailed';busy=false;return;}
     busy=false;onSaved();
   }
 </script>
 
-<dialog bind:this={dialog} aria-label={$translator('checklist.title')} onkeydown={e=>e.stopPropagation()}
+<dialog bind:this={dialog} aria-label={$translator(creation?'checklist.create':'checklist.title')} onkeydown={e=>e.stopPropagation()}
   oncancel={e=>{e.preventDefault();if(!busy)onClose();}}>
   <form onsubmit={e=>{e.preventDefault();void save();}}>
-    <header><h2>{$translator('checklist.title')}</h2>
-      <span class="scope">{$translator((choice!=='keep'&&choice!=='none')||(choice==='keep'&&future)?'checklist.future':'checklist.scope')}</span></header>
+    <header><h2>{$translator(creation?'checklist.newTask':'checklist.title')}</h2>
+      {#if !creation}<span class="scope">{$translator((choice!=='keep'&&choice!=='none')||(choice==='keep'&&future)?'checklist.future':'checklist.scope')}</span>{/if}</header>
     <div class="fields">
       {#if loading}<p role="status">{$translator('common.loading')}</p>{/if}
       {#if error}<p role="alert">{$translator(`checklist.${error}`)}</p>{/if}
       {#if error==='loadFailed'}<button type="button" class="action-button" onclick={()=>void load()}>{$translator('common.retry')}</button>{/if}
       {#if loaded}
-        <details class="task-details" bind:open={detailsOpen}>
+        <details class="task-details" class:creation={creation!==null} bind:open={detailsOpen}>
           <summary><span>{title}</span><span class="edit-label">{$translator('common.edit')}</span></summary>
           <div class="task-fields">
             <label>{$translator('links.title')}<input bind:value={title} maxlength="100" disabled={busy||readOnly}/></label>
             <label>{$translator('todo.note')}<textarea bind:value={note} maxlength="1000" rows="2" disabled={busy||readOnly}></textarea></label>
           </div>
         </details>
-        <ChecklistTaskFields bind:fields bind:choice {groups} {repeatSummary} disabled={busy||readOnly}
+        <ChecklistTaskFields bind:fields bind:choice {groups} {repeatSummary} creating={creation!==null} disabled={busy||readOnly}
           repeatEnabled={snapshot!==null&&checklistCanChangeRepeat(snapshot)}
           customSummary={ruleForm ? formSchedule(ruleForm).anchor_date : ''}
           onCustom={()=>{if(snapshot){ruleEditorForm=structuredClone(ruleForm??checklistRuleForm(snapshot,fields,'custom',zone));ruleOpen=true;}}}/>
@@ -127,7 +130,7 @@
           {#each items as item,index (item.uuid)}
             <li class:completed={item.completed}>
               <label class="check-hit">
-                <input type="checkbox" bind:checked={item.completed} disabled={busy||readOnly} aria-label={$translator('checklist.mark',{index:index+1})}/>
+                <input type="checkbox" bind:checked={item.completed} disabled={busy||readOnly||creation!==null} aria-label={$translator('checklist.mark',{index:index+1})}/>
               </label>
               <textarea class="item-content" rows="1" use:fitText={item.content} bind:value={item.content} maxlength="200"
                 disabled={busy||readOnly} aria-label={$translator('checklist.item',{index:index+1})}></textarea>
@@ -172,6 +175,7 @@
   .scope{font-size:11px;color:var(--muted);}
   .fields{min-height:0;overflow:auto;display:flex;flex-direction:column;gap:8px;scrollbar-width:thin;}
   .task-details{border-bottom:1px solid var(--line);padding-bottom:8px;}
+  .task-details.creation>summary{display:none;}
   summary{display:flex;align-items:center;gap:8px;cursor:pointer;list-style:none;min-height:30px;}
   summary>span:first-child{flex:1;min-width:0;font-size:13px;font-weight:500;overflow-wrap:anywhere;}
   .edit-label{font-size:12px;color:var(--muted);flex-shrink:0;}

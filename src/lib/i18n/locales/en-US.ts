@@ -588,6 +588,8 @@ export const enUS = {
   "data.checklistSummary": "Backup contains {count} checklist items ({deleted} deleted), {definitions} recurring definitions, and {missing} missing parent tasks. Records are merged, not all added as new.",
   "data.checklistsLegacy": "This older backup has no checklist data. Local items and recurring definitions are preserved.",
   "checklist.title": "Checklist",
+  "checklist.create": "New task with checklist",
+  "checklist.newTask": "New task",
   "checklist.applyTo": "Apply checklist to",
   "checklist.current": "This task only",
   "checklist.future": "This and future tasks",

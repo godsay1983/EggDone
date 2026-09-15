@@ -567,6 +567,8 @@ export const zhCN = {
   "data.checklistSummary": "备份内清单子项 {count} 条，其中已删除 {deleted} 条；重复清单定义 {definitions} 条，备份中缺少的父任务 {missing} 个。按合并规则恢复，并非全部新增。",
   "data.checklistsLegacy": "旧版备份不含清单，本机已有清单和重复清单定义将保留。",
   "checklist.title": "检查清单",
+  "checklist.create": "新建任务与清单",
+  "checklist.newTask": "新建任务",
   "checklist.applyTo": "清单应用范围",
   "checklist.current": "仅本次",
   "checklist.future": "本次及以后",

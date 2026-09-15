@@ -7,6 +7,7 @@
   export let choice = 'keep';
   export let groups: TodoGroup[] = [];
   export let disabled = false;
+  export let creating = false;
   export let repeatEnabled = false;
   export let onCustom: () => void;
   export let customSummary = '';
@@ -34,7 +35,7 @@
   </select></label>
   <label class="important"><input type="checkbox" checked={fields.priority>0} onchange={e=>fields={...fields,priority:e.currentTarget.checked?1:0}}/>{$translator('checklist.important')}</label>
   <label>{$translator('todo.repeat')}<select aria-label={$translator('todo.repeat')} bind:value={choice} disabled={!repeatEnabled}>
-   <option value="keep">{$translator('checklist.keepRepeat')}</option>
+   {#if !creating}<option value="keep">{$translator('checklist.keepRepeat')}</option>{/if}
    <option value="none">{$translator('todo.noRepeat')}</option>
    <option value="daily">{$translator('recurrence.daily')}</option>
    <option value="weekly">{$translator('recurrence.weekly')}</option>
@@ -44,7 +45,7 @@
   </select></label>
   {#if choice==='keep' && repeatSummary}<p>{repeatSummary}</p>{/if}
   {#if choice==='custom'}<button type="button" onclick={onCustom}>{$translator('checklist.configureRule')}</button>{#if customSummary}<p>{customSummary}</p>{/if}{/if}
-  {#if choice!=='keep'}<p>{$translator(choice==='none'?'checklist.stopNotice':'checklist.ruleChangeNotice')}</p>{/if}
+  {#if choice!=='keep' && (!creating || choice!=='none')}<p>{$translator(choice==='none'?'checklist.stopNotice':'checklist.ruleChangeNotice')}</p>{/if}
  </fieldset>
 </details>
 <style>

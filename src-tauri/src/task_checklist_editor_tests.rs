@@ -120,6 +120,195 @@ fn request_from_editor_snapshot(
     }
 }
 
+fn creation_setup() -> (Connection, EditorRequest, String) {
+    let (db, mut r, by) = setup(false);
+    // Leave an unrelated task to exercise ordering and identity isolation.
+    r.task.todo_uuid = uuid::Uuid::new_v4().to_string();
+    r.task.expected_updated_at = 0;
+    (db, r, by)
+}
+
+#[test]
+fn create_task_and_checklist_is_atomic_and_replay_safe() {
+    let (mut db, mut r, by) = creation_setup();
+    r.fields.priority = 1;
+    db.execute_batch("CREATE TRIGGER reject_create_item BEFORE INSERT ON task_checklist_items BEGIN SELECT RAISE(ABORT,'creation rollback'); END;").unwrap();
+    assert!(create(&mut db, &r, 100, &by)
+        .unwrap_err()
+        .contains("creation rollback"));
+    assert_eq!(
+        db.query_row("SELECT COUNT(*) FROM todos", [], |row| row.get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        db.query_row(
+            "SELECT COUNT(*) FROM app_metadata WHERE key LIKE 'checklist.create.%'",
+            [],
+            |row| row.get::<_, i64>(0)
+        )
+        .unwrap(),
+        0
+    );
+    db.execute_batch("DROP TRIGGER reject_create_item").unwrap();
+    let result = create(&mut db, &r, 100, &by).unwrap();
+    assert_eq!(result, create(&mut db, &r, 6000, &by).unwrap()); // Replay after reminder has elapsed.
+    let snapshot = crate::task_checklist_views::read_editor(&mut db, &r.task.todo_uuid).unwrap();
+    assert_eq!(snapshot.task.title, "edited");
+    assert_eq!(snapshot.fields, r.fields);
+    assert_eq!(snapshot.task.items.items.len(), 1);
+    assert!(!snapshot.task.items.items[0].completed);
+    assert_eq!(
+        db.query_row("SELECT COUNT(*) FROM todos", [], |row| row.get::<_, i64>(0))
+            .unwrap(),
+        2
+    );
+    let created: (i64, i64) = db
+        .query_row(
+            "SELECT created_at,updated_at FROM todos WHERE uuid=?1",
+            [&r.task.todo_uuid],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(created, (100, 100));
+}
+
+#[test]
+fn create_recurrence_and_definition_roll_back_together() {
+    let (mut db, mut r, by) = creation_setup();
+    replacement(&mut r);
+    r.future_entries[0].content = r.task.items[0].content.clone();
+    db.execute_batch("CREATE TRIGGER reject_create_definition BEFORE INSERT ON task_checklist_definitions BEGIN SELECT RAISE(ABORT,'definition rollback'); END;").unwrap();
+    assert!(create(&mut db, &r, 100, &by)
+        .unwrap_err()
+        .contains("definition rollback"));
+    assert_eq!(
+        db.query_row("SELECT COUNT(*) FROM todos", [], |row| row.get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
+    assert!(checklist::snapshot(&mut db).unwrap().items.items.is_empty());
+    assert!(recurrence_store::snapshot(&db)
+        .unwrap()
+        .document
+        .rules
+        .is_empty());
+    db.execute_batch("DROP TRIGGER reject_create_definition")
+        .unwrap();
+    create(&mut db, &r, 100, &by).unwrap();
+    let s = crate::task_checklist_views::read_editor(&mut db, &r.task.todo_uuid).unwrap();
+    assert_eq!(s.repeat_series_uuid, Some(r.task.todo_uuid));
+    assert_eq!(s.definitions.definitions[0].entries[0].content, "step");
+}
+
+#[test]
+fn creation_rejects_changed_receipt_and_existing_or_deleted_identity() {
+    let (mut db, r, by) = creation_setup();
+    create(&mut db, &r, 100, &by).unwrap();
+    let mut changed = r.clone();
+    changed.task.title = "changed after lost reply".into();
+    assert_eq!(
+        create(&mut db, &changed, 101, &by).unwrap_err(),
+        "CHECKLIST_OPERATION_REUSED"
+    );
+    changed.task.operation_uuid = uuid::Uuid::new_v4().to_string();
+    assert_eq!(
+        create(&mut db, &changed, 101, &by).unwrap_err(),
+        "CHECKLIST_CREATE_EXISTS"
+    );
+    db.execute(
+        "UPDATE todos SET deleted_at=101 WHERE uuid=?1",
+        [&r.task.todo_uuid],
+    )
+    .unwrap();
+    assert_eq!(
+        create(&mut db, &changed, 102, &by).unwrap_err(),
+        "CHECKLIST_CREATE_EXISTS"
+    );
+    create(&mut db, &r, 103, &by).unwrap();
+    assert_eq!(
+        db.query_row(
+            "SELECT deleted_at FROM todos WHERE uuid=?1",
+            [&r.task.todo_uuid],
+            |row| row.get::<_, i64>(0)
+        )
+        .unwrap(),
+        101
+    );
+}
+
+#[test]
+fn invalid_creation_never_leaves_a_parent() {
+    for case in 0..10 {
+        let (mut db, mut r, by) = creation_setup();
+        match case {
+            0 => r.task.title = " ".into(),
+            1 => r.task.items[0].content = " ".into(),
+            2 => r.task.items[0].completed = true,
+            3 => r.fields.reminder_at = Some(99),
+            4 => r.fields.group_uuid = Some(uuid::Uuid::new_v4().to_string()),
+            5 => r.task.expected_updated_at = 1,
+            6 => r.mode = "stop".into(),
+            7 => {
+                r.fields.repeat_rule = Some("daily".into());
+            }
+            8 => {
+                replacement(&mut r);
+                r.future_entries[0].content = "not the current checklist".into();
+            }
+            _ => {
+                r.task.items = (0..21)
+                    .map(|i| checklist::ChecklistEdit {
+                        uuid: uuid::Uuid::new_v4().to_string(),
+                        content: "Step".into(),
+                        sort_order: i,
+                        completed: false,
+                    })
+                    .collect();
+            }
+        }
+        assert!(create(&mut db, &r, 100, &by).is_err(), "case {case}");
+        assert_eq!(
+            db.query_row("SELECT COUNT(*) FROM todos", [], |row| row.get::<_, i64>(0))
+                .unwrap(),
+            1,
+            "case {case}"
+        );
+        assert!(checklist::snapshot(&mut db).unwrap().items.items.is_empty());
+    }
+}
+
+#[test]
+fn empty_creation_has_valid_clock_and_preserves_unrelated_rules() {
+    let (mut db, mut r, by) = setup(true);
+    let before = recurrence_store::snapshot(&db).unwrap().document;
+    r.task.todo_uuid = uuid::Uuid::new_v4().to_string();
+    r.task.expected_updated_at = 0;
+    r.task.items.clear();
+    r.task.note.clear();
+    r.fields.due_date = None;
+    r.fields.reminder_at = None;
+    r.expected_rules.rules.clear();
+    let result = create(&mut db, &r, 100, &by).unwrap();
+    assert_eq!(result.updated_at, 100);
+    assert_eq!(result.rule_uuid, None);
+    assert_eq!(
+        crate::recurrence_protocol::encode_document(&before).unwrap(),
+        crate::recurrence_protocol::encode_document(
+            &recurrence_store::snapshot(&db).unwrap().document
+        )
+        .unwrap()
+    );
+    let row: (i64, i64) = db
+        .query_row(
+            "SELECT created_at,updated_at FROM todos WHERE uuid=?1",
+            [&r.task.todo_uuid],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(row, (100, 100));
+}
+
 #[test]
 fn checklist_editor_snapshot_roundtrip_preserves_fields_and_future_definition() {
     let (mut db, mut r, by) = setup(true);

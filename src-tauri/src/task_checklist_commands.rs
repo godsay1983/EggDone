@@ -30,6 +30,21 @@ pub fn read_task_checklist_editor(
 }
 
 #[tauri::command]
+pub fn create_task_checklist_editor(
+    database: State<'_, Database>,
+    app: AppHandle,
+    request: EditorRequest,
+) -> Result<EditorResult, String> {
+    let result = {
+        let mut db = lock_database(&database)?;
+        let by = device_id(&db).map_err(|e| e.to_string())?;
+        task_checklist_editor::create(&mut db, &request, now_millis(), &by)?
+    };
+    let _ = app.emit_to("main", "todos-changed", ());
+    Ok(result)
+}
+
+#[tauri::command]
 pub fn save_task_checklist_editor(
     database: State<'_, Database>,
     app: AppHandle,

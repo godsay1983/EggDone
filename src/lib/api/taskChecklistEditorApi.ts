@@ -7,4 +7,5 @@ export const taskChecklistEditorApi = {
     invoke<number | null>('resolve_checklist_rule_time', { schedule, timezone }),
   read: (uuid: string) => invoke<ChecklistEditorSnapshot>('read_task_checklist_editor', { uuid }),
   save: (request: ChecklistEditorRequest) => invoke<ChecklistEditorResult>('save_task_checklist_editor', { request }),
+  create: (request: ChecklistEditorRequest) => invoke<ChecklistEditorResult>('create_task_checklist_editor', { request }),
 };

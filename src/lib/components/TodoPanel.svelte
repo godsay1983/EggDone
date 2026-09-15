@@ -1,6 +1,9 @@
 <script lang="ts">
   import { invoke, isTauri } from "@tauri-apps/api/core";
   import CaptureDialog from "./CaptureDialog.svelte";
+  import TaskChecklistDialog from "./TaskChecklistDialog.svelte";
+  import { newChecklistDraft } from "$lib/utils/taskChecklistCreation";
+  import type { ChecklistEditorSnapshot } from "$lib/types/taskChecklistEditor";
   import LinkedTodoDialog from "./LinkedTodoDialog.svelte";
   import LinkManagerDialog from "./LinkManagerDialog.svelte";
   import LinkWorkspace from "./LinkWorkspace.svelte";
@@ -1665,6 +1668,24 @@
       .catch(() => {});
   }
 
+  let checklistCreation: ChecklistEditorSnapshot | null = null;
+  let checklistInitialRepeat = 'none';
+  function openChecklistCreation() {
+    if(adding || checklistCreation) return;
+    const parsed = quickAddPreview;
+    const schedule = parsed?.schedule;
+    checklistInitialRepeat = schedule?.repeat_rule ?? 'none';
+    checklistCreation = newChecklistDraft(crypto.randomUUID(), parsed?.title ?? title.trim(), {
+      due_date: schedule?.due_date ?? null, due_at: schedule?.due_at ?? null,
+      reminder_at: schedule?.reminder_at ?? null, repeat_rule: null,
+      group_uuid: groupUuidByName(parsed?.groupName ?? null) ?? newTodoGroupUuid(), priority: parsed?.priority ?? 0
+    });
+  }
+  async function afterChecklistCreated() {
+    checklistCreation = null; title = ''; quickAddParsingDisabledFor = '';
+    try { await todos.load(); } catch(error) { todos.reportError(error); }
+  }
+
   async function addTodo() {
     const nextTitle = title.trim();
     if (!nextTitle || adding) return;
@@ -2580,8 +2601,17 @@
         <button type="submit" disabled={!title.trim() || adding} aria-label={$translator("todo.add")}>
           {adding ? "…" : "+"}
         </button>
+        <button type="button" disabled={adding} aria-label={$translator("checklist.create")} title={$translator("checklist.create")} onclick={openChecklistCreation}>
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <path d="m2 5 2 2 3-4M9 5h9M2 11h4M9 11h9M2 16h4M9 16h9"/>
+          </svg>
+        </button>
       </form>
     {/if}
+  {/if}
+  {#if checklistCreation}
+    <TaskChecklistDialog uuid={checklistCreation.task.todo_uuid} creation={checklistCreation} initialRepeat={checklistInitialRepeat}
+      groups={$todos.groups} onClose={()=>checklistCreation=null} onSaved={()=>void afterChecklistCreated()}/>
   {/if}
   {#if quickAddPreview && listView !== "notes"}
     <div class="quick-add-preview" role="status">

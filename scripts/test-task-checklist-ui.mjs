@@ -25,7 +25,7 @@ export async function invoke(command,args){
         exhausted:false,deleted_at:window.stopped?1:null,schedule:{anchor_date:'2026-09-18',frequency:'daily',interval:1,weekdays:[],month_day:null,
         end_type:'count',end_date:null,max_occurrences:5,local_time_minutes:null},timezone_id:null}]:[]}};
   }
-  if(command==='save_task_checklist_editor'){if(window.failSave)throw Error(window.failSave);return {updated_at:2,rule_uuid:null,reminder_changed:false};}
+  if(command==='save_task_checklist_editor'||command==='create_task_checklist_editor'){if(window.failSave)throw Error(window.failSave);return {updated_at:2,rule_uuid:null,reminder_changed:false};}
   if(command==='resolve_checklist_rule_time')return args.schedule.local_time_minutes===null?null:Date.parse(args.schedule.anchor_date+'T00:00:00Z')+args.schedule.local_time_minutes*60000;
   if(command==='list_task_checklist_progress')return [];
   throw Error('Unexpected IPC '+command);
@@ -33,6 +33,7 @@ export async function invoke(command,args){
 const html=`<!doctype html><html><head><meta charset="utf-8"></head><body><script type="module">
 import {mount,unmount} from 'svelte';
 import Dialog from '/src/lib/components/TaskChecklistDialog.svelte';
+import {newChecklistDraft} from '/src/lib/utils/taskChecklistCreation.ts';
 import TodoItem from '/src/lib/components/TodoItem.svelte';
 import {checklistProgress} from '/src/lib/stores/taskChecklistStore.ts';
 import {setLanguageMode} from '/src/lib/i18n/index.ts';
@@ -42,6 +43,7 @@ document.documentElement.style.zoom=p.get('scale')||'1';
 window.calls=[];window.saved=0;window.cancelled=0;window.failLoad=p.has('failLoad');window.failSave='';window.readOnly=p.has('readOnly');window.count=Number(p.get('count')||2);
 window.recurring=p.has('recurring');window.completed=p.has('completed');window.stopped=p.has('stopped');window.legacy=p.has('legacy');
 window.openPanel=()=>{let dialog=mount(Dialog,{target:document.body,props:{uuid:'123e4567-e89b-42d3-a456-000000000001',
+ creation:p.has('create')?newChecklistDraft('123e4567-e89b-42d3-a456-000000000001','',{due_date:'2026-09-21',due_at:null,reminder_at:null,group_uuid:null,priority:0,repeat_rule:null}):null,
  onClose:()=>{window.cancelled++;void unmount(dialog);},onSaved:()=>{window.saved++;void unmount(dialog);}}});};
 if(p.has('row')){
  const noop=async()=>{};const uuid='123e4567-e89b-42d3-a456-000000000001';
@@ -211,5 +213,42 @@ try{
  await page.goto(server.resolvedUrls.local[0]+'__checklist?lang=en-US&theme=dark&legacy');
  await page.locator('.scope-choices input').last().check();await page.locator('button[type=submit]').click();await page.waitForFunction(()=>window.saved===1);
  assert.equal(await page.evaluate(()=>window.calls.find(c=>c.command==='save_task_checklist_editor').args.request.fields.repeat_rule),null);
- assert.deepEqual(errors,[]);console.log('Checklist UI: '+cases+' baseline, 8 density, 8 scope and 8 full-settings matrices; draft-only custom cancel and legacy conversion passed. Screenshots: '+output);
+ for(const lang of ['zh-CN','en-US'])for(const theme of ['light','dark'])for(const width of [320,620]){
+   await page.setViewportSize({width,height:640});
+   await page.goto(server.resolvedUrls.local[0]+'__checklist?create&lang='+lang+'&theme='+theme+'&scale=1.5');
+   await page.locator('.task-fields input').waitFor();
+   assert.equal(await page.evaluate(()=>window.calls.length),0,'new draft never loads a parent');
+   await page.locator('button[type=submit]').click();await page.locator('[role=alert]').waitFor();
+   assert.equal(await page.evaluate(()=>window.calls.length),0,'blank title never creates a task');
+   await page.locator('.task-fields input').fill('Creation preview');
+   await page.locator('.section-head button').click();
+   assert.ok(await page.locator('li textarea').evaluate(el=>el===document.activeElement));
+   await page.locator('button[type=submit]').click();
+   assert.equal(await page.evaluate(()=>window.calls.length),0,'blank child never writes');
+   await page.locator('li textarea').fill('First step');
+   assert.ok(await page.locator('li input[type=checkbox]').isDisabled());
+   await page.locator('.section-head button').click();await page.locator('li textarea').last().fill('Second step');
+   await page.locator('li .item-more').last().click();await page.locator('li .item-tools button').first().click();
+   assert.equal(await page.locator('li textarea').first().inputValue(),'Second step');
+   await page.locator('.task-settings summary').click();await page.locator('.task-settings select').last().selectOption('daily');
+   assert.equal(await page.locator('.task-settings option[value=keep]').count(),0);
+   await page.locator('.task-settings summary').click();
+   await page.evaluate(()=>window.failSave='offline');await page.locator('button[type=submit]').click();await page.locator('[role=alert]').waitFor();
+   assert.equal(await page.locator('.task-fields input').inputValue(),'Creation preview');
+   assert.ok(await page.locator('dialog').evaluate(el=>el.scrollWidth<=el.clientWidth));
+   for(const b of await page.locator('dialog footer button').all()){
+     const r=await b.boundingBox();assert.ok(r.x>=0&&r.y>=0&&r.x+r.width<=width+1&&r.y+r.height<=641);
+   }
+   await page.screenshot({path:resolve(output,'create-'+lang+'-'+theme+'-'+width+'.png')});
+   await page.evaluate(()=>window.failSave='');await page.locator('button[type=submit]').click();await page.waitForFunction(()=>window.saved===1);
+   const requests=await page.evaluate(()=>window.calls.filter(c=>c.command==='create_task_checklist_editor').map(c=>c.args.request));
+   assert.equal(requests.length,2);assert.deepEqual(requests[0],requests[1]);assert.equal(requests[1].task.expected_updated_at,0);
+   assert.equal(requests[1].task.items[0].content,'Second step');assert.equal(requests[1].mode,'replace');
+   assert.deepEqual(requests[1].future_entries.map(e=>e.content),['Second step','First step']);
+   assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.command==='save_task_checklist_editor').length),0);
+   await page.evaluate(()=>window.openPanel());await page.locator('.task-fields input').waitFor();
+   await page.locator('.task-fields input').fill('Discard');await page.keyboard.press('Escape');await page.waitForFunction(()=>window.cancelled===1);
+   assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.command==='create_task_checklist_editor').length),2);
+ }
+ assert.deepEqual(errors,[]);console.log('Checklist UI: '+cases+' baseline, 8 density, 8 scope, 8 full-settings and 8 creation matrices; draft-only cancel, validation and stable retries passed. Screenshots: '+output);
 }finally{await browser?.close();await server.close();}
