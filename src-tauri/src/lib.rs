@@ -40,6 +40,10 @@ mod shortcut_preferences;
 mod sync;
 mod sync_runtime_state;
 mod sync_target;
+mod task_batch;
+mod task_batch_commands;
+#[cfg(test)]
+mod task_batch_tests;
 mod task_checklist_backup;
 mod task_checklist_commands;
 pub mod task_checklist_editor;
@@ -187,6 +191,7 @@ pub fn run() {
             task_checklist_commands::read_task_checklist,
             task_checklist_commands::read_task_checklist_editor,
             task_template_commands::list_task_templates,
+            task_batch_commands::create_task_batch,
             task_template_commands::save_task_template,
             task_checklist_commands::save_task_checklist_editor,
             task_checklist_commands::create_task_checklist_editor,

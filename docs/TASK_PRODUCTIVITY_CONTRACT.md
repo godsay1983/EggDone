@@ -61,4 +61,4 @@ copyTaskForCreation 通过字段白名单创建深副本，所有子项未勾选
 - 定义独立对象版本、配置世代、revision/ACK、412 有界重试、404 与鉴权错误、未知版本拒绝。
 - 备份新版本、新旧库迁移、删除/恢复及旧端重复实例兼容必须一起验证。
 
-以上早期 P0/P1a 边界为历史设计记录；当前阶段以 roadmap 为准。P2b-1 的模板 wire schema、冲突全序与持久化约束见[模板协议与存储](TASK_TEMPLATE_STORAGE.md)。P2b-2 已实现[独立模板同步与备份 v5](TASK_TEMPLATE_SYNC_BACKUP.md)，通过实际 Rust/ArkTS 隔离 HTTP 及备份文件交换；设备和实际 S3 验收保留，模板产品入口仍待 P2c。
+以上早期 P0/P1a 边界为历史设计记录；当前阶段以 roadmap 为准。P2b-1 的模板 wire schema、冲突全序与持久化约束见[模板协议与存储](TASK_TEMPLATE_STORAGE.md)。P2b-2 已实现[独立模板同步与备份 v5](TASK_TEMPLATE_SYNC_BACKUP.md)，P2c 已接模板产品入口；设备和实际 S3 的未测项仍保留。P3a 已实现[批量创建事务与本机重试回执](TASK_BATCH_CREATION.md)，整批校验、写入和标脏原子提交；P3b/P3c 再接预览、稳定提交会话和产品结果反馈。
