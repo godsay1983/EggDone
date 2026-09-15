@@ -89,7 +89,7 @@ function validText(value: string, multiline: boolean): boolean {
   return true;
 }
 
-function titleIssue(title: string): CompositionIssueCode | null {
+export function titleIssue(title: string): CompositionIssueCode | null {
   if (title.trim().length === 0) return 'EMPTY_TITLE';
   if (title.trim().length > TASK_TITLE_LIMIT) return 'TITLE_TOO_LONG';
   if (!validText(title, false)) return 'INVALID_TITLE';

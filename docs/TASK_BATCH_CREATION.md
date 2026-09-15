@@ -2,6 +2,8 @@
 
 日期：2026-09-15。两端应用版本不变，SQLite 21 / RDB 22，不新增迁移或同步对象。
 
+本文件记录 P3a 事务层交付边界，现已提交（桌面 c9589db、鸿蒙 fd77e88）。后续已接 P3b [批量界面](TASK_BATCH_UI.md)，以下“尚无入口”等描述为 P3a 当时状态。
+
 ## 交付范围
 
 - 桌面：`create_task_batch` 命令、`taskBatchApi.create` 与 Rust 事务实现。

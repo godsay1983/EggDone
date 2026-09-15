@@ -3,6 +3,15 @@
   import CaptureDialog from "./CaptureDialog.svelte";
   import TaskChecklistDialog from "./TaskChecklistDialog.svelte";
   import TaskTemplateDialog from "./TaskTemplateDialog.svelte";
+  import TaskBatchDialog from './TaskBatchDialog.svelte';
+  import { createBatchSession } from '$lib/stores/taskBatchStore';
+  let batchOpen = false;
+  let batchSession = createBatchSession();
+  function openBatch() {
+    summaryMenuOpen = false;
+    if (batchSession.done) batchSession = createBatchSession();
+    batchOpen = true;
+  }
   import type { TaskCopyDraft } from '$lib/utils/taskCopyDraft';
   let templatesOpen = false;
   let templateTaskDraft: TaskCopyDraft | null = null;
@@ -2621,6 +2630,7 @@
     <TaskTemplateDialog groups={$todos.groups} onClose={()=>templatesOpen=false}
       onUse={draft=>{templatesOpen=false;templateTaskDraft=draft;}}/>
   {/if}
+  {#if batchOpen}<TaskBatchDialog session={batchSession} groups={$todos.groups} onClose={() => batchOpen=false}/>{/if}
   {#if templateTaskDraft}
     <TaskChecklistDialog uuid={templateTaskDraft.creation.task.todo_uuid} creation={templateTaskDraft.creation}
       initialItems={templateTaskDraft.items} groups={$todos.groups} onClose={()=>templateTaskDraft=null}
@@ -2976,6 +2986,7 @@
             <hr />
           {/if}
           <button type="button" role="menuitem" onclick={()=>{summaryMenuOpen=false;templatesOpen=true;}}>{$translator('templates.title')}</button>
+          <button type="button" role="menuitem" onclick={openBatch}>{$translator('batch.title')}</button>
           <button
             class:active={showSearch}
             type="button"
