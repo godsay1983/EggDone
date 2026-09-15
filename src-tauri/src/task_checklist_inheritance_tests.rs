@@ -136,6 +136,71 @@ fn dump(db: &Connection) -> Vec<String> {
     .collect()
 }
 #[test]
+fn checked_instance_replay_does_not_check_future_instance() {
+    let by = "00000000-0000-4000-8000-00000000000a";
+    let (mut db, rule, _) = setup(true);
+    let first = advance(&mut db, &rule);
+    let panel = crate::task_checklist_views::read(&mut db, &first).unwrap();
+    let before = store::snapshot(&mut db).unwrap();
+    let request = store::ChecklistSave {
+        operation_uuid: uuid::Uuid::new_v4().to_string(),
+        todo_uuid: first.clone(),
+        expected_updated_at: panel.updated_at,
+        title: panel.title,
+        note: panel.note,
+        items: panel
+            .items
+            .items
+            .iter()
+            .map(|i| store::ChecklistEdit {
+                uuid: i.uuid.clone(),
+                content: i.content.clone(),
+                sort_order: i.sort_order,
+                completed: true,
+            })
+            .collect(),
+        expected_items: panel.items,
+    };
+    store::save(&mut db, &request, 300, by).unwrap();
+    assert!(!db
+        .query_row("SELECT completed FROM todos WHERE uuid=?1", [&first], |r| r
+            .get::<_, bool>(0))
+        .unwrap());
+    let current = recurrence_store::snapshot(&db)
+        .unwrap()
+        .document
+        .rules
+        .remove(0);
+    let next = advance(&mut db, &current);
+    let after = store::snapshot(&mut db).unwrap();
+    assert!(after
+        .items
+        .items
+        .iter()
+        .filter(|i| i.todo_uuid == first)
+        .all(|i| i.completed));
+    let children: Vec<_> = after
+        .items
+        .items
+        .iter()
+        .filter(|i| i.todo_uuid == next)
+        .collect();
+    assert_eq!(children.len(), request.items.len());
+    assert!(children.iter().all(|i| !i.completed));
+    assert!(children
+        .iter()
+        .all(|i| request.items.iter().all(|old| old.uuid != i.uuid)));
+    assert_eq!(before.definitions, after.definitions);
+    store::save(&mut db, &request, 400, by).unwrap();
+    assert_eq!(store::snapshot(&mut db).unwrap(), after);
+    assert_eq!(
+        db.query_row("SELECT COUNT(*) FROM todos", [], |r| r.get::<_, i64>(0))
+            .unwrap(),
+        3
+    );
+}
+
+#[test]
 fn inheritance_completion_uses_definition_and_deterministic_identity() {
     let (mut db, r, d) = setup(true);
     let id = advance(&mut db, &r);

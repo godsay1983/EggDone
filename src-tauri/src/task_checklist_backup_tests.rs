@@ -49,6 +49,70 @@ fn dump(db: &Connection) -> Vec<String> {
 }
 
 #[test]
+fn checklist_immediate_check_restore_invalidates_old_write_receipt() {
+    let by = "00000000-0000-4000-8000-00000000000a";
+    let mut db = empty();
+    let id = fixture().todos[0].uuid.clone();
+    merge_import(&mut db, fixture()).unwrap();
+    let panel = crate::task_checklist_views::read(&mut db, &id).unwrap();
+    let mut request = store::ChecklistSave {
+        operation_uuid: uuid::Uuid::new_v4().to_string(),
+        todo_uuid: id.clone(),
+        expected_updated_at: panel.updated_at,
+        title: panel.title,
+        note: panel.note,
+        items: panel
+            .items
+            .items
+            .iter()
+            .filter(|i| i.deleted_at.is_none())
+            .map(|i| store::ChecklistEdit {
+                uuid: i.uuid.clone(),
+                content: i.content.clone(),
+                sort_order: i.sort_order,
+                completed: true,
+            })
+            .collect(),
+        expected_items: panel.items,
+    };
+    store::save(&mut db, &request, 3000, by).unwrap();
+    let checked = store::snapshot(&mut db).unwrap();
+    let exported = capture_export(&mut db, false, 4000).unwrap();
+    merge_import(&mut db, exported).unwrap();
+    assert_eq!(store::snapshot(&mut db).unwrap().items, checked.items);
+    assert_eq!(
+        db.query_row("SELECT COUNT(*) FROM task_checklist_operations", [], |r| {
+            r.get::<_, i64>(0)
+        })
+        .unwrap(),
+        0
+    );
+    assert!(store::save(&mut db, &request, 4000, by)
+        .unwrap_err()
+        .contains("STALE"));
+    let restored = crate::task_checklist_views::read(&mut db, &id).unwrap();
+    assert!(restored.items.items[0].completed);
+    request.operation_uuid = uuid::Uuid::new_v4().to_string();
+    request.expected_updated_at = restored.updated_at;
+    request.expected_items = restored.items;
+    request.items[0].completed = false;
+    store::save(&mut db, &request, 5000, by).unwrap();
+    assert!(
+        !crate::task_checklist_views::read(&mut db, &id)
+            .unwrap()
+            .items
+            .items[0]
+            .completed
+    );
+    assert!(!db
+        .query_row("SELECT completed FROM todos WHERE uuid=?1", [&id], |r| r
+            .get::<_, bool>(
+            0
+        ))
+        .unwrap());
+}
+
+#[test]
 fn checklist_backup_roundtrip_preview_and_legacy_preservation() {
     let mut db = empty();
     let p = build_preview(&db, Path::new("v4.json"), &fixture()).unwrap();

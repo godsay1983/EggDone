@@ -3084,6 +3084,46 @@ mod tests {
     }
 
     #[test]
+    fn checklist_survives_task_delete_restore_and_archive() {
+        use crate::{task_checklist_store as checklist, task_checklist_views as views};
+        let mut db = connection();
+        let task = create_todo_in_connection(&db, "Checklist lifecycle", None).unwrap();
+        let panel = views::read(&mut db, &task.uuid).unwrap();
+        checklist::save(
+            &mut db,
+            &checklist::ChecklistSave {
+                operation_uuid: Uuid::new_v4().to_string(),
+                todo_uuid: task.uuid.clone(),
+                expected_updated_at: panel.updated_at,
+                expected_items: panel.items,
+                title: panel.title,
+                note: panel.note,
+                items: vec![checklist::ChecklistEdit {
+                    uuid: Uuid::new_v4().to_string(),
+                    content: "Keep checked".into(),
+                    sort_order: 1000,
+                    completed: true,
+                }],
+            },
+            now_millis(),
+            "00000000-0000-4000-8000-00000000000a",
+        )
+        .unwrap();
+        let before = checklist::snapshot(&mut db).unwrap();
+        soft_delete_todo_in_connection(&mut db, task.id, None).unwrap();
+        assert!(views::read(&mut db, &task.uuid).is_err());
+        assert!(views::progress(&mut db).unwrap().is_empty());
+        restore_todo_in_connection(&mut db, task.id).unwrap();
+        assert_eq!(checklist::snapshot(&mut db).unwrap(), before);
+        assert!(views::read(&mut db, &task.uuid).unwrap().items.items[0].completed);
+        assert_eq!(views::progress(&mut db).unwrap()[0].completed, 1);
+        set_todo_completed_in_connection(&mut db, task.id, true).unwrap();
+        archive_completed_todos_in_connection(&db).unwrap();
+        assert!(views::read(&mut db, &task.uuid).unwrap().read_only);
+        assert_eq!(checklist::snapshot(&mut db).unwrap(), before);
+    }
+
+    #[test]
     fn todo_lifecycle_uses_sync_ready_fields() {
         let mut connection = connection();
 

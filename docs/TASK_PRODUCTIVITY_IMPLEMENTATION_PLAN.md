@@ -101,4 +101,5 @@ P1d-2b-1 已接两端自定义重复清单的仅本次/以后选择，当前与�
 P1d-2b-2 已在清单面板接完整字段与清单统一草稿、普通重复继承转换和提交后提醒刷新，见 [TASK_CHECKLIST_FULL_DRAFT_UI.md](TASK_CHECKLIST_FULL_DRAFT_UI.md)。原有快捷编辑入口仍保留。
 P1d-2c 已接两端原子新建、草稿取消与稳定创建回执，见 [TASK_CHECKLIST_CREATION_UI.md](TASK_CHECKLIST_CREATION_UI.md)。
 P1d-2d 已接已保存详情即时勾选，查看和编辑草稿分离；失败恢复、稳定重试及重新读取见 [TASK_CHECKLIST_DETAIL_UI.md](TASK_CHECKLIST_DETAIL_UI.md)。
-下一步 P1e 完整回归与原生人工验收，不将自动化通过视为整体 P1 已验收。
+P1e 已补双端串联测试和统一回归入口，记录用户基础操作验收，见 [TASK_CHECKLIST_REGRESSION.md](TASK_CHECKLIST_REGRESSION.md)。自动化、测试构建和原生验收分开记录，不将自动化通过视为整体 P1 已验收。
+下一开发阶段 P2a 快捷复制；剩余设备边界保留至发布前，不重复已通过的基础操作，不阻塞独立草稿开发。
