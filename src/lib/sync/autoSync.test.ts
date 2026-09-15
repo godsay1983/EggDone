@@ -258,6 +258,18 @@ function deferred<T>() {
 }
 
 describe("independent rule polling", () => {
+  it("detects template-only changes and never consumes an incomplete receipt", async () => {
+    vi.useFakeTimers(); configureAutoSync(enabledSettings);
+    vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue({ ...remoteProbe(), templateToken: 'missing' });
+    vi.mocked(syncApi.syncNow).mockResolvedValue({ ...syncResult(), templateRemoteToken: 'own' });
+    setAutoSyncForeground(true); await vi.advanceTimersByTimeAsync(0);
+    vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue({ ...remoteProbe(), templateToken: 'own' });
+    await vi.advanceTimersByTimeAsync(60_000); expect(syncApi.syncNow).toHaveBeenCalledTimes(1);
+    vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue({ ...remoteProbe(), templateToken: 'peer' });
+    vi.mocked(syncApi.syncNow).mockResolvedValue(syncResult());
+    await vi.advanceTimersByTimeAsync(60_000); expect(syncApi.syncNow).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(60_000); expect(syncApi.syncNow).toHaveBeenCalledTimes(3);
+  });
   it("detects checklist-only changes using the complete upload receipt", async () => {
     vi.useFakeTimers(); configureAutoSync(enabledSettings);
     vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue({ ...remoteProbe(), checklistToken: 'missing' });

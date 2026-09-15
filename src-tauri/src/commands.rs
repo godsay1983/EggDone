@@ -1507,6 +1507,7 @@ async fn sync_now_inner(
     };
     Ok(ManualSyncResult {
         checklist_remote_token: entities.checklist_token,
+        template_remote_token: entities.template_token,
         link_remote_token: entities.link_token,
         recurrence_remote_token: todo.recurrence_token,
         message: cleanup_summary.append_to(sync_message),

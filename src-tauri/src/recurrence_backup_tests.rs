@@ -67,6 +67,7 @@ fn export(db: &Connection) -> TodoExport {
         task_note_links: None,
         task_checklist_items: None,
         task_checklist_definitions: None,
+        task_templates: None,
         extra: Default::default(),
     }
 }

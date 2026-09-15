@@ -37,6 +37,7 @@ fn entity_replies() -> Vec<Reply> {
         Reply::new(200, None, b""),
         Reply::new(404, None, b""), // checklist definitions
         Reply::new(404, None, b""), // checklist items
+        Reply::new(404, None, b""), // templates
         Reply::new(404, None, b""),
         Reply::new(200, None, b""),
     ]
@@ -76,6 +77,7 @@ fn actual_signed_transport_entity_order_and_bounded_conflict_retry() {
                     ("PUT", "todos.json"),
                     ("GET", "task-checklist-definitions.json"),
                     ("GET", "task-checklist-items.json"),
+                    ("GET", "task-templates.json"),
                     ("GET", "notes.json"),
                     ("PUT", "notes.json"),
                     ("GET", "task-note-links.json"),

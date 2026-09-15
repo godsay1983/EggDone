@@ -163,6 +163,7 @@
 
   function domainLabel(domain: SyncDirtyDomain) {
     if (domain === "checklists") return $translator("sync.domainChecklists");
+    if (domain === "templates") return $translator("sync.domainTemplates");
     if (domain === "links") return $translator("sync.domainLinks");
     if (domain === "todos") return $translator("sync.domainTodos");
     if (domain === "notes") return $translator("sync.domainNotes");
@@ -334,7 +335,7 @@
         </div>
       </dl>
       <div class="sync-domain-list">
-        {#each (["todos", "notes", "attachments", "links", "checklists"] as SyncDirtyDomain[]) as domain}
+        {#each (["todos", "notes", "attachments", "links", "checklists", "templates"] as SyncDirtyDomain[]) as domain}
           <span class:dirty={$syncRuntimeSnapshot.dirtyDomains.includes(domain)}>
             {domainLabel(domain)}
           </span>

@@ -71,8 +71,11 @@ pub mod task_note_link_sync;
 mod task_note_link_tests;
 mod task_note_link_transport;
 mod task_note_link_views;
+mod task_template_backup;
 pub mod task_template_protocol;
+mod task_template_session;
 pub mod task_template_store;
+pub mod task_template_sync;
 #[cfg(test)]
 mod task_template_tests;
 mod trash;

@@ -78,6 +78,23 @@ pub struct PreparedManualSync {
 }
 
 impl PreparedManualSync {
+    pub(crate) fn template_transport(
+        &self,
+    ) -> Result<crate::task_checklist_transport::TaskChecklistTransport, String> {
+        crate::task_checklist_transport::TaskChecklistTransport::templates(
+            &self.bucket,
+            &self.object_key,
+            &[
+                self.note_object_key.clone(),
+                self.note_attachment_object_key.clone(),
+                crate::recurrence_protocol::recurrence_object_key(&self.object_key, &[])?,
+                crate::task_note_link_protocol::object_key(&self.object_key, &[])?,
+                crate::task_checklist_sync::Domain::Items.object_key(&self.object_key, &[])?,
+                crate::task_checklist_sync::Domain::Definitions
+                    .object_key(&self.object_key, &[])?,
+            ],
+        )
+    }
     pub(crate) fn checklist_transport(
         &self,
         domain: crate::task_checklist_sync::Domain,
@@ -166,6 +183,7 @@ pub struct RemoteNoteAttachmentSyncObject {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoteSyncState {
+    pub template_token: String,
     pub checklist_token: String,
     pub link_token: String,
     pub recurrence_token: String,
@@ -180,6 +198,8 @@ pub struct RemoteSyncState {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ManualSyncResult {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub template_remote_token: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub checklist_remote_token: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -493,7 +513,10 @@ pub async fn get_remote_state(
             .probe()
             .await?;
         guard()?;
+        let template_token = prepared.template_transport()?.probe().await?;
+        guard()?;
         Ok(RemoteSyncState {
+            template_token,
             checklist_token: serde_json::to_string(&[definitions, items])
                 .map_err(|_| "CHECKLIST_TOKEN_INVALID")?,
             link_token,

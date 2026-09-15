@@ -1,0 +1,194 @@
+{
+  "format_version": 5,
+  "exported_at": 1000,
+  "groups": [],
+  "todos": [
+    {
+      "uuid": "123e4567-e89b-42d3-a456-426614174000",
+      "title": "Linked backup task",
+      "note": null,
+      "group_uuid": null,
+      "completed": false,
+      "pinned": false,
+      "priority": 0,
+      "sort_order": 0,
+      "created_at": 1,
+      "updated_at": 100,
+      "completed_at": null,
+      "deleted_at": null,
+      "archived_at": null,
+      "due_date": null,
+      "due_at": null,
+      "reminder_at": null,
+      "repeat_rule": null,
+      "repeat_next_due_date": null,
+      "repeat_series_uuid": null
+    }
+  ],
+  "notes": [
+    {
+      "uuid": "123e4567-e89b-42d3-a456-426614174001",
+      "title": "Linked backup note",
+      "content": "Reference",
+      "color": "default",
+      "pinned": false,
+      "created_at": 1,
+      "updated_at": 100,
+      "deleted_at": null,
+      "updated_by": "00000000-0000-4000-8000-00000000000b"
+    }
+  ],
+  "note_attachments": [],
+  "attachment_files_included": false,
+  "recurrence": {
+    "document": {
+      "format_version": 1,
+      "rules": []
+    },
+    "instances": []
+  },
+  "task_note_links": {
+    "format_version": 1,
+    "links": [
+      {
+        "uuid": "b5d16c58-d3c9-5596-a7f4-774b530c3920",
+        "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+        "note_uuid": "123e4567-e89b-42d3-a456-426614174001",
+        "created_at": 10,
+        "updated_at": 100,
+        "updated_by": "00000000-0000-4000-8000-00000000000b",
+        "deleted_at": null
+      }
+    ]
+  },
+  "task_checklist_items": {
+    "format_version": 1,
+    "items": [
+      {
+        "uuid": "123e4567-e89b-42d3-a456-00000000000a",
+        "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+        "source_rule_uuid": null,
+        "source_entry_uuid": null,
+        "content": "Compile",
+        "sort_order": 1000,
+        "completed": false,
+        "created_at": 1000,
+        "updated_at": 2000,
+        "updated_by": "device-a",
+        "deleted_at": null
+      },
+      {
+        "uuid": "123e4567-e89b-42d3-a456-00000000000b",
+        "todo_uuid": "123e4567-e89b-42d3-a456-000000000002",
+        "source_rule_uuid": null,
+        "source_entry_uuid": null,
+        "content": "Compile",
+        "sort_order": 1000,
+        "completed": false,
+        "created_at": 1000,
+        "updated_at": 2000,
+        "updated_by": "device-a",
+        "deleted_at": 2000
+      }
+    ]
+  },
+  "task_checklist_definitions": {
+    "format_version": 1,
+    "definitions": [
+      {
+        "rule_uuid": "123e4567-e89b-42d3-a456-426614174000",
+        "first_todo_uuid": "123e4567-e89b-42d3-a456-000000000002",
+        "schedule": {
+          "anchor_date": "2026-09-05",
+          "frequency": "daily",
+          "interval": 1,
+          "weekdays": [],
+          "month_day": null,
+          "end_type": "never",
+          "end_date": null,
+          "max_occurrences": null,
+          "local_time_minutes": null
+        },
+        "timezone_id": null,
+        "applies_from_index": 2,
+        "entries": [
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000014",
+            "content": "Compile",
+            "sort_order": 1000
+          },
+          {
+            "uuid": "123e4567-e89b-42d3-a456-000000000015",
+            "content": "Upload",
+            "sort_order": 2000
+          }
+        ],
+        "created_at": 1000,
+        "updated_at": 1000,
+        "updated_by": "device-a",
+        "deleted_at": null
+      },
+      {
+        "rule_uuid": "123e4567-e89b-42d3-a456-426614174002",
+        "first_todo_uuid": "123e4567-e89b-42d3-a456-000000000002",
+        "schedule": {
+          "anchor_date": "2026-09-05",
+          "frequency": "daily",
+          "interval": 1,
+          "weekdays": [],
+          "month_day": null,
+          "end_type": "never",
+          "end_date": null,
+          "max_occurrences": null,
+          "local_time_minutes": null
+        },
+        "timezone_id": null,
+        "applies_from_index": 2,
+        "entries": [],
+        "created_at": 1000,
+        "updated_at": 2000,
+        "updated_by": "device-a",
+        "deleted_at": 2000
+      }
+    ]
+  },
+  "task_templates": {
+    "format_version": 1,
+    "templates": [
+      {
+        "uuid": "123e4567-e89b-42d3-a456-000000000010",
+        "content": {
+          "name": "Release checklist",
+          "title": "Prepare release",
+          "note": "Keep\nnotes",
+          "group_uuid": null,
+          "checklist": [
+            "Build",
+            "Verify"
+          ]
+        },
+        "created_at": 1,
+        "updated_at": 10,
+        "updated_by": "device-a",
+        "deleted_at": null
+      },
+      {
+        "uuid": "123e4567-e89b-42d3-a456-000000000088",
+        "content": {
+          "name": "Release checklist",
+          "title": "Prepare release",
+          "note": "Keep\nnotes",
+          "group_uuid": null,
+          "checklist": [
+            "Build",
+            "Verify"
+          ]
+        },
+        "created_at": 1,
+        "updated_at": 11,
+        "updated_by": "device-a",
+        "deleted_at": 11
+      }
+    ]
+  }
+}

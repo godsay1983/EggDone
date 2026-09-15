@@ -20,6 +20,9 @@ export interface ImportPreview {
   checklist_definition_total: number;
   checklist_missing_parent_total: number;
   checklist_metadata_included: boolean;
+  template_total: number;
+  template_deleted: number;
+  template_metadata_included: boolean;
   link_deleted: number;
   link_metadata_included: boolean;
   attachment_added: number;

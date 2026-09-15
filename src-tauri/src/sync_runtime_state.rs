@@ -63,7 +63,8 @@ pub fn get_snapshot(connection: &Connection) -> Result<SyncRuntimeSnapshot, Stri
                     dirty_domains, last_result, last_error_code, last_error_message,
                     pending_attachment_count, updated_at,
                     (SELECT revision>synced_revision FROM task_note_link_sync_state WHERE id=1),
-                    EXISTS(SELECT 1 FROM task_checklist_sync_state WHERE revision>synced_revision)
+                    EXISTS(SELECT 1 FROM task_checklist_sync_state WHERE revision>synced_revision),
+                    EXISTS(SELECT 1 FROM task_template_sync_state WHERE revision>synced_revision)
              FROM sync_runtime_state WHERE id = ?1",
             params![STATE_ID],
             |row| {
@@ -75,6 +76,9 @@ pub fn get_snapshot(connection: &Connection) -> Result<SyncRuntimeSnapshot, Stri
                 }
                 if row.get::<_, bool>(11)? {
                     domains.push("checklists".into());
+                }
+                if row.get::<_, bool>(12)? {
+                    domains.push("templates".into());
                 }
                 Ok(SyncRuntimeSnapshot {
                     schema_version: row.get(0)?,

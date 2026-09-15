@@ -9,20 +9,37 @@ use uuid::Uuid;
 
 use crate::task_checklist_sync::Domain;
 
+// Share bounded conditional transport, not the checklist storage/ACK domain.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum WireDomain {
+    Checklist(Domain),
+    Templates,
+}
+impl WireDomain {
+    fn canonical(self, raw: &str) -> Result<String, String> {
+        match self {
+            Self::Checklist(domain) => domain.canonical(raw),
+            Self::Templates => {
+                crate::task_template_protocol::encode(&crate::task_template_protocol::parse(raw)?)
+            }
+        }
+    }
+}
+
 pub const MAX_CHECKLIST_BYTES: usize = 4 * 1024 * 1024;
 
 pub struct TaskChecklistTransport {
     bucket: Box<Bucket>,
     object_key: String,
     owner: Uuid,
-    domain: Domain,
+    domain: WireDomain,
 }
 
 pub struct RemoteChecklist {
     pub document: Option<String>,
     etag: Option<String>,
     owner: Uuid,
-    domain: Domain,
+    domain: WireDomain,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -79,6 +96,22 @@ impl TaskChecklistTransport {
         domain: Domain,
     ) -> Result<Self, String> {
         let object_key = domain.object_key(todo_key, occupied_keys)?;
+        Self::for_key(bucket, object_key, WireDomain::Checklist(domain))
+    }
+
+    pub fn templates(
+        bucket: &Bucket,
+        todo_key: &str,
+        occupied_keys: &[String],
+    ) -> Result<Self, String> {
+        Self::for_key(
+            bucket,
+            crate::task_template_sync::object_key(todo_key, occupied_keys)?,
+            WireDomain::Templates,
+        )
+    }
+
+    fn for_key(bucket: &Bucket, object_key: String, domain: WireDomain) -> Result<Self, String> {
         Ok(Self {
             bucket: bucket
                 .with_request_timeout(Duration::from_secs(25))

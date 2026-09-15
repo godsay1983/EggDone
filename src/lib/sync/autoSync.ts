@@ -231,6 +231,7 @@ async function performSyncWithRetry(): Promise<ManualSyncResult> {
       if (result.recurrenceRemoteToken !== undefined) pollState.acknowledgeRules(generation, result.recurrenceRemoteToken);
       if (result.linkRemoteToken !== undefined) pollState.acknowledgeLinks(generation, result.linkRemoteToken);
       if (result.checklistRemoteToken !== undefined) pollState.acknowledgeChecklists(generation, result.checklistRemoteToken);
+      if (result.templateRemoteToken !== undefined) pollState.acknowledgeTemplates(generation, result.templateRemoteToken);
       const cleanupNotice = result.message.includes("远端附件");
       let snapshot: SyncRuntimeSnapshot | null = null;
       try {
@@ -290,6 +291,7 @@ async function checkRemoteAndSync() {
       pollState.rulesChanged(remote.recurrenceToken) ||
       pollState.linksChanged(remote.linkToken) ||
       pollState.checklistsChanged(remote.checklistToken) ||
+      pollState.templatesChanged(remote.templateToken) ||
       !remoteStateInitialized ||
       remote.todoObjectExists !== (knownTodoRemoteEtag !== null) ||
       remote.todoEtag !== knownTodoRemoteEtag ||

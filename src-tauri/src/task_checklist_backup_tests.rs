@@ -128,7 +128,7 @@ fn checklist_backup_roundtrip_preview_and_legacy_preservation() {
     );
     merge_import(&mut db, fixture()).unwrap();
     let exported = capture_export(&mut db, false, 4000).unwrap();
-    assert_eq!(exported.format_version, 4);
+    assert_eq!(exported.format_version, 5);
     assert_eq!(
         exported.task_checklist_items,
         fixture().task_checklist_items

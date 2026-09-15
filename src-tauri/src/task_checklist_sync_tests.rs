@@ -303,6 +303,7 @@ fn checklist_conflict_retries_parents_and_both_downloads_with_a_bound() {
             }
             if conflicts == 1 {
                 replies.extend([
+                    Reply::new(404, None, b""), // templates
                     Reply::new(404, None, b""),
                     Reply::new(200, None, b""),
                     Reply::new(404, None, b""),

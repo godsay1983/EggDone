@@ -67,6 +67,9 @@ pub(crate) fn invalidate(connection: &Connection) -> Result<(), String> {
     if tx.execute("UPDATE task_checklist_sync_state SET revision=revision+1,generation=generation+1,etag=NULL
         WHERE revision<9007199254740991 AND generation<9007199254740991",[])
         .map_err(|_| "SYNC_TARGET_DATABASE")? != 2 { return Err("SYNC_TARGET_REVISION_LIMIT".into()); }
+    if tx.execute("UPDATE task_template_sync_state SET revision=revision+1,generation=generation+1,etag=NULL
+        WHERE id=1 AND revision<9007199254740991 AND generation<9007199254740991",[])
+        .map_err(|_| "SYNC_TARGET_DATABASE")? != 1 { return Err("SYNC_TARGET_REVISION_LIMIT".into()); }
     tx.commit().map_err(|_| "SYNC_TARGET_DATABASE".into())
 }
 

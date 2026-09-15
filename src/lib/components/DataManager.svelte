@@ -174,6 +174,9 @@
           ? $translator("data.checklistSummary", { count: preview.checklist_total, deleted: preview.checklist_deleted,
               definitions: preview.checklist_definition_total, missing: preview.checklist_missing_parent_total })
           : $translator("data.checklistsLegacy")}</span>
+        <span>{preview.template_metadata_included
+          ? $translator("data.templatesSummary", { total: preview.template_total, deleted: preview.template_deleted })
+          : $translator("data.templatesLegacy")}</span>
         <div>
           <span>{$translator("data.taskChanges", { added: preview.added, updated: preview.updated, unchanged: preview.unchanged })}</span>
           <span>{$translator("data.noteChanges", { added: preview.note_added, updated: preview.note_updated, unchanged: preview.note_unchanged })}</span>

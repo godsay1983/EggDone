@@ -1,4 +1,4 @@
-//! Internal storage foundation. UI commands, transport and backup integration are separate phases.
+//! Atomic template storage. Transport and backup use dedicated snapshot/restore boundaries.
 use crate::task_checklist_protocol::{valid_uuid, MAX_CLOCK};
 use crate::task_template_protocol::{
     self as protocol, TaskTemplate, TemplateContent, TemplatesDocument,

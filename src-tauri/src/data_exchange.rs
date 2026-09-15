@@ -22,7 +22,7 @@ use crate::{
     tray::PanelState,
 };
 
-const FORMAT_VERSION: u32 = 4;
+const FORMAT_VERSION: u32 = 5;
 const BACKUP_FORMAT_VERSION: u32 = 1;
 const BACKUP_MAX_ENTRY_COUNT: usize = 10_000;
 const BACKUP_MAX_TOTAL_BYTES: u64 = 512 * 1024 * 1024;
@@ -110,6 +110,12 @@ struct TodoExport {
         deserialize_with = "crate::task_checklist_backup::deserialize_definitions"
     )]
     task_checklist_definitions: Option<crate::task_checklist_protocol::DefinitionsDocument>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::task_template_backup::deserialize"
+    )]
+    task_templates: Option<crate::task_template_protocol::TemplatesDocument>,
     #[serde(flatten)]
     extra: std::collections::BTreeMap<String, serde_json::Value>,
 }
@@ -159,6 +165,9 @@ pub struct ImportPreview {
     checklist_definition_total: usize,
     checklist_missing_parent_total: usize,
     checklist_metadata_included: bool,
+    template_total: usize,
+    template_deleted: usize,
+    template_metadata_included: bool,
     attachment_added: usize,
     attachment_updated: usize,
     attachment_unchanged: usize,
@@ -1067,6 +1076,7 @@ fn capture_export(
         task_note_links: Some(crate::task_note_link_store::snapshot(&tx)?.document),
         task_checklist_items: Some(checklist.items),
         task_checklist_definitions: Some(checklist.definitions),
+        task_templates: Some(crate::task_template_store::read_in_transaction(&tx)?.document),
         extra: Default::default(),
     };
     validate_import_mode(&export, full)?;
@@ -1094,7 +1104,7 @@ fn validate_complete_import(import: &TodoExport) -> Result<(), String> {
 fn validate_import_mode(import: &TodoExport, expect_attachment_files: bool) -> Result<(), String> {
     match (import.format_version, &import.recurrence) {
         (1, None) => {}
-        (2 | 3 | 4, Some(backup)) => {
+        (2 | 3 | 4 | 5, Some(backup)) => {
             crate::recurrence_backup::validate(backup)?;
             if backup
                 .instances
@@ -1108,7 +1118,7 @@ fn validate_import_mode(import: &TodoExport, expect_attachment_files: bool) -> R
     }
     match (import.format_version, &import.task_note_links) {
         (1 | 2, None) => {}
-        (3 | 4, Some(links)) => {
+        (3 | 4 | 5, Some(links)) => {
             crate::task_note_link_protocol::encode_document(links)?;
         }
         _ => return Err("INVALID_TASK_NOTE_LINK_BACKUP_VERSION".into()),
@@ -1119,12 +1129,13 @@ fn validate_import_mode(import: &TodoExport, expect_attachment_files: bool) -> R
         &import.task_checklist_definitions,
     ) {
         (1..=3, None, None) => {}
-        (4, Some(items), Some(definitions)) if import.extra.is_empty() => {
+        (4 | 5, Some(items), Some(definitions)) if import.extra.is_empty() => {
             crate::task_checklist_protocol::encode_items(items)?;
             crate::task_checklist_protocol::encode_definitions(definitions)?;
         }
         _ => return Err("INVALID_CHECKLIST_BACKUP_VERSION".into()),
     }
+    crate::task_template_backup::validate(import.format_version, import.task_templates.as_ref())?;
     if import.format_version > FORMAT_VERSION {
         return Err(format!(
             "导入文件版本 {} 高于当前支持的版本 {}",
@@ -1374,6 +1385,17 @@ fn build_preview(
                 .len()
         }),
         checklist_metadata_included: import.task_checklist_items.is_some(),
+        template_total: import
+            .task_templates
+            .as_ref()
+            .map_or(0, |d| d.templates.len()),
+        template_deleted: import.task_templates.as_ref().map_or(0, |d| {
+            d.templates
+                .iter()
+                .filter(|t| t.deleted_at.is_some())
+                .count()
+        }),
+        template_metadata_included: import.task_templates.is_some(),
         recurrence_total: import
             .recurrence
             .as_ref()
@@ -1493,6 +1515,7 @@ fn merge_import_in_transaction(
         import.task_checklist_items.as_ref(),
         import.task_checklist_definitions.as_ref(),
     )?;
+    crate::task_template_backup::restore(connection, import.task_templates.as_ref())?;
     Ok(result)
 }
 
@@ -1867,6 +1890,10 @@ mod task_note_link_backup_tests;
 mod task_checklist_backup_tests;
 
 #[cfg(test)]
+#[path = "task_template_backup_tests.rs"]
+mod task_template_backup_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::db::{configure_connection, migrate};
@@ -2014,6 +2041,7 @@ mod tests {
             task_note_links: None,
             task_checklist_items: None,
             task_checklist_definitions: None,
+            task_templates: None,
             extra: Default::default(),
         };
         let json = serde_json::to_string(&export).unwrap();
@@ -2098,6 +2126,7 @@ mod tests {
             task_note_links: None,
             task_checklist_items: None,
             task_checklist_definitions: None,
+            task_templates: None,
             extra: Default::default(),
         };
         assert!(validate_import(&future).is_err());
@@ -2114,6 +2143,7 @@ mod tests {
             task_note_links: None,
             task_checklist_items: None,
             task_checklist_definitions: None,
+            task_templates: None,
             extra: Default::default(),
         };
         assert!(validate_import(&duplicated).is_err());
@@ -2130,6 +2160,7 @@ mod tests {
             task_note_links: None,
             task_checklist_items: None,
             task_checklist_definitions: None,
+            task_templates: None,
             extra: Default::default(),
         };
         assert!(validate_import(&falsely_complete).is_err());
@@ -2197,6 +2228,7 @@ mod tests {
                 task_note_links: None,
                 task_checklist_items: None,
                 task_checklist_definitions: None,
+                task_templates: None,
                 extra: Default::default(),
             },
         )
@@ -2275,6 +2307,7 @@ mod tests {
             task_note_links: None,
             task_checklist_items: None,
             task_checklist_definitions: None,
+            task_templates: None,
             extra: Default::default(),
         };
         let data = serde_json::to_vec(&export).unwrap();
