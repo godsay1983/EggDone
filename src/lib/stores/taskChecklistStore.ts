@@ -1,5 +1,6 @@
 import { writable } from 'svelte/store';
 import { taskChecklistApi } from '$lib/api/taskChecklistApi';
+import { TaskChecklistDetailSession } from '$lib/utils/taskChecklistDetailSession';
 import { scheduleAutoSync } from '$lib/sync/autoSync';
 import type { ChecklistEdit, ChecklistPanelSnapshot, ChecklistProgress, ChecklistSave } from '$lib/types/taskChecklist';
 
@@ -31,6 +32,13 @@ export function createChecklistSession(api = taskChecklistApi, changed = schedul
   };
 }
 export const checklistProgress = writable<Record<string, ChecklistProgress> | null>(null);
+export function createChecklistDetailSession() {
+  return new TaskChecklistDetailSession({ read: taskChecklistApi.read, save: async request => {
+    const result = await taskChecklistApi.save(request);
+    try { scheduleAutoSync(); } catch { /* The persisted revision stays dirty. */ }
+    return result;
+  } }, () => crypto.randomUUID());
+}
 let generation=0;
 export async function refreshChecklistProgress() {
   const ticket=++generation;

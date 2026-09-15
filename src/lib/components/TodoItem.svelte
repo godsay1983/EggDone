@@ -5,13 +5,13 @@
   import { languageState, translator } from "$lib/i18n";
   import type { TranslationKey } from "$lib/i18n";
   import RecurrenceEditor from "./RecurrenceEditor.svelte";
-  import TaskChecklistDialog from './TaskChecklistDialog.svelte';
+  import TaskChecklistDetails from './TaskChecklistDetails.svelte';
   import { checklistProgress, refreshChecklistProgress } from '$lib/stores/taskChecklistStore';
   import { todos } from '$lib/stores/todoStore';
   let checklistOpen = false;
   $: checklistCount = $checklistProgress?.[todo.uuid];
   function openChecklist() { actionsOpen=false;checklistOpen=true; }
-  function checklistSaved() { checklistOpen=false;void todos.refresh();void refreshChecklistProgress(); }
+  function checklistSaved() { void todos.refresh();void refreshChecklistProgress(); }
   import { recurrenceRules } from "$lib/stores/recurrenceStore";
   import { visibleRecurrenceRule } from "$lib/utils/recurrenceForm";
   import { recurrenceSummary } from "$lib/utils/recurrenceSummary";
@@ -896,7 +896,7 @@
   <RecurrenceEditor {todo} onClose={() => recurrenceOpen = false} />
 {/if}
 {#if checklistOpen}
-  <TaskChecklistDialog uuid={todo.uuid} {groups} onClose={() => checklistOpen=false} onSaved={checklistSaved}/>
+  <TaskChecklistDetails uuid={todo.uuid} {groups} onClose={() => checklistOpen=false} onChanged={checklistSaved}/>
 {/if}
 
 <style>

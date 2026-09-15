@@ -3,7 +3,7 @@
 日期：2026-09-14。
 范围：任务内检查清单、任务模板与快捷复制、多行文本批量创建任务。
 基线：桌面 1.1.0 / SQLite 19，鸿蒙 1.2.0 / RDB 20。
-状态：P0/P1a/P1b/P1c 已提交；当前 SQLite 20 / RDB 21，清单网络传输与备份 v4 已接入。P1d-1/P1d-2a/P1d-2b 已实现已有任务清单、完整字段和以后定义；P1d-2c 已接[新建任务与清单](TASK_CHECKLIST_CREATION_UI.md)。独立即时勾选与原生验收尚未完成。
+状态：P0/P1a/P1b/P1c 已提交；当前 SQLite 20 / RDB 21，清单网络传输与备份 v4 已接入。P1d-1/P1d-2a/P1d-2b 已实现已有任务清单、完整字段和以后定义；P1d-2c 已接[新建任务与清单](TASK_CHECKLIST_CREATION_UI.md)，P1d-2d 已接[详情即时勾选](TASK_CHECKLIST_DETAIL_UI.md)。完整原生验收尚未完成。
 旧版体验升级不再纳入本轮功能范围。阶段状态见 [roadmap](TASK_PRODUCTIVITY_ROADMAP.md)，规则见 [共享契约](TASK_PRODUCTIVITY_CONTRACT.md)。
 
 ## 产品目标
@@ -100,4 +100,5 @@ P1d-2a 已完成同事务完整快照、命令/store 与提交会话接线；共
 P1d-2b-1 已接两端自定义重复清单的仅本次/以后选择，当前与后续定义同事务保存，按剩余次数分叉，未来子项默认未完成。见 [TASK_CHECKLIST_SCOPE_UI.md](TASK_CHECKLIST_SCOPE_UI.md)。
 P1d-2b-2 已在清单面板接完整字段与清单统一草稿、普通重复继承转换和提交后提醒刷新，见 [TASK_CHECKLIST_FULL_DRAFT_UI.md](TASK_CHECKLIST_FULL_DRAFT_UI.md)。原有快捷编辑入口仍保留。
 P1d-2c 已接两端原子新建、草稿取消与稳定创建回执，见 [TASK_CHECKLIST_CREATION_UI.md](TASK_CHECKLIST_CREATION_UI.md)。
-下一步 P1d-2d 接已保存详情即时勾选，之后 P1e 验收，不将现有界面视为整体 P1d 完成。
+P1d-2d 已接已保存详情即时勾选，查看和编辑草稿分离；失败恢复、稳定重试及重新读取见 [TASK_CHECKLIST_DETAIL_UI.md](TASK_CHECKLIST_DETAIL_UI.md)。
+下一步 P1e 完整回归与原生人工验收，不将自动化通过视为整体 P1 已验收。
