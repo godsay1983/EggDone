@@ -162,29 +162,22 @@ pub fn run() {
             reminders::start_reminder_scheduler(app.handle().clone());
             Ok(())
         })
-        .on_window_event(|window, event| {
-            match event {
-                WindowEvent::CloseRequested { api, .. } if window.label() == "main" => {
-                    api.prevent_close();
-                    if let Err(error) = window_preferences::flush_size(window.app_handle()) {
-                        eprintln!("Window size save failed: {error}");
-                    }
-                    let _ = window.hide();
+        .on_window_event(|window, event| match event {
+            WindowEvent::CloseRequested { api, .. } if window.label() == "main" => {
+                api.prevent_close();
+                if let Err(error) = window_preferences::flush_size(window.app_handle()) {
+                    eprintln!("Window size save failed: {error}");
                 }
-                WindowEvent::CloseRequested { api, .. } if window.label() == "focus" => {
-                    api.prevent_close();
-                    let _ = window.hide();
-                }
-                WindowEvent::Focused(false) if window.label() == "main" => {
-                    let panel_state = window.app_handle().state::<tray::PanelState>();
-                    if !panel_state.handle_blur() {
-                        return;
-                    }
-                    // Keep the process alive and treat the panel like a native tray popover.
-                    let _ = window.hide();
-                }
-                _ => {}
+                let _ = window.hide();
             }
+            WindowEvent::CloseRequested { api, .. } if window.label() == "focus" => {
+                api.prevent_close();
+                let _ = window.hide();
+            }
+            WindowEvent::Focused(false) if window.label() == "main" => {
+                tray::handle_panel_blur(window);
+            }
+            _ => {}
         })
         .invoke_handler(tauri::generate_handler![
             task_note_link_commands::list_task_note_links,

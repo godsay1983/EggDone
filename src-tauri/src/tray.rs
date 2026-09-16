@@ -38,8 +38,8 @@ pub struct PanelState {
 }
 
 impl PanelState {
-    pub fn handle_blur(&self) -> bool {
-        self.handle_blur_at(Instant::now())
+    pub fn handle_blur(&self, window_still_active: bool) -> bool {
+        !window_still_active && self.handle_blur_at(Instant::now())
     }
 
     pub fn begin_dialog(&self) {
@@ -143,6 +143,26 @@ impl PanelState {
 
 fn duration_since(later: Instant, earlier: Instant) -> Duration {
     later.checked_duration_since(earlier).unwrap_or_default()
+}
+
+pub(crate) fn handle_panel_blur(window: &tauri::Window) {
+    // WebView2 emits LostFocus when focus moves to the native resize frame.
+    // That is not an app switch, and the frame may never send a DOM pointerdown.
+    #[cfg(target_os = "windows")]
+    let window_still_active = window.hwnd().is_ok_and(|hwnd| {
+        // GetForegroundWindow only reads system state; the HWND is owned by Tauri.
+        unsafe { windows_sys::Win32::UI::WindowsAndMessaging::GetForegroundWindow() == hwnd.0 }
+    });
+    #[cfg(not(target_os = "windows"))]
+    let window_still_active = false;
+
+    if window
+        .app_handle()
+        .state::<PanelState>()
+        .handle_blur(window_still_active)
+    {
+        let _ = window.hide();
+    }
 }
 
 /// Tray icon backend. Linux prefers a native StatusNotifierItem service
@@ -778,6 +798,25 @@ fn set_panel_position(window: &tauri::WebviewWindow, point: panel_position::Poin
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_frame_focus_does_not_hide_without_a_dom_interaction() {
+        let state = PanelState::default();
+        // No short pointer grace is needed, including a long or stationary drag.
+        for _ in 0..8 {
+            assert!(!state.handle_blur(true));
+        }
+        assert!(state.inner.lock().unwrap().last_blur_hide.is_none());
+        assert!(state.handle_blur(false));
+    }
+
+    #[test]
+    fn native_frame_focus_does_not_swallow_the_next_tray_toggle() {
+        let state = PanelState::default();
+        state.mark_tray_press();
+        assert!(!state.handle_blur(true));
+        assert!(!state.consume_tray_blur());
+    }
 
     #[test]
     fn external_blur_hides_without_suppressing_a_later_tray_press() {

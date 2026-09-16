@@ -31,5 +31,4 @@
   .corner { width: 10px; height: 10px; }
   [data-direction="NorthEast"], [data-direction="SouthWest"] { cursor: nesw-resize; }
   [data-direction="NorthWest"], [data-direction="SouthEast"] { cursor: nwse-resize; }
-  [data-direction="SouthEast"]::after { content: ""; position: absolute; inset: 2px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; opacity: 0.5; }
 </style>

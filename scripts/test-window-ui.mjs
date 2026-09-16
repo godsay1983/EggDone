@@ -19,7 +19,7 @@ const win={ innerSize:async()=>n.size, outerSize:async()=>n.size, scaleFactor:as
  outerPosition:async()=>n.position, setSize:async size=>{n.size={width:size.width*n.monitor.scaleFactor,height:size.height*n.monitor.scaleFactor};n.calls.push('size');},
  setMinSize:async size=>{n.min=size;},setMaxSize:async size=>{n.max=size;},setPosition:async pos=>{n.position=pos;},
  onResized:event('resize'),onScaleChanged:event('scale'),onFocusChanged:event('focus'),onMoved:event('move'),
- startResizeDragging:async direction=>{n.direction=direction;} };
+ startResizeDragging:async direction=>{n.direction=direction;n.calls.push('resize:'+direction);} };
 export const getCurrentWindow=()=>win;
 export const currentMonitor=async()=>n.monitor;
 export const primaryMonitor=currentMonitor;
@@ -81,6 +81,7 @@ try {
     await page.setViewportSize({width,height:600});
     await page.goto(base+'?lang='+lang+'&theme='+theme);
     await page.waitForFunction(()=>window.ready);
+    assert.equal(await page.locator('[data-direction="SouthEast"]').evaluate(el => getComputedStyle(el, '::after').content), 'none', 'resize corner must not draw an extra line');
     assert.equal(await page.locator('.settings-card').evaluate(el=>el.scrollWidth<=el.clientWidth),true);
     const zoomLayout = await page.locator('.window-settings').evaluate(section => {
       const presets = section.querySelector('.language-options').getBoundingClientRect();
@@ -139,8 +140,23 @@ try {
   await page.evaluate(async()=>{window.native.failSave=true;await window.updatePrefs({zoom:1.5});});
   assert.equal(await page.evaluate(()=>window.native.zoom),1.25);
   assert.equal(await page.evaluate(()=>JSON.parse(sessionStorage.getItem('native-window-preferences')).zoom),1.25);
-  await page.locator('[data-direction="SouthEast"]').dispatchEvent('pointerdown',{button:0});
-  await page.waitForFunction(()=>window.native.direction==='SouthEast');
+  // Use hit-tested pointer input, not dispatchEvent: every edge/corner must be reachable.
+  for (const direction of ['North','South','East','West','NorthEast','NorthWest','SouthEast','SouthWest']) {
+    const handle = page.locator(`[data-direction="${direction}"]`);
+    const bounds = await handle.boundingBox();
+    assert.ok(bounds && bounds.width > 0 && bounds.height > 0, direction+' needs a hit area');
+    const point = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+    assert.equal(await page.evaluate(({x,y})=>document.elementFromPoint(x,y)?.getAttribute('data-direction'),point),direction);
+    await page.evaluate(()=>{window.native.calls=[];window.native.direction=null;});
+    await page.mouse.move(point.x,point.y);
+    await page.mouse.down();
+    await page.waitForFunction(d=>window.native.direction===d,direction);
+    await page.mouse.up();
+    assert.deepEqual(await page.evaluate(()=>window.native.calls),['mark_panel_interaction','resize:'+direction]);
+  }
+  await page.evaluate(()=>{window.native.calls=[];});
+  await page.locator('[data-direction="East"]').dispatchEvent('pointerdown',{button:2});
+  assert.deepEqual(await page.evaluate(()=>window.native.calls),[],'right click must not start resizing');
   await page.evaluate(()=>window.stopPrefs());
   assert.equal(await page.evaluate(()=>Object.keys(window.native.events).length),0);
   // A failed native read must not overwrite saved preferences with defaults.
@@ -151,6 +167,6 @@ try {
   assert.equal(await page.evaluate(()=>window.native.calls.includes('save_window_preferences')),false);
   assert.equal(await page.evaluate(()=>JSON.parse(sessionStorage.getItem('native-window-preferences')).zoom),1.25);
   assert.deepEqual(errors,[]);
-  console.log('Window UI: '+cases+' language/theme/width combinations passed; preset, zoom, keyboard, restore, DPI, display fitting, error rollback, resize IPC, cleanup passed. Native transport is mocked.');
+  console.log('Window UI: '+cases+' language/theme/width combinations passed; preset, zoom, keyboard, restore, DPI, display fitting, error rollback, all 8 resize hit areas/IPC, cleanup passed. Native transport is mocked.');
 } catch(error) { console.error(error); process.exitCode=1; }
 finally { await browser?.close(); await server.close(); }
