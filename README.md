@@ -34,7 +34,7 @@ Windows 窗口缩放修复（2026-09-16，未发布）：拖动主窗口边缘�
 
 任务效率功能开发（2026-09-15）：P1d-2c 已接“新建任务与清单”，两端任务设置及子项一次保存，取消不创建、重试不重复。桌面从输入框右侧清单图标进入，鸿蒙从新增任务“选项”进入，见[入口与验收](docs/TASK_CHECKLIST_CREATION_UI.md)。下一步为详情独立即时勾选；模板与批量创建尚未开放。详见[实现方案](docs/TASK_PRODUCTIVITY_IMPLEMENTATION_PLAN.md)、[共享契约](docs/TASK_PRODUCTIVITY_CONTRACT.md)与[roadmap](docs/TASK_PRODUCTIVITY_ROADMAP.md)。软件版本不变。
 
-最新交接：[桌面 1.2.0 发布准备与主线交接](.claude/handoffs/2026-09-16-122303-desktop-1-2-0-release-main.md)。三项功能、双端回归及升版已完成，已按用户授权合并本地 main；未推送或发布。后续按交接中的剩余发布门槛准备正式包，不重复基础验收。
+最新交接：[桌面窗口缩放与右下角提示线修复](.claude/handoffs/2026-09-16-131415-desktop-window-resize.md)。当前分支 `codex/fix-window-resize`，桌面版本保持 1.2.0；窗口修复及去线已完成自动化与 Debug 构建，原生鼠标完整验收待确认。本次仅桌面本地提交，未合并或推送；此前三项功能已合并 main，发布准备见上一份交接，不重复基础验收。
 
 当前本地候选版本：**1.2.0**（2026-09-16），配套鸿蒙 1.3.0 / 1000030。检查清单、模板与快捷复制、批量创建已纳入版本，备份格式为 v5，SQLite schema 为 21。主要变化见[更新日志](CHANGELOG.md)，验证与升级限制见[发布前检查](docs/TASK_PRODUCTIVITY_RELEASE_REVIEW.md)。已合并本地 main，未推送或发布；以下旧候选版本及旧 handoff 为历史记录，不代表所有发布验收已通过。
 
