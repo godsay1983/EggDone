@@ -56,14 +56,29 @@ try {
     Run-Step $name $HarmonyRoot 'node' @("scripts/$name.cjs", "--desktop=$DesktopRoot")
   }
   Run-Step 'desktop-rust' (Join-Path $DesktopRoot 'src-tauri') 'cargo' @('test','--locked','--lib','--quiet')
+  foreach ($name in @('test-task-templates','test-task-template-sync','test-template-library',
+      'test-template-library-panel','test-task-batch','test-batch-creation-session',
+      'test-batch-creation-panel','test-batch-recovery','test-action-controls')) {
+    Run-Step $name $HarmonyRoot 'node' @("scripts/$name.cjs", "--desktop=$DesktopRoot")
+  }
   Run-Step 'cross-client-backup' $HarmonyRoot 'node' @('scripts/test-task-checklist-backup.cjs', "--desktop=$DesktopRoot")
   Run-Step 'cross-client-http' $HarmonyRoot 'node' @('scripts/test-task-checklist-http.cjs', "--desktop=$DesktopRoot")
+  Run-Step 'cross-client-template-backup' $HarmonyRoot 'node' @('scripts/test-task-template-backup.cjs', "--desktop=$DesktopRoot")
+  Run-Step 'cross-client-template-http' $HarmonyRoot 'node' @('scripts/test-task-template-http.cjs', "--desktop=$DesktopRoot")
   Run-Step 'desktop-unit' $DesktopRoot 'pnpm' @('exec','vitest','run','--maxWorkers=1')
   Run-Step 'desktop-types' $DesktopRoot 'pnpm' @('check')
   Run-Step 'desktop-i18n' $DesktopRoot 'pnpm' @('i18n:check')
+  Run-Step 'harmony-i18n' $HarmonyRoot 'powershell' @('-NoProfile','-ExecutionPolicy','Bypass','-File','scripts/check-i18n-release.ps1')
   Run-Step 'desktop-rust-format' (Join-Path $DesktopRoot 'src-tauri') 'cargo' @('fmt','--','--check')
   Run-Step 'desktop-rust-check' (Join-Path $DesktopRoot 'src-tauri') 'cargo' @('check','--locked')
-  if (!$SkipUi) { Run-Step 'desktop-browser' $DesktopRoot 'node' @('scripts/test-task-checklist-ui.mjs') }
+  Run-Step 'desktop-views' $DesktopRoot 'pnpm' @('views:check')
+  Run-Step 'desktop-capture' $DesktopRoot 'pnpm' @('capture:check')
+  Run-Step 'desktop-frontend-build' $DesktopRoot 'pnpm' @('build')
+  if (!$SkipUi) {
+    foreach ($name in @('task-checklist','template-library','batch-creation')) {
+      Run-Step "desktop-browser-$name" $DesktopRoot 'node' @("scripts/test-$name-ui.mjs")
+    }
+  }
   if (!$SkipBuild) {
     Run-Step 'desktop-test-build' $DesktopRoot 'pnpm' @('tauri','build','--debug','--no-bundle')
     Run-Step 'harmony-test-build' (Join-Path $HarmonyRoot 'EggDone') 'devecocli' @('build','--product','default','--modules','entry@default','--build-mode','debug')
