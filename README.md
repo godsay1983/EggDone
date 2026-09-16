@@ -32,9 +32,9 @@
 
 任务效率功能开发（2026-09-15）：P1d-2c 已接“新建任务与清单”，两端任务设置及子项一次保存，取消不创建、重试不重复。桌面从输入框右侧清单图标进入，鸿蒙从新增任务“选项”进入，见[入口与验收](docs/TASK_CHECKLIST_CREATION_UI.md)。下一步为详情独立即时勾选；模板与批量创建尚未开放。详见[实现方案](docs/TASK_PRODUCTIVITY_IMPLEMENTATION_PLAN.md)、[共享契约](docs/TASK_PRODUCTIVITY_CONTRACT.md)与[roadmap](docs/TASK_PRODUCTIVITY_ROADMAP.md)。软件版本不变。
 
-最新交接：[桌面 1.2.0 发布准备与主线交接](.claude/handoffs/2026-09-16-122303-desktop-1-2-0-release-main.md)。三项功能、双端回归及升版已完成，用户授权文档提交后合并本地 main；不推送或发布。后续按交接中的剩余发布门槛准备正式包，不重复基础验收。
+最新交接：[桌面 1.2.0 发布准备与主线交接](.claude/handoffs/2026-09-16-122303-desktop-1-2-0-release-main.md)。三项功能、双端回归及升版已完成，已按用户授权合并本地 main；未推送或发布。后续按交接中的剩余发布门槛准备正式包，不重复基础验收。
 
-当前本地候选版本：**1.2.0**（2026-09-16），配套鸿蒙 1.3.0 / 1000030。检查清单、模板与快捷复制、批量创建已纳入版本，备份格式为 v5，SQLite schema 为 21。主要变化见[更新日志](CHANGELOG.md)，验证与升级限制见[发布前检查](docs/TASK_PRODUCTIVITY_RELEASE_REVIEW.md)。仍在开发分支，未合并、推送或发布；以下旧候选版本及旧 handoff 为历史记录，不代表所有发布验收已通过。
+当前本地候选版本：**1.2.0**（2026-09-16），配套鸿蒙 1.3.0 / 1000030。检查清单、模板与快捷复制、批量创建已纳入版本，备份格式为 v5，SQLite schema 为 21。主要变化见[更新日志](CHANGELOG.md)，验证与升级限制见[发布前检查](docs/TASK_PRODUCTIVITY_RELEASE_REVIEW.md)。已合并本地 main，未推送或发布；以下旧候选版本及旧 handoff 为历史记录，不代表所有发布验收已通过。
 
 图片查看修正（未发布）：附件管理器中无预览的图片显示“查看图片”，避免搜索定位后误以为一直在准备；仍只在主动点击时打开原图。浏览器与隔离原生客户端回归通过，见[原生验证记录](docs/CONTENT_SEARCH_NATIVE_RUNTIME.md)。
 

@@ -12,7 +12,7 @@
 
 ## 1.2.0 - 2026-09-16
 
-本地候选版本，配套鸿蒙 1.3.0 / 1000030；同步更新前端包、Rust 包及锁文件、Tauri 配置。开发分支仍为 `codex/task-productivity`，未合并、推送或发布；验证状态见[发布前检查](docs/TASK_PRODUCTIVITY_RELEASE_REVIEW.md)。本轮升版不新增迁移，当前 SQLite schema 为 21。
+本地候选版本，配套鸿蒙 1.3.0 / 1000030；同步更新前端包、Rust 包及锁文件、Tauri 配置。已从 `codex/task-productivity` 快进合并到本地 `main`，未推送或发布；验证状态见[发布前检查](docs/TASK_PRODUCTIVITY_RELEASE_REVIEW.md)。本轮升版不新增迁移，当前 SQLite schema 为 21。
 
 - 新增任务内检查清单：任务行显示进度并可直接打开；已保存详情支持即时勾选，编辑模式使用统一草稿保存；子项完成不自动完成主任务。
 - 新增快捷复制和任务模板：复制后先确认草稿，清空旧日期、提醒、重复和完成状态；模板支持保存、搜索、编辑、删除及多次生成独立任务。
