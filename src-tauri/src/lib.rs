@@ -1,5 +1,6 @@
 pub mod archive;
 pub mod archive_batch;
+mod archive_commands;
 #[cfg(test)]
 mod archive_tests;
 mod capture;
@@ -229,6 +230,9 @@ pub fn run() {
             commands::delete_note,
             commands::restore_note,
             trash_commands::list_trash,
+            archive_commands::list_archived,
+            archive_commands::preview_archived,
+            archive_commands::apply_archive_action,
             note_history_commands::list_note_history,
             note_history_commands::preview_note_history,
             note_history_commands::restore_note_history,

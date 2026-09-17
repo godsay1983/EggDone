@@ -1,7 +1,7 @@
 # 双端任务安排与归档回收管理实现方案
 
 日期：2026-09-17。
-状态：LC0a/LC0b 已提交；LC1a 双端归档存储内核及自动化完成，产品入口与原生验收尚未开始。见[归档内核实现](TASK_ARCHIVE_STORAGE.md)。
+状态：LC0a/LC0b/LC1a 已提交；LC1b-1 双端单条归档管理入口已实现、纳入本地提交，批量界面、搜索集成与原生验收仍待进行。见[归档内核实现](TASK_ARCHIVE_STORAGE.md)及[入口与验证](TASK_ARCHIVE_UI.md)。
 配套：[Roadmap](TASK_LIFECYCLE_ROADMAP.md)。
 共享规则与现有恢复路径盘点见[LC0b 契约](TASK_LIFECYCLE_CONTRACT.md)。候选脚本不接入应用，不代表生产实现完成。
 

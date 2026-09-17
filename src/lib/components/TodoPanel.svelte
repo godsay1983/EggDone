@@ -96,6 +96,7 @@
   } from "$lib/utils/viewPreferences";
   import DataManager from "./DataManager.svelte";
   import TrashDialog from "./TrashDialog.svelte";
+  import ArchiveDialog from "./ArchiveDialog.svelte";
   import NoteHistoryDialog from "./NoteHistoryDialog.svelte";
   import ContentSearchDialog from "./ContentSearchDialog.svelte";
   import { contentSearchApi, type SearchItem, type SearchTarget } from "$lib/api/contentSearchApi";
@@ -189,7 +190,7 @@
   let captureReadAgain = false;
 
   async function readCapture() {
-    if (contentSearchSession || contentSearchOpening) return;
+    if (showArchive || archiveOpening || contentSearchSession || contentSearchOpening) return;
     if (captureRequest) return;
     if (captureLoading) { captureReadAgain = true; return; }
     captureLoading = true;
@@ -248,12 +249,29 @@
   let showAbout = false;
   let showDataManager = false;
   let showTrash = false;
+  let showArchive = false;
+  let archiveOpening = false;
+  async function openArchive() {
+    if (showArchive || archiveOpening || showTrash || trashOpening || contentSearchSession || contentSearchOpening ||
+      noteNavigationBusy || noteAttachmentBusy || captureRequest || captureLoading) return;
+    archiveOpening = true;
+    try { await flushAllNoteChanges(); summaryMenuOpen = false; showArchive = true; }
+    catch { noteAttachmentError = $translator("trash.saveFailed"); }
+    finally { archiveOpening = false; }
+  }
+  async function viewArchiveTask(uuid: string) {
+    await refreshAfterTrash();
+    if (!$todos.items.some(item => item.uuid === uuid && item.archived_at === null)) throw Error("ARCHIVE_NOT_FOUND");
+    await focusTodoByUuid(uuid, false);
+    closeArchive();
+  }
+  function closeArchive() { showArchive = false; void readCapture(); }
   let contentSearchSession = false;
   let contentSearchActive = false;
   let contentSearchOpening = false;
   let searchAttachmentUuid = "";
   async function openContentSearch() {
-    if (contentSearchSession || contentSearchOpening || noteNavigationBusy || noteAttachmentBusy || historyOpening || historyUuid ||
+    if (showArchive || archiveOpening || contentSearchSession || contentSearchOpening || noteNavigationBusy || noteAttachmentBusy || historyOpening || historyUuid ||
       linkedRequest || linkManager || linkedTaskEditing || linkNavigating || noteDraft || captureRequest || captureLoading) return;
     const sourceUuid = selectedNoteUuid;
     contentSearchOpening = true; noteNavigationBusy = true;
@@ -336,7 +354,7 @@
   let trashOpening = false;
   async function openTrash() {
     if (contentSearchActive || contentSearchOpening) return;
-    if (showTrash || trashOpening || noteNavigationBusy || noteAttachmentBusy) return;
+    if (showArchive || archiveOpening || showTrash || trashOpening || noteNavigationBusy || noteAttachmentBusy) return;
     trashOpening = true;
     try { await flushAllNoteChanges(); summaryMenuOpen = false; showTrash = true; }
     catch { noteAttachmentError = $translator("trash.saveFailed"); }
@@ -1441,7 +1459,7 @@
     }
   }
 
-  async function focusTodoByUuid(uuid: string) {
+  async function focusTodoByUuid(uuid: string, persistCompletedVisibility = true) {
     if (!(await setListView("all"))) return;
     showAbout = false;
     showDataManager = false;
@@ -1449,7 +1467,7 @@
     showSearch = false;
     searchQuery = "";
     showCompleted = true;
-    writePreference("eggdone-show-completed", "true");
+    if (persistCompletedVisibility) writePreference("eggdone-show-completed", "true");
     setSelectedGroup("all");
 
     await tick();
@@ -1998,6 +2016,7 @@
       showAbout ||
       showDataManager ||
       showTrash ||
+      showArchive || archiveOpening ||
       contentSearchActive || contentSearchOpening ||
       showSettings ||
       managingGroup ||
@@ -3032,6 +3051,7 @@
               {batchMode ? $translator("batch.exit") : $translator("batch.actions")}
             </button>
           {/if}
+          <button type="button" role="menuitem" disabled={archiveOpening || noteAttachmentBusy} onclick={() => void openArchive()}>{$translator("archive.title")}</button>
           <button type="button" role="menuitem" disabled={trashOpening || noteAttachmentBusy} onclick={() => void openTrash()}>{$translator("trash.title")}</button>
           <button type="button" role="menuitem" disabled={contentSearchOpening || noteAttachmentBusy} onclick={() => void openContentSearch()}>{$translator("contentSearch.title")}</button>
         </div>
@@ -3601,6 +3621,9 @@
 
 {#if showTrash}
   <TrashDialog onClose={() => showTrash = false} afterCommit={refreshAfterTrash} />
+{/if}
+{#if showArchive}
+  <ArchiveDialog onClose={closeArchive} afterCommit={refreshAfterTrash} onViewTask={viewArchiveTask} />
 {/if}
 {#if contentSearchSession}
   <ContentSearchDialog active={contentSearchActive} onOpen={openSearchResult}

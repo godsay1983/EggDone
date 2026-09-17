@@ -1,6 +1,6 @@
 # EggDone（蛋定 Todo）
 
-任务生命周期（2026-09-17，LC1a 内核完成，界面未接入）：双端已实现归档查询、取消归档、单次重新打开、移入回收站，以及固定批量进度/冲突保护；共享数据库、导入回滚及跨端 JSON 回归通过。数据库 schema、同步格式、备份 v5 和应用版本不变。下一步 LC1b 接“已归档”与搜索恢复入口；真机/S3 仍待验收，清空仍以旧端隔离和防复活验证为门槛，不调整小艺意图。见[归档内核与验证](docs/TASK_ARCHIVE_STORAGE.md)、[方案](docs/TASK_LIFECYCLE_IMPLEMENTATION_PLAN.md)和[roadmap](docs/TASK_LIFECYCLE_ROADMAP.md)，下方历史阶段状态不是本轮进度。
+任务生命周期（2026-09-17，LC1b-1，纳入本地提交）：双端新增“已归档”入口，与回收站相邻，支持搜索、分页、只读详情、单条取消归档/重新打开/移入回收站及二次确认。取消不写入，结果不明原样重试，保存后的刷新失败独立重试；提供查看恢复任务入口。自动化与构建通过，真机/S3 仍待验收。下一步是批量管理 UI、统一搜索恢复及文案收敛，清空暂不开放；schema、同步格式、备份 v5 和应用版本不变，不调整小艺意图。见[归档界面与验证](docs/TASK_ARCHIVE_UI.md)、[方案](docs/TASK_LIFECYCLE_IMPLEMENTATION_PLAN.md)和[roadmap](docs/TASK_LIFECYCLE_ROADMAP.md)，下方历史阶段状态不是本轮进度。
 
 Windows 窗口缩放修复（2026-09-16，未发布）：拖动主窗口边缘时，先区分原生边框接管焦点与真正切换到其他窗口，避免调整大小触发自动隐藏。保留失焦隐藏、托盘切换及尺寸保存；不影响鸿蒙端。验证范围见[窗口缩放回归](docs/WINDOW_RESIZE_REGRESSION.md)。
 
