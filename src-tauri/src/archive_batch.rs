@@ -80,6 +80,48 @@ pub fn get(c: &Connection, operation: &str) -> Result<Job, String> {
     let raw = archive::meta(c, &key(operation))?.ok_or("ARCHIVE_OPERATION_NOT_FOUND")?;
     serde_json::from_str(&raw).map_err(|_| "ARCHIVE_INVALID_STATE".into())
 }
+/// Keep completed receipts visible until acknowledged, including a lost final reply.
+pub fn pending(c: &mut Connection) -> Result<Vec<Job>, String> {
+    let tx = c
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(archive::db)?;
+    let scope = archive::scope(&tx)?;
+    let mut jobs = Vec::new();
+    {
+        let mut statement = tx
+            .prepare(
+                "SELECT value FROM app_metadata WHERE key LIKE 'archive.batch.v1:%' ORDER BY key",
+            )
+            .map_err(archive::db)?;
+        let rows = statement
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(archive::db)?;
+        for raw in rows {
+            let job: Job = serde_json::from_str(&raw.map_err(archive::db)?)
+                .map_err(|_| "ARCHIVE_INVALID_STATE")?;
+            if job.scope == scope
+                && archive::meta(
+                    &tx,
+                    &format!("archive.batch.dismissed.v1:{}", job.operation_uuid),
+                )?
+                .is_none()
+            {
+                jobs.push(job);
+            }
+        }
+    }
+    tx.commit().map_err(archive::db)?;
+    Ok(jobs)
+}
+/// Acknowledging progress never rolls back tasks or removes idempotency receipts.
+pub fn dismiss(c: &mut Connection, operation: &str) -> Result<(), String> {
+    archive::id(operation)?;
+    let tx = c
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(archive::db)?;
+    archive::put(&tx, &format!("archive.batch.dismissed.v1:{operation}"), "1")?;
+    tx.commit().map_err(archive::db)
+}
 pub fn run(
     c: &mut Connection,
     operation: &str,
@@ -98,6 +140,11 @@ pub fn run(
     let mut job = get(&tx, operation)?;
     if archive::scope(&tx)? != job.scope {
         return Err("ARCHIVE_SCOPE_CHANGED".into());
+    }
+    if job.results.len() < job.targets.len()
+        && archive::meta(&tx, &format!("archive.batch.dismissed.v1:{operation}"))?.is_some()
+    {
+        return Err("ARCHIVE_BATCH_ENDED".into());
     }
     let end = (job.results.len() + limit as usize).min(job.targets.len());
     for i in job.results.len()..end {

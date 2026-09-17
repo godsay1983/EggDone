@@ -122,7 +122,7 @@ pub fn invalidate_in_transaction(c: &Connection) -> Result<(), String> {
         return Err("ARCHIVE_TRANSACTION_REQUIRED".into());
     }
     put(c, "archive.scope.v1", &Uuid::new_v4().to_string())?;
-    c.execute("DELETE FROM app_metadata WHERE key LIKE 'archive.op.v1:%' OR key LIKE 'archive.batch.v1:%'",[]).map_err(db)?;
+    c.execute("DELETE FROM app_metadata WHERE key LIKE 'archive.op.v1:%' OR key LIKE 'archive.batch.v1:%' OR key LIKE 'archive.batch.dismissed.v1:%'",[]).map_err(db)?;
     Ok(())
 }
 pub(crate) fn rows(

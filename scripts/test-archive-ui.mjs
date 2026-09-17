@@ -13,6 +13,25 @@ const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const output=resolve(tmpdir(),'eggdone-archive-ui-'+Date.now());mkdirSync(output,{recursive:true});
 const native=`export const isTauri=()=>false;
 export async function invoke(command,args){
+ if(command==='pending_archive_batches')return structuredClone(Object.values(window.jobs).filter(j=>!window.dismissed.includes(j.operation_uuid)));
+ if(command==='dismiss_archive_batch'){window.dismissed.push(args.operation);window.persistBatch();return;}
+ if(command==='prepare_archive_batch'){
+  window.batchPrepares.push(structuredClone(args));
+  window.jobs[args.operation]??={operation_uuid:args.operation,action:args.action,scope:'scope',targets:structuredClone(args.targets),results:[]};
+  window.persistBatch();return structuredClone(window.jobs[args.operation]);
+ }
+ if(command==='run_archive_batch'){
+  window.batchRuns.push(args.operation);
+  const job=window.jobs[args.operation],end=Math.min(job.results.length+50,job.targets.length);
+  for(let i=job.results.length;i<end;i++){
+   const uuid=job.targets[i].uuid,error=uuid===window.changedUuid?'ARCHIVE_CONFLICT':null;
+   const result=error?null:{uuid,action:job.action,outcome:'applied',result_version:2,warnings:[]};
+   job.results.push({uuid,error,result});if(!error)window.rows=window.rows.filter(r=>r.expected.uuid!==uuid);
+  }
+  window.persistBatch();
+  if(window.loseBatchReply){window.loseBatchReply=false;throw Error('lost batch reply');}
+  return structuredClone(job);
+ }
  if(command==='list_archived'){
   if(window.failLoad)throw Error('read');
   const rows=window.rows.filter(r=>(r.title+r.content).includes(args.query));
@@ -47,6 +66,10 @@ window.rows=Array.from({length:p.has('pages')?51:2},(_,i)=>({expected:{uuid:Stri
  title:i===0?'项目发布前的归档检查 Archived checklist '.repeat(3):'Task '+i,content:'Full body line\n'.repeat(14),
  completed:true,archived_at:1789190000000,updated_at:1,completed_at:1,due_date:'2026-09-17',due_at:null,group_name:'Work',
  checklist_json:JSON.stringify({items:[{uuid:'item',content:'Verify everything',sort_order:1,completed:true,deleted_at:null}]}),links_json:'{"links":[]}'}));
+const saved=p.has('recover')?JSON.parse(sessionStorage.getItem('archive-batch')||'null'):null;
+window.jobs=saved?.jobs||{};window.dismissed=saved?.dismissed||[];window.rows=saved?.rows||window.rows;
+window.batchPrepares=[];window.batchRuns=[];window.loseBatchReply=false;window.changedUuid='';
+window.persistBatch=()=>sessionStorage.setItem('archive-batch',JSON.stringify({jobs:window.jobs,dismissed:window.dismissed,rows:window.rows}));
 const instance=mount(Dialog,{target:document.body,props:{
  afterCommit:async()=>{if(window.failRefresh)throw Error('refresh');},
  onViewTask:async uuid=>{window.viewed=uuid;},
@@ -113,9 +136,48 @@ try{
  assert(await page.getByRole('button',{name:'Confirm action',exact:true}).isDisabled());
  await page.keyboard.press('Escape');await page.keyboard.press('Escape');
  assert.equal(await page.getByRole('textbox').inputValue(),'Task 50');
- assert.equal(await page.locator('.record').count(),1);
+ for(const size of [{width:320,height:480},{width:1000,height:760}])for(const lang of ['zh-CN','en-US']){
+  await page.setViewportSize(size);await page.goto(url+'?pages=1&lang='+lang+'&theme=dark');
+  const button=(zh,en)=>page.getByRole('button',{name:lang==='zh-CN'?zh:en,exact:true});
+  await button('批量选择','Select tasks').click();await button('全选已加载','Select loaded tasks').click();
+  await button('加载更多','Load more').click();
+  await page.waitForFunction(()=>document.querySelectorAll('.record').length===51);
+  assert.equal(await page.locator('.record[aria-pressed=true]').count(),50);
+  await button('全选已加载','Select loaded tasks').click();await button('移入回收站','Move to trash').click();
+  await button('取消','Cancel').click();assert.equal(await page.evaluate(()=>window.batchPrepares.length),0);
+  await button('移入回收站','Move to trash').click();
+  await page.evaluate(()=>{window.loseBatchReply=true;window.changedUuid='1';});
+  await button('确认操作','Confirm action').click();
+  await page.getByRole('status').filter({hasText:lang==='zh-CN'?'原样重试':'same action'}).waitFor();
+  assert.equal(await page.evaluate(()=>Object.values(window.jobs)[0].targets.length),51);
+  assert.equal(await page.evaluate(()=>window.rows.length),2);
+  const op=await page.evaluate(()=>Object.keys(window.jobs)[0]);
+  await page.goto(url+'?recover=1&lang='+lang+'&theme=dark');
+  await page.getByRole('button').filter({hasText:lang==='zh-CN'?'查看批量进度':'Review batch progress'}).click();
+  assert.equal(await page.evaluate(()=>window.batchRuns.length),0);
+  await button('继续处理','Continue').click();await button('完成','Done').waitFor();
+  assert.equal(await page.evaluate(()=>window.rows.length),1);assert.deepEqual(await page.evaluate(()=>window.batchRuns),[op]);
+  assert(await page.locator('dialog').evaluate(e=>e.scrollWidth<=e.clientWidth));
+  await page.screenshot({path:resolve(output,'batch-'+lang+'-'+size.width+'.png')});
+  await button('完成','Done').click();await page.waitForFunction(()=>window.dismissed.length===1);
+  await page.getByRole('button',{name:lang==='zh-CN'?'批量选择':'Select tasks',exact:true}).waitFor();
+ }
+ await page.goto(url+'?lang=en-US&theme=light');
+ await page.getByRole('button',{name:'Select tasks',exact:true}).click();
+ await page.getByRole('button',{name:'Select loaded tasks',exact:true}).click();
+ await page.getByRole('button',{name:'Unarchive',exact:true}).click();
+ await page.evaluate(()=>{window.loseBatchReply=true;});
+ await page.getByRole('button',{name:'Confirm action',exact:true}).click();
+ await page.getByRole('status').filter({hasText:'same action'}).waitFor();
+ assert.equal(await page.evaluate(()=>window.rows.length),0);
+ await page.goto(url+'?recover=1&lang=en-US&theme=light');
+ await page.getByRole('button').filter({hasText:'Review batch progress'}).click();
+ assert(await page.getByRole('button',{name:'Done',exact:true}).isEnabled());
+ assert.equal(await page.evaluate(()=>window.batchRuns.length),0);
+ await page.getByRole('button',{name:'Done',exact:true}).click();
+ await page.waitForFunction(()=>window.dismissed.length===1);
  assert.deepEqual(errors,[]);
- console.log('PASS: '+count+' archive locale/theme/window/zoom combinations, cancel, response-loss retry, busy/back, refresh-only retry, pagination, search, conflict. Screenshots: '+output);
+ console.log('PASS: '+count+' archive locale/theme/window/zoom combinations plus 4 batch recovery layouts and lost final reply recovery. Cancel, fixed selection, conflict skip, busy/back and refresh-only retry passed. Screenshots: '+output);
 }catch(e){
  if(page)await page.screenshot({path:resolve(output,'failure.png')});
  console.error('Screenshots: '+output);throw e;

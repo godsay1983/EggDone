@@ -210,6 +210,7 @@ fn archive_batch_fixed_targets_partial_conflicts_and_rollback() {
         .map(|p| p.expected)
         .collect();
     batch::prepare(&mut c, &f.operation, a::Action::Unarchive, &targets).unwrap();
+    assert_eq!(batch::pending(&mut c).unwrap().len(), 1);
     assert!(batch::prepare(&mut c, &f.operation, a::Action::Delete, &targets).is_err());
     c.execute_batch("CREATE TRIGGER fail_batch BEFORE UPDATE ON todos WHEN OLD.title='Archived second' BEGIN SELECT RAISE(ABORT,'injected'); END").unwrap();
     assert!(batch::run(&mut c, &f.operation, 50, 200, &f.device).is_err());
@@ -235,6 +236,33 @@ fn archive_batch_fixed_targets_partial_conflicts_and_rollback() {
 }
 use uuid::Uuid;
 #[test]
+fn archive_batch_dismiss_retains_receipts_and_scope_isolates_progress() {
+    let f = fixtures();
+    let mut c = seed();
+    let targets: Vec<_> = a::select_all(&mut c, "")
+        .unwrap()
+        .into_iter()
+        .map(|p| p.expected)
+        .collect();
+    batch::prepare(&mut c, &f.operation, a::Action::Delete, &targets).unwrap();
+    let finished = batch::run(&mut c, &f.operation, 50, 200, &f.device).unwrap();
+    assert_eq!(batch::pending(&mut c).unwrap(), vec![finished.clone()]);
+    batch::dismiss(&mut c, &f.operation).unwrap();
+    batch::dismiss(&mut c, &f.operation).unwrap();
+    assert!(batch::pending(&mut c).unwrap().is_empty());
+    assert_eq!(
+        batch::run(&mut c, &f.operation, 50, 300, &f.device).unwrap(),
+        finished
+    );
+    let mut other = seed();
+    batch::prepare(&mut other, &f.operation, a::Action::Unarchive, &targets).unwrap();
+    other
+        .execute("DELETE FROM app_metadata WHERE key='archive.scope.v1'", [])
+        .unwrap();
+    assert!(batch::pending(&mut other).unwrap().is_empty());
+    assert!(batch::run(&mut other, &f.operation, 50, 300, &f.device).is_err());
+}
+#[test]
 fn archive_receipts_and_batches_survive_reopen() {
     let f = fixtures();
     let path = std::env::temp_dir().join(format!("eggdone-archive-{}.sqlite", Uuid::new_v4()));
@@ -256,12 +284,33 @@ fn archive_receipts_and_batches_survive_reopen() {
         let mut c = Connection::open(&path).unwrap();
         crate::db::migrate(&mut c).unwrap();
         assert_eq!(batch::get(&c, &f.operation).unwrap().results.len(), 1);
+        assert_eq!(batch::pending(&mut c).unwrap()[0].results.len(), 1);
         let job = batch::run(&mut c, &f.operation, 50, 201, &f.device).unwrap();
         assert_eq!(job.results.len(), 2);
         assert!(job.results.iter().all(|r| r.error.is_none()));
         assert!(a::select_all(&mut c, "").unwrap().is_empty());
     }
     std::fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn archive_ended_batch_cannot_process_remaining_targets() {
+    let f = fixtures();
+    let mut c = seed();
+    let targets: Vec<_> = a::select_all(&mut c, "")
+        .unwrap()
+        .into_iter()
+        .map(|p| p.expected)
+        .collect();
+    batch::prepare(&mut c, &f.operation, a::Action::Delete, &targets).unwrap();
+    batch::run(&mut c, &f.operation, 1, 200, &f.device).unwrap();
+    batch::dismiss(&mut c, &f.operation).unwrap();
+    assert_eq!(
+        batch::run(&mut c, &f.operation, 50, 300, &f.device).unwrap_err(),
+        "ARCHIVE_BATCH_ENDED"
+    );
+    assert_eq!(batch::get(&c, &f.operation).unwrap().results.len(), 1);
+    assert_eq!(a::select_all(&mut c, "").unwrap().len(), 1);
 }
 
 #[test]
