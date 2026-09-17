@@ -32,7 +32,7 @@ export interface SearchTarget {
   archived: boolean;
 }
 export const contentSearchApi = {
-  search: (scope: SearchScope, query: string, offset = 0, limit = 20) =>
-    invoke<SearchPage>('search_content', { scope, query, offset, limit }),
+  search: (scope: SearchScope, query: string, offset = 0, limit = 20, includeArchived = true) =>
+    invoke<SearchPage>('search_content', { scope, query, offset, limit, includeArchived }),
   resolve: (scope: SearchScope, uuid: string) => invoke<SearchTarget>('resolve_search_target', { scope, uuid }),
 };

@@ -21,6 +21,7 @@
   import LinkManagerDialog from "./LinkManagerDialog.svelte";
   import LinkWorkspace from "./LinkWorkspace.svelte";
   import { createLinkManager } from "$lib/stores/linkManagerStore";
+  import { createArchiveStore } from "$lib/stores/archiveStore";
   import type { TaskNoteLinkView } from "$lib/types/taskNoteLink";
   import type { LinkScope } from "$lib/types/taskNoteLink";
   import { createTaskNoteLinkStore } from "$lib/stores/taskNoteLinkStore";
@@ -250,6 +251,7 @@
   let showDataManager = false;
   let showTrash = false;
   let showArchive = false;
+  let archiveInitial: import("$lib/api/archiveApi").ArchivePreview | null = null;
   let archiveOpening = false;
   async function openArchive() {
     if (showArchive || archiveOpening || showTrash || trashOpening || contentSearchSession || contentSearchOpening ||
@@ -265,7 +267,12 @@
     await focusTodoByUuid(uuid, false);
     closeArchive();
   }
-  function closeArchive() { showArchive = false; void readCapture(); }
+  function closeArchive() {
+    showArchive = false;
+    if (archiveInitial && contentSearchSession) contentSearchActive = true;
+    archiveInitial = null;
+    void readCapture();
+  }
   let contentSearchSession = false;
   let contentSearchActive = false;
   let contentSearchOpening = false;
@@ -290,7 +297,11 @@
       await flushAllNoteChanges();
       if (notes.hasPendingSave() || $notes.error) throw Error("SEARCH_SAVE_FAILED");
       const target = await contentSearchApi.resolve(item.kind, item.uuid);
-      if (target.kind === "todo" && target.archived) return target;
+      if (target.kind === "todo" && target.archived) {
+        archiveInitial = await createArchiveStore().previewUuid(target.uuid);
+        contentSearchActive = false; showArchive = true;
+        return null;
+      }
       const noteUuid = target.kind === "note" ? target.uuid : target.kind === "attachment" ? target.parent_uuid : null;
       if (noteUuid) {
         await notes.load();
@@ -3038,8 +3049,9 @@
               role="menuitem"
               onclick={requestClearCompleted}
             >
-              {confirmingClear ? $translator("todo.confirmClear") : $translator("todo.clearCompleted")}
+              {confirmingClear ? $translator("todo.confirmDeleteCompleted") : $translator("todo.clearCompleted")}
             </button>
+            {#if confirmingClear}<p role="status">{$translator("todo.deleteCompletedHint")}</p>{/if}
           {/if}
           {#if listView !== "notes" && renderedTodos.length > 0}
             <button
@@ -3623,7 +3635,7 @@
   <TrashDialog onClose={() => showTrash = false} afterCommit={refreshAfterTrash} />
 {/if}
 {#if showArchive}
-  <ArchiveDialog onClose={closeArchive} afterCommit={refreshAfterTrash} onViewTask={viewArchiveTask} />
+  <ArchiveDialog initialItem={archiveInitial} onClose={closeArchive} afterCommit={refreshAfterTrash} onViewTask={viewArchiveTask} />
 {/if}
 {#if contentSearchSession}
   <ContentSearchDialog active={contentSearchActive} onOpen={openSearchResult}

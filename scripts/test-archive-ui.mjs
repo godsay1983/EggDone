@@ -13,6 +13,11 @@ const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const output=resolve(tmpdir(),'eggdone-archive-ui-'+Date.now());mkdirSync(output,{recursive:true});
 const native=`export const isTauri=()=>false;
 export async function invoke(command,args){
+ if(command==='list_task_note_links')return window.noteLinks||[];
+ if(command==='resolve_search_target'){
+   if(window.noteUnavailable)throw Error('SEARCH_UNAVAILABLE');
+   return {kind:'note',uuid:args.uuid,title:'Linked reference',content:'Current linked text',archived:false,completed:false,parent_uuid:null,parent_title:null};
+ }
  if(command==='pending_archive_batches')return structuredClone(Object.values(window.jobs).filter(j=>!window.dismissed.includes(j.operation_uuid)));
  if(command==='dismiss_archive_batch'){window.dismissed.push(args.operation);window.persistBatch();return;}
  if(command==='prepare_archive_batch'){
@@ -202,6 +207,18 @@ try{
  assert.equal(await page.evaluate(()=>window.batchRuns.length),0);
  await page.getByRole('button',{name:'Done',exact:true}).click();
  await page.waitForFunction(()=>window.dismissed.length===1);
+ await page.goto(url+'?lang=en-US&theme=dark');
+ await page.evaluate(()=>window.noteLinks=[{link:{uuid:'link',todo_uuid:'0',note_uuid:'note',deleted_at:null},note_state:'active',note_title:'Linked reference'}]);
+ await page.locator('.record').first().click();
+ await page.getByRole('button',{name:'Linked reference',exact:true}).click();
+ await page.getByText('Current linked text',{exact:true}).waitFor();
+ assert.equal(await page.getByRole('button',{name:'Unarchive',exact:true}).count(),0);
+ await page.getByRole('button',{name:'Back to task details',exact:true}).click();
+ await page.evaluate(()=>window.noteLinks=[]);
+ await page.getByRole('button',{name:'Linked reference',exact:true}).click();
+ await page.getByText('The note or link is unavailable. Please retry.',{exact:true}).waitFor();
+ assert.equal(await page.getByRole('button',{name:'Linked reference',exact:true}).count(),0);
+ assert.equal(await page.evaluate(()=>window.writes.length),0);
  assert.deepEqual(errors,[]);
  console.log('PASS: '+count+' archive locale/theme/window/zoom combinations plus 8 batch recovery layouts and lost final reply recovery. Left checkbox, keyboard selection, fixed toolbar, cancel, conflict skip, busy/back and refresh-only retry passed. Screenshots: '+output);
 }catch(e){

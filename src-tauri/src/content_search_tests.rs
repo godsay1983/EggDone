@@ -87,6 +87,41 @@ fn content_search_shared_contract() {
 }
 
 #[test]
+fn content_search_archived_filter_precedes_count_and_paging() {
+    let (db, _) = fixture();
+    for scope in [
+        SearchScope::Todo,
+        SearchScope::Note,
+        SearchScope::Attachment,
+    ] {
+        let all = content_search::search(&db, scope, "needle", 0, 50).unwrap();
+        let expected: Vec<_> = all
+            .items
+            .iter()
+            .filter(|item| !item.archived)
+            .map(|item| item.uuid.clone())
+            .collect();
+        let filtered = content_search::search_filtered(&db, scope, "needle", 0, 50, false).unwrap();
+        assert_eq!(filtered.total, expected.len() as i64);
+        assert_eq!(
+            filtered
+                .items
+                .iter()
+                .map(|item| item.uuid.clone())
+                .collect::<Vec<_>>(),
+            expected
+        );
+        for (offset, uuid) in expected.iter().enumerate() {
+            let page =
+                content_search::search_filtered(&db, scope, "needle", offset as u32, 1, false)
+                    .unwrap();
+            assert_eq!(page.total, expected.len() as i64);
+            assert_eq!(&page.items[0].uuid, uuid);
+        }
+    }
+}
+
+#[test]
 fn content_search_resolves_current_destinations_and_excludes_deleted_parents() {
     let (db, _) = fixture();
     let uuid = "123e4567-e89b-42d3-a456-200000000001";

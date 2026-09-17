@@ -69,6 +69,17 @@ pub fn search(
     offset: u32,
     limit: u32,
 ) -> Result<SearchPage, String> {
+    search_filtered(db, scope, query, offset, limit, true)
+}
+
+pub fn search_filtered(
+    db: &Connection,
+    scope: SearchScope,
+    query: &str,
+    offset: u32,
+    limit: u32,
+    include_archived: bool,
+) -> Result<SearchPage, String> {
     let query = query.trim_matches(|c: char| c.is_whitespace() || c == '\u{feff}');
     if query.chars().count() > 100 || query.contains('\0') {
         return Err("SEARCH_INVALID_QUERY".into());
@@ -92,8 +103,13 @@ pub fn search(
     } else {
         "instr(lower(body),lower(?1))"
     };
+    let filter = if include_archived {
+        ""
+    } else {
+        " WHERE archived=0"
+    };
     let matched = format!(
-        "SELECT s.*,instr(lower(title),lower(?1)) AS title_hit,{body_hit} AS body_hit FROM ({}) s",
+        "SELECT s.*,instr(lower(title),lower(?1)) AS title_hit,{body_hit} AS body_hit FROM ({}) s{filter}",
         source(scope)
     );
     let tx = db.unchecked_transaction().map_err(db_error)?;

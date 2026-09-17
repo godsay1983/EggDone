@@ -12,9 +12,17 @@ pub fn search_content(
     query: String,
     offset: u32,
     limit: u32,
+    include_archived: Option<bool>,
 ) -> Result<SearchPage, String> {
     let connection = lock_database(&database)?;
-    content_search::search(&connection, scope, &query, offset, limit)
+    content_search::search_filtered(
+        &connection,
+        scope,
+        &query,
+        offset,
+        limit,
+        include_archived.unwrap_or(true),
+    )
 }
 
 #[tauri::command]

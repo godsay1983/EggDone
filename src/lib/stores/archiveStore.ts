@@ -5,6 +5,7 @@ export function createArchiveStore(port: ArchivePort = archiveApi, identity: () 
   let busy = false;
   return {
     list: port.list,
+    previewUuid: port.preview,
     preview: (item: ArchivePreview) => port.preview(item.expected.uuid),
     prepare(action: ArchiveAction, item: ArchivePreview): ArchiveRequest {
       return { operation: identity(), action, expected: structuredClone(item.expected) };

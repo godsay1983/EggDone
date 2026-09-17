@@ -15,7 +15,7 @@
   let scrollTop = 0, dialogScrollTop = 0;
   let category: SearchScope | "all" = "all";
   $: if (dialog) {
-    if (active && !dialog.open) { dialog.showModal(); void restoreScroll(); }
+    if (active && !dialog.open) { dialog.showModal(); void search.refresh().then(restoreScroll); }
     else if (!active && dialog.open) dialog.close();
   }
   onMount(() => {
@@ -66,6 +66,11 @@
         disabled={opening || !$search.query} onclick={() => { change(""); input.focus(); }}>×</button>
       <button class="action-button" data-tone="primary" type="submit" disabled={opening}>{$translator("contentSearch.search")}</button>
     </form>
+    <label class="archive-filter">
+      <input type="checkbox" checked={$search.includeArchived} disabled={opening}
+        onchange={event => { resetScroll(); void search.setIncludeArchived(event.currentTarget.checked); }} />
+      {$translator("contentSearch.includeArchived")}
+    </label>
   {/if}
   <div class="content" bind:this={content}>
     {#if error}<p role="alert">{$translator(error)}</p>{/if}
@@ -140,6 +145,8 @@
   .result strong { font-size: 15px; font-weight: 500; } .result span { font-size: 14px; }
   .excerpt { white-space: pre-wrap; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
   .pages { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .archive-filter { display: flex; align-items: center; gap: 8px; font-size: 14px; flex: none; }
+  .archive-filter input { flex: none; width: 16px; height: 16px; margin: 0; padding: 0; accent-color: #b28b20; }
   @media (max-height: 500px) {
     dialog[open] { display: block; overflow: auto; }
     header { position: sticky; top: -16px; background: inherit; margin: -16px -16px 12px; padding: 16px; z-index: 1; }

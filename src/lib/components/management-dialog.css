@@ -11,7 +11,10 @@
   outline: 2px solid #b28b20; outline-offset: -2px;
 }
 .management-dialog .records { margin: 0; padding: 0; list-style: none; }
-.management-dialog .records li { display: flex; align-items: flex-start; margin: 0; border-bottom: 1px solid #9c8a632b; border-radius: 4px; }
+.management-dialog .records li { display: flex; align-items: flex-start; margin: 0 0 6px;
+  border: 1px solid #9c8a6333; border-radius: 6px; background: #9c8a630b; }
+.management-dialog .records li:hover { background: #9c8a631a; border-color: #9c8a6359; }
+.management-dialog .records li:focus-within { border-color: #b28b20; }
 .management-dialog .record { display: flex; flex: 1; min-width: 0; flex-direction: column; align-items: stretch;
   gap: 4px; padding: 12px 8px; width: 100%; border: 0; border-radius: 4px; background: transparent;
   color: inherit; text-align: left; white-space: normal; overflow-wrap: anywhere; font: inherit; cursor: pointer; }
@@ -21,7 +24,12 @@
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
 .management-dialog .record .meta, .management-dialog .record .excerpt { font-size: 12px; line-height: 1.5; opacity: .8; }
 .management-dialog .record .excerpt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
-.management-dialog .records .selected { background: #c59a2620; }
+.management-dialog .records .selected { background: #c59a262c; border-color: #b28b20; }
+.management-dialog .records .selected:hover { background: #c59a2638; }
+:root[data-theme="dark"] .management-dialog .records li { background: #ffffff05; border-color: #ffffff14; }
+:root[data-theme="dark"] .management-dialog .records li:hover { background: #ffffff0b; border-color: #ffffff26; }
+:root[data-theme="dark"] .management-dialog .records .selected { background: #c59a262c; border-color: #b28b20; }
+:root[data-theme="dark"] .management-dialog .records li:focus-within { border-color: #b28b20; }
 .management-dialog .selection-check { display: flex; align-items: center; justify-content: center; width: 36px; min-height: 44px; flex: none; cursor: pointer; }
 .management-dialog input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: #b88c16; flex: none; }
 .management-dialog footer { flex: none; padding-top: 12px; border-top: 1px solid #9c8a632b; }

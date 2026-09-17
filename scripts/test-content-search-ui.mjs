@@ -14,7 +14,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const output = resolve(tmpdir(), 'eggdone-content-search-ui-' + Date.now()); mkdirSync(output, { recursive: true });
 const panel = readFileSync(resolve(root,'src/lib/components/TodoPanel.svelte'),'utf8');
 const ast = ts.createSourceFile('panel.ts',panel.slice(panel.indexOf('<script lang="ts">')+18,panel.indexOf('</script>')),ts.ScriptTarget.Latest,true);
-const names=['openContentSearch','openSearchResult','backFromLinkedContent','openRelatedContent','updateNote','flushAllNoteChanges','refreshNoteAttachments','loadAttachmentPreviews'];
+const names=['openContentSearch','openSearchResult','closeArchive','backFromLinkedContent','openRelatedContent','updateNote','flushAllNoteChanges','refreshNoteAttachments','loadAttachmentPreviews'];
 const methods=ast.statements.filter(n=>ts.isFunctionDeclaration(n)&&names.includes(n.name?.text));assert.equal(methods.length,names.length);
 const previewEffect=ast.statements.find(n=>ts.isLabeledStatement(n)&&n.getText(ast).includes('const requestKey = visibleNotePreviewAttachments'));
 assert.ok(previewEffect,'Use the production list-preview effect to detect search-triggered file reads');
@@ -23,12 +23,15 @@ const harness=`<script lang="ts">
  import {onMount} from 'svelte';import {writable} from 'svelte/store';
  import {translator} from '$lib/i18n';import {createNoteStore} from '$lib/stores/noteStore';
  import {contentSearchApi} from '$lib/api/contentSearchApi';
+ import {createArchiveStore} from '$lib/stores/archiveStore';
+ import ArchiveDialog from '$lib/components/ArchiveDialog.svelte';
  import {noteAttachmentApi} from '$lib/api/noteAttachmentApi';
  import Editor from '$lib/components/NoteEditor.svelte';import Dialog from '$lib/components/ContentSearchDialog.svelte';
  import Workspace from '$lib/components/LinkWorkspace.svelte';import TodoItem from '$lib/components/TodoItem.svelte';
  const noop=async()=>{};const notes=createNoteStore(undefined,()=>{},600);
  const todos=Object.assign(writable({items:window.taskData,error:null}),{refresh:noop});
  let contentSearchSession=false,contentSearchActive=false,contentSearchOpening=false,searchAttachmentUuid='';
+ let showArchive=false,archiveOpening=false,archiveInitial=null;const readCapture=noop;
  let selectedNoteUuid='source',linkedTodoUuid=null,linkedTaskEditing=false,linkNavigating=false,linkHistory=[],linkNotice='';
  let historyOpening=false,historyUuid=null,historyOpenError=false,noteNavigationBusy=false,noteAttachmentBusy=false;
  let linkedRequest=null,linkManager=null,noteDraft=null,captureRequest=null,captureLoading=false,summaryMenuOpen=false,noteAttachmentError='';
@@ -66,10 +69,22 @@ const harness=`<script lang="ts">
  </Workspace>
  {#if contentSearchSession}<Dialog active={contentSearchActive} onOpen={openSearchResult}
  onClose={()=>{contentSearchSession=false;contentSearchActive=false;}}/>{/if}
+ {#if showArchive}<ArchiveDialog initialItem={archiveInitial} onClose={closeArchive} afterCommit={noop} onViewTask={noop}/>{/if}
  <style>:global(body){margin:0;padding:12px;box-sizing:border-box;display:flex;flex-direction:column;height:100vh;}</style>`;
 const native=`export const isTauri=()=>false;
  export async function invoke(command,args){
  if(command==='list_task_note_links')return [];
+ if(command==='pending_archive_batches')return [];
+ if(command==='list_archived')return {items:[],next:null};
+ if(command==='preview_archived'){
+   const row=window.results.todo.find(r=>r.uuid===args.uuid && r.archived);if(!row)throw Error('ARCHIVE_NOT_ARCHIVED');
+   return {expected:{uuid:row.uuid,scope:'scope',fingerprint:'hash'},title:row.title,content:'Archived full body <img src=x onerror=alert(1)>',
+     completed:true,archived_at:1,updated_at:1,completed_at:1,due_date:null,due_at:null,group_name:'Work',checklist_json:'{"items":[]}',links_json:'{"links":[]}'};
+ }
+ if(command==='apply_archive_action'){
+   const row=window.results.todo.find(r=>r.uuid===args.expected.uuid);row.archived=false;
+   return {uuid:row.uuid,action:args.action,outcome:'applied',result_version:2,warnings:[]};
+ }
  if(command==='list_notes')return window.noteData;
  if(command==='list_note_attachments')return window.assets.filter(a=>a.note_uuid===args.noteUuid);
  if(command==='read_note_attachment_preview'){window.fileReads++;return [1,2,3];}
@@ -80,7 +95,7 @@ const native=`export const isTauri=()=>false;
  }
  if(command==='search_content'){
    window.calls.push({...args});if(window.failedScope===args.scope)throw Error('private database path');
-   const all=window.results[args.scope].filter(i=>(i.title+' '+i.excerpt).toLowerCase().includes(args.query.toLowerCase()));
+   const all=window.results[args.scope].filter(i=>(args.includeArchived!==false||!i.archived)&&(i.title+' '+i.excerpt).toLowerCase().includes(args.query.toLowerCase()));
    return {...args,total:all.length,items:all.slice(args.offset,args.offset+args.limit)};
  }
  if(command==='resolve_search_target'){
@@ -138,13 +153,23 @@ try {
   }
   assert.equal(await category.evaluate(el=>getComputedStyle(el).colorScheme),theme);
   assert.ok(await page.locator('dialog[open]').evaluate(d=>{const r=d.getBoundingClientRect();return r.left>=-1&&r.right<=innerWidth+1&&r.top>=-1&&r.bottom<=innerHeight+1&&d.scrollWidth<=d.clientWidth+1;}));
-  await page.locator('[data-scope="todo"] .result').first().click();await page.getByText(lang==='zh-CN'?'已归档任务 · 只读':'Archived task · Read only',{exact:true}).waitFor();
+  await page.locator('[data-scope="todo"] .result').first().click();await page.getByRole('button',{name:lang==='zh-CN'?'取消归档':'Unarchive',exact:true}).waitFor();
   assert.equal(await page.locator('dialog[open] textarea').count(),0);assert.equal(await page.locator('dialog[open] img').count(),0);
   await page.getByRole('button',{name:lang==='zh-CN'?'返回结果':'Back to results',exact:true}).click();
   assert.equal(await page.getByRole('searchbox').inputValue(),'needle');
   await page.screenshot({path:resolve(output,`${lang}-${theme}-${size.width}-${scale}.png`)});
  }
  await page.setViewportSize({width:480,height:720});await begin();
+ await page.getByRole('checkbox',{name:'Include archived tasks'}).uncheck();
+ await page.waitForFunction(()=>window.calls.at(-1)?.includeArchived===false);
+ assert.equal(await page.locator('[data-scope="todo"] .result').first().innerText().then(t=>t.includes('Archived')),false);
+ await page.getByRole('checkbox',{name:'Include archived tasks'}).check();
+ await page.locator('[data-scope="todo"] .result').first().click();
+ await page.getByRole('button',{name:'Unarchive',exact:true}).click();
+ await page.getByRole('button',{name:'Confirm action',exact:true}).click();
+ await page.getByRole('button',{name:'Back to results',exact:true}).click();
+ await page.locator('[data-scope="todo"] .result').first().waitFor();
+ assert.equal(await page.locator('[data-scope="todo"] .result').first().innerText().then(t=>t.includes('Archived')),false);
  await page.locator('[data-scope="todo"] .result').nth(5).scrollIntoViewIfNeeded();
  const resultScroll=await page.locator('dialog[open] .content').evaluate(n=>n.scrollTop);assert.ok(resultScroll>0);
  await page.locator('[data-scope="todo"] .result').nth(5).click();await page.getByRole('button',{name:'Back to search',exact:true}).click();

@@ -6,9 +6,9 @@ beforeEach(() => { invoke.mockReset(); });
 it('requests bounded pages by type without altering literal input', async () => {
   invoke.mockResolvedValue({ items: [], total: 0 });
   await contentSearchApi.search('attachment', '100%_计划');
-  expect(invoke).toHaveBeenLastCalledWith('search_content', { scope: 'attachment', query: '100%_计划', offset: 0, limit: 20 });
-  await contentSearchApi.search('todo', 'report', 20, 20);
-  expect(invoke).toHaveBeenLastCalledWith('search_content', { scope: 'todo', query: 'report', offset: 20, limit: 20 });
+  expect(invoke).toHaveBeenLastCalledWith('search_content', { scope: 'attachment', query: '100%_计划', offset: 0, limit: 20, includeArchived: true });
+  await contentSearchApi.search('todo', 'report', 20, 20, false);
+  expect(invoke).toHaveBeenLastCalledWith('search_content', { scope: 'todo', query: 'report', offset: 20, limit: 20, includeArchived: false });
 });
 it('resolves by identity instead of trusting cached titles, body or file paths', async () => {
   invoke.mockResolvedValue({ title: 'Current title' });

@@ -4,12 +4,20 @@
   import "./management-dialog.css";
   import { languageState, translator, type TranslationKey } from "$lib/i18n";
   import { createArchiveStore } from "$lib/stores/archiveStore";
+  import { createArchiveNoteReader } from "$lib/stores/archiveNoteReader";
+  import { archiveDateHasPassed } from "$lib/utils/archiveDate";
+  import type { TaskNoteLinkView } from "$lib/types/taskNoteLink";
+  import type { SearchTarget } from "$lib/api/contentSearchApi";
   import { createArchiveBatchStore } from "$lib/stores/archiveBatchStore";
   import type { ArchiveAction, ArchivePreview, ArchiveRequest, ArchiveCursor, ArchiveBatchRequest, ArchiveBatchAction, ArchiveJob } from "$lib/api/archiveApi";
   export let onClose: () => void;
   export let afterCommit: () => Promise<void>;
   export let onViewTask: (uuid: string) => Promise<void>;
+  export let initialItem: ArchivePreview | null = null;
   const store = createArchiveStore();
+  const noteReader = createArchiveNoteReader();
+  let linkedNotes: TaskNoteLinkView[] = [], notesFailed = false;
+  let notePreview: SearchTarget | null = null;
   const batches = createArchiveBatchStore();
   let selecting = false, selected: ArchivePreview[] = [], jobs: ArchiveJob[] = [];
   let batchRequest: ArchiveBatchRequest | null = null, job: ArchiveJob | null = null;
@@ -44,12 +52,14 @@
       if (dialog.open && event.key === "Escape") { event.preventDefault(); event.stopImmediatePropagation(); back(); }
     };
     window.addEventListener("keydown", escape, true);
-    dialog.showModal(); void load(true);
+    dialog.showModal();
+    if (initialItem) { pending = structuredClone(initialItem); void loadNotes(); } else void load(true);
     return () => { disposed = true; window.removeEventListener("keydown", escape, true); dialog.close(); };
   });
   function back() {
     if (busy) return;
-    if (stopConfirm) { stopConfirm = false; }
+    if (notePreview) { notePreview = null; message = null; }
+    else if (stopConfirm) { stopConfirm = false; }
     else if (batchRequest) {
       const started = batchStarted;
       batchRequest = null; job = null; batchStarted = false; blocked = false;
@@ -57,7 +67,7 @@
     }
     else if (selecting) { selecting = false; selected = []; }
     else if (request) { request = null; }
-    else if (pending) { pending = null; blocked = false; }
+    else if (pending) { if (initialItem) onClose(); else { pending = null; blocked = false; } }
     else onClose();
   }
   async function page(reset: boolean) {
@@ -99,7 +109,7 @@
   async function select(item: ArchivePreview) {
     if (busy || refreshNeeded) return;
     busy = true; blocked = false; message = null; request = null; groupReset = false; lastUuid = "";
-    try { pending = await store.preview(item); await tick(); content.scrollTop = 0; }
+    try { pending = await store.preview(item); await loadNotes(); await tick(); content.scrollTop = 0; }
     catch (error) { message = failure(error); }
     finally { busy = false; }
   }
@@ -107,6 +117,25 @@
     if (busy || blocked || !pending) return;
     request = store.prepare(action, pending); message = null;
     content.scrollTop = 0;
+  }
+  async function loadNotes() {
+    linkedNotes = []; notesFailed = false;
+    const uuid = pending?.expected.uuid;
+    if (!uuid) return;
+    try {
+      const notes = await noteReader.list(uuid);
+      if (!disposed && pending?.expected.uuid === uuid) linkedNotes = notes;
+    } catch { if (!disposed && pending?.expected.uuid === uuid) notesFailed = true; }
+  }
+  async function openNote(link: TaskNoteLinkView) {
+    if (busy || !pending) return;
+    busy = true; message = null;
+    try {
+      await store.preview(pending);
+      notePreview = await noteReader.open(pending.expected.uuid, link.link.uuid);
+      await tick(); content.scrollTop = 0;
+    } catch { message = "archive.noteUnavailable"; await loadNotes(); }
+    finally { busy = false; }
   }
   async function confirm() {
     if (busy || !request || blocked) return;
@@ -118,7 +147,7 @@
       lastUuid = request.action === "delete" ? "" : result.outcome.uuid;
       request = null; pending = null;
       message = refreshNeeded ? "archive.refreshFailed" : "archive.saved";
-      await page(true);
+      if (!initialItem) await page(true);
     } catch (error) { message = failure(error); }
     finally { busy = false; }
   }
@@ -181,20 +210,22 @@
 <dialog class="management-dialog" bind:this={dialog} aria-labelledby="archive-heading"
   onkeydown={event => event.stopPropagation()} oncancel={event => { event.preventDefault(); back(); }}>
   <header><h2 id="archive-heading">{selecting && !batchRequest ? $translator("archive.batchSelected", { count: selected.length }) : $translator(batchRequest ? "archive.batchTitle" : request ? label(request.action) : "archive.title")}</h2>
-    {#if !pending && !batchRequest}
+    {#if !pending && !batchRequest && !initialItem}
       <div class="header-tools">
         {#if selecting}
           <button class="text-tool" disabled={busy} onclick={back}>{$translator("common.cancel")}</button>
-        {:else}
+        {:else if !initialItem}
           <button class="text-tool" disabled={busy || loadFailed || refreshNeeded || !items.length || jobs.length > 0}
             onclick={() => { selecting = true; selected = []; message = null; }}>{$translator("archive.batchSelect")}</button>
           <PanelToolButton icon="refresh" label={$translator("archive.refresh")} disabled={busy} onclick={() => load(true)} />
           <PanelToolButton icon="close" label={$translator("common.close")} disabled={busy} onclick={back} />
+        {:else}
+          <PanelToolButton icon="close" label={$translator("contentSearch.back")} disabled={busy} onclick={back} />
         {/if}
       </div>
     {/if}
   </header>
-  {#if !pending && !batchRequest}
+  {#if !pending && !batchRequest && !initialItem}
     <form onsubmit={event => { event.preventDefault(); void load(true); }}>
       <input aria-label={$translator("archive.search")} placeholder={$translator("archive.search")} maxlength="200" bind:value={query} disabled={busy} />
       <PanelToolButton icon="search" type="submit" label={$translator("contentSearch.search")} disabled={busy} />
@@ -234,12 +265,17 @@
         {/each}</ul>
       {/if}
       {#if refreshNeeded}<p role="alert">{$translator("archive.batchRefreshFailed")}</p>{/if}
+    {:else if notePreview}
+      <h3>{notePreview.title || $translator("trash.untitled")}</h3>
+      <p class="meta">{$translator("archive.notePreview")}</p>
+      <p class="body">{notePreview.content}</p>
     {:else if pending}
       <h3>{pending.title}</h3>
       <p class="meta">{$translator(pending.completed ? "trash.completed" : "trash.incomplete")}
         {#if pending.group_name} · {pending.group_name}{/if}</p>
       <p class="meta">{$translator("archive.archivedOn")}: {date(pending.archived_at)}</p>
       {#if pending.due_date || pending.due_at !== null}<p class="meta">{$translator("archive.due")}: {pending.due_date ?? date(pending.due_at!)}</p>{/if}
+      {#if archiveDateHasPassed(pending)}<p class="meta">{$translator("archive.pastDue")}</p>{/if}
       {#if request}<p class="confirmation">{$translator(hint(request.action))}</p>{/if}
       {#if pending.content}<p class="body">{pending.content}</p>{/if}
       {#if checklist.length}
@@ -248,7 +284,14 @@
           <li><input type="checkbox" checked={item.completed} disabled aria-label={item.content} /><span>{item.content}</span></li>
         {/each}</ul>
       {/if}
-    {:else}
+      {#if !request && (linkedNotes.length || notesFailed)}
+        <h4>{$translator("links.notes")}</h4>
+        {#if notesFailed}<button class="text-tool" disabled={busy} onclick={loadNotes}>{$translator("archive.notesRetry")}</button>{/if}
+        <ul class="records">{#each linkedNotes as link (link.link.uuid)}
+          <li><button class="record" disabled={busy} onclick={() => openNote(link)}><strong>{link.note_title || $translator("trash.untitled")}</strong></button></li>
+        {/each}</ul>
+      {/if}
+    {:else if !initialItem}
       {#if !selecting}
         {#each jobs as saved (saved.operation_uuid)}
           <button class="record" disabled={busy || loadFailed} onclick={() => resumeBatch(saved)}>
@@ -270,14 +313,14 @@
         <button class="record" aria-pressed={selecting ? selected.some(v => v.expected.uuid === item.expected.uuid) : undefined}
           disabled={busy || loadFailed || refreshNeeded} onclick={() => selecting ? toggle(item) : select(item)}>
           <strong>{item.title}</strong>
-          <span class="meta">{$translator(item.completed ? "trash.completed" : "trash.incomplete")} · {listDate(item.archived_at)}</span>
+          <span class="meta">{$translator(item.completed ? "trash.completed" : "trash.incomplete")} · {listDate(item.archived_at)}{#if item.group_name} · {item.group_name}{/if}</span>
           {#if item.content}<span class="excerpt">{item.content}</span>{/if}
         </button></li>
       {/each}</ul>
       {#if cursor}<button class="action-button" disabled={busy || loadFailed} onclick={() => load(false)}>{$translator("trash.more")}</button>{/if}
     {/if}
   </div>
-  {#if batchRequest || selecting || pending || (lastUuid && !refreshNeeded)}
+  {#if batchRequest || selecting || pending || initialItem || (lastUuid && !refreshNeeded)}
   <footer class:batch-actions={selecting && !batchRequest}>
     {#if batchRequest}
       {#if stopConfirm}
@@ -295,16 +338,21 @@
     {:else if selecting}
       <button class="action-button" data-tone="danger" disabled={busy || !selected.length || refreshNeeded} onclick={() => chooseBatch("delete")}>{$translator("archive.delete")}</button>
       <button class="action-button" data-tone="primary" disabled={busy || !selected.length || refreshNeeded} onclick={() => chooseBatch("unarchive")}>{$translator("archive.unarchive")}</button>
+    {:else if notePreview}
+      <button class="action-button" disabled={busy} onclick={back}>{$translator("archive.backToTask")}</button>
     {:else if request}
       <button class="action-button" disabled={busy} onclick={back}>{$translator("common.cancel")}</button>
       <button class="action-button" data-tone={request.action === "delete" ? "danger" : "primary"} disabled={busy || blocked} onclick={confirm}>{$translator("archive.confirm")}</button>
     {:else if pending}
-      <button class="action-button" disabled={busy} onclick={back}>{$translator("archive.back")}</button>
+      <button class="action-button" disabled={busy} onclick={back}>{$translator(initialItem ? "contentSearch.back" : "archive.back")}</button>
       <button class="action-button" data-tone="danger" disabled={busy || blocked} onclick={() => choose("delete")}>{$translator("archive.delete")}</button>
       <button class="action-button" disabled={busy || blocked} onclick={() => choose("reopen")}>{$translator("archive.reopen")}</button>
       <button class="action-button" data-tone="primary" disabled={busy || blocked} onclick={() => choose("unarchive")}>{$translator("archive.unarchive")}</button>
     {:else}
-      {#if lastUuid && !refreshNeeded}<button class="action-button" disabled={busy} onclick={viewTask}>{$translator("archive.viewTask")}</button>{/if}
+      {#if initialItem}
+        <button class="action-button" disabled={busy} onclick={back}>{$translator("contentSearch.back")}</button>
+        {#if refreshNeeded}<button class="action-button" disabled={busy} onclick={() => load(true)}>{$translator("archive.refresh")}</button>{/if}
+      {:else if lastUuid && !refreshNeeded}<button class="action-button" disabled={busy} onclick={viewTask}>{$translator("archive.viewTask")}</button>{/if}
     {/if}
   </footer>
   {/if}
