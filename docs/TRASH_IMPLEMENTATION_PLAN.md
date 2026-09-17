@@ -1,5 +1,7 @@
 # 双端回收站实现与验收
 
+后续方案（2026-09-17，仅文档）：[任务安排与归档回收管理](TASK_LIFECYCLE_IMPLEMENTATION_PLAN.md)及[roadmap](TASK_LIFECYCLE_ROADMAP.md)规划单条/批量彻底删除和安全清空。下文“不提供清空”仍是当前已实现边界；新能力须通过 LC2 协议、旧端兼容和验收门槛后才能开放，不因本文增加链接而改变现有恢复行为。
+
 ## 范围
 
 E8a 分为数据内核、用户入口、原生与同步验收三个可提交任务。整体回收站没有完成前，不把 E8a 勾选通过。本方案承接 EXPERIENCE_EVOLUTION_IMPLEMENTATION_PLAN.md；E6/E7 未完成的人工及异常验收不阻塞 E8 开发。
