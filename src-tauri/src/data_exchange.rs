@@ -1516,6 +1516,7 @@ fn merge_import_in_transaction(
         import.task_checklist_definitions.as_ref(),
     )?;
     crate::task_template_backup::restore(connection, import.task_templates.as_ref())?;
+    crate::archive::invalidate_in_transaction(connection)?;
     Ok(result)
 }
 
@@ -2194,6 +2195,45 @@ mod tests {
         assert!(import.note_attachments.is_empty());
         assert!(!import.attachment_files_included);
         validate_import(&import).unwrap();
+        let mut c = connection();
+        c.execute_batch("INSERT INTO app_metadata(key,value) VALUES('archive.scope.v1','old-scope'),('archive.op.v1:test','receipt'),('archive.batch.v1:test','batch');").unwrap();
+        c.execute_batch("CREATE TRIGGER fail_archive_import BEFORE UPDATE ON app_metadata WHEN OLD.key='archive.scope.v1' BEGIN SELECT RAISE(ABORT,'injected'); END;").unwrap();
+        assert!(merge_import(&mut c, serde_json::from_str(json).unwrap()).is_err());
+        assert_eq!(
+            c.query_row("SELECT count(*) FROM todos", [], |r| r.get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            c.query_row(
+                "SELECT value FROM app_metadata WHERE key='archive.scope.v1'",
+                [],
+                |r| r.get::<_, String>(0)
+            )
+            .unwrap(),
+            "old-scope"
+        );
+        assert_eq!(
+            c.query_row(
+                "SELECT count(*) FROM app_metadata WHERE key LIKE 'archive.%'",
+                [],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+            3
+        );
+        c.execute_batch("DROP TRIGGER fail_archive_import").unwrap();
+        merge_import(&mut c, import).unwrap();
+        assert_ne!(
+            c.query_row(
+                "SELECT value FROM app_metadata WHERE key='archive.scope.v1'",
+                [],
+                |r| r.get::<_, String>(0)
+            )
+            .unwrap(),
+            "old-scope"
+        );
+        assert_eq!(c.query_row("SELECT count(*) FROM app_metadata WHERE key LIKE 'archive.op.v1:%' OR key LIKE 'archive.batch.v1:%'", [], |r| r.get::<_, i64>(0)).unwrap(), 0);
     }
 
     #[test]

@@ -1,3 +1,7 @@
+pub mod archive;
+pub mod archive_batch;
+#[cfg(test)]
+mod archive_tests;
 mod capture;
 mod commands;
 mod content_search;

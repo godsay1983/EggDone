@@ -1,0 +1,303 @@
+{
+  "todo": "123e4567-e89b-42d3-a456-426614174000",
+  "second": "123e4567-e89b-42d3-a456-426614174001",
+  "note": "123e4567-e89b-42d3-a456-426614174002",
+  "group": "123e4567-e89b-42d3-a456-426614174003",
+  "device": "123e4567-e89b-42d3-a456-426614174004",
+  "operation": "123e4567-e89b-42d3-a456-426614174009",
+  "seed": [
+    "INSERT INTO app_metadata(key,value) VALUES('archive.scope.v1','123e4567-e89b-42d3-a456-426614174005')",
+    "INSERT INTO groups(uuid,name,color,sort_order,created_at,updated_at,updated_by) VALUES('123e4567-e89b-42d3-a456-426614174003','Work','yellow',0,1,10,'123e4567-e89b-42d3-a456-426614174004')",
+    "INSERT INTO todos(uuid,title,note,group_uuid,completed,sort_order,created_at,updated_at,completed_at,archived_at,due_date,reminder_at,repeat_rule,repeat_series_uuid,repeat_next_due_date,updated_by) VALUES('123e4567-e89b-42d3-a456-426614174000','Archived report','Keep body','123e4567-e89b-42d3-a456-426614174003',1,1,1,100,90,100,'2026-09-16',99,'daily','123e4567-e89b-42d3-a456-426614174000','2026-09-17','123e4567-e89b-42d3-a456-426614174004')",
+    "INSERT INTO todos(uuid,title,note,completed,sort_order,created_at,updated_at,archived_at,updated_by) VALUES('123e4567-e89b-42d3-a456-426614174001','Archived second','100%_literal',0,2,1,100,100,'123e4567-e89b-42d3-a456-426614174004')",
+    "INSERT INTO notes(uuid,title,content,color,created_at,updated_at,updated_by) VALUES('123e4567-e89b-42d3-a456-426614174002','Linked note','Keep note','default',1,10,'123e4567-e89b-42d3-a456-426614174004')",
+    "INSERT INTO task_checklist_items(uuid,todo_uuid,active,record_json) VALUES('123e4567-e89b-42d3-a456-42661417400a','123e4567-e89b-42d3-a456-426614174000',1,'{\"uuid\":\"123e4567-e89b-42d3-a456-42661417400a\",\"todo_uuid\":\"123e4567-e89b-42d3-a456-426614174000\",\"source_rule_uuid\":null,\"source_entry_uuid\":null,\"content\":\"Compile\",\"sort_order\":1000,\"completed\":true,\"created_at\":1,\"updated_at\":10,\"updated_by\":\"123e4567-e89b-42d3-a456-426614174004\",\"deleted_at\":null}')",
+    "INSERT INTO task_note_links(uuid,todo_uuid,note_uuid,active,record_json) VALUES('c2fa642f-d6b0-512a-8bbe-6290c6666736','123e4567-e89b-42d3-a456-426614174000','123e4567-e89b-42d3-a456-426614174002',1,'{\"uuid\":\"c2fa642f-d6b0-512a-8bbe-6290c6666736\",\"todo_uuid\":\"123e4567-e89b-42d3-a456-426614174000\",\"note_uuid\":\"123e4567-e89b-42d3-a456-426614174002\",\"created_at\":1,\"updated_at\":10,\"updated_by\":\"123e4567-e89b-42d3-a456-426614174004\",\"deleted_at\":null}')"
+  ],
+  "cases": [
+    {
+      "before": [],
+      "after": [],
+      "checks": [
+        {
+          "sql": "SELECT COUNT(*) FROM todos WHERE uuid='123e4567-e89b-42d3-a456-426614174000' AND archived_at IS NULL AND completed=1 AND completed_at=90 AND reminder_at IS NULL AND repeat_rule='daily' AND due_date='2026-09-16'",
+          "value": 1
+        }
+      ],
+      "id": "unarchive-preserves-completion-and-repeat-history",
+      "action": "unarchive"
+    },
+    {
+      "before": [],
+      "after": [],
+      "checks": [
+        {
+          "sql": "SELECT COUNT(*) FROM todos WHERE uuid='123e4567-e89b-42d3-a456-426614174000' AND archived_at IS NULL AND completed=0 AND completed_at IS NULL AND reminder_at IS NULL AND repeat_rule IS NULL AND repeat_series_uuid IS NULL AND repeat_next_due_date IS NULL AND due_date='2026-09-16'",
+          "value": 1
+        }
+      ],
+      "id": "reopen-one-off-preserves-date",
+      "action": "reopen"
+    },
+    {
+      "before": [],
+      "after": [],
+      "checks": [
+        {
+          "sql": "SELECT COUNT(*) FROM todos WHERE uuid='123e4567-e89b-42d3-a456-426614174000' AND deleted_at=200 AND archived_at=100 AND completed=1 AND reminder_at IS NULL",
+          "value": 1
+        },
+        {
+          "sql": "SELECT COUNT(*) FROM notes WHERE deleted_at IS NULL",
+          "value": 1
+        },
+        {
+          "sql": "SELECT COUNT(*) FROM task_note_links WHERE active=0",
+          "value": 1
+        }
+      ],
+      "id": "delete-archive-keeps-linked-note",
+      "action": "delete"
+    },
+    {
+      "before": [
+        "DELETE FROM groups WHERE uuid='123e4567-e89b-42d3-a456-426614174003'"
+      ],
+      "after": [],
+      "checks": [
+        {
+          "sql": "SELECT COUNT(*) FROM todos WHERE uuid='123e4567-e89b-42d3-a456-426614174000' AND group_uuid IS NULL AND archived_at IS NULL",
+          "value": 1
+        }
+      ],
+      "id": "missing-group-reset",
+      "action": "unarchive"
+    },
+    {
+      "before": [
+        "UPDATE groups SET deleted_at=50 WHERE uuid='123e4567-e89b-42d3-a456-426614174003'"
+      ],
+      "after": [],
+      "checks": [
+        {
+          "sql": "SELECT COUNT(*) FROM todos WHERE uuid='123e4567-e89b-42d3-a456-426614174000' AND group_uuid IS NULL AND completed=0",
+          "value": 1
+        }
+      ],
+      "id": "deleted-group-reset",
+      "action": "reopen"
+    },
+    {
+      "before": [],
+      "after": [
+        "UPDATE todos SET title='Remote' WHERE uuid='123e4567-e89b-42d3-a456-426614174000'"
+      ],
+      "checks": [],
+      "id": "changed-title-same-clock",
+      "action": "reopen",
+      "error": "ARCHIVE_CONFLICT"
+    },
+    {
+      "before": [],
+      "after": [
+        "UPDATE todos SET updated_by='remote' WHERE uuid='123e4567-e89b-42d3-a456-426614174000'"
+      ],
+      "checks": [],
+      "id": "changed-device-same-clock",
+      "action": "unarchive",
+      "error": "ARCHIVE_CONFLICT"
+    },
+    {
+      "before": [],
+      "after": [
+        "DELETE FROM task_checklist_items WHERE todo_uuid='123e4567-e89b-42d3-a456-426614174000'"
+      ],
+      "checks": [],
+      "id": "changed-child-same-parent-clock",
+      "action": "reopen",
+      "error": "ARCHIVE_CONFLICT"
+    },
+    {
+      "before": [],
+      "after": [
+        "DELETE FROM task_note_links WHERE todo_uuid='123e4567-e89b-42d3-a456-426614174000'"
+      ],
+      "checks": [],
+      "id": "changed-link",
+      "action": "delete",
+      "error": "ARCHIVE_CONFLICT"
+    },
+    {
+      "before": [],
+      "after": [
+        "UPDATE groups SET name='Other' WHERE uuid='123e4567-e89b-42d3-a456-426614174003'"
+      ],
+      "checks": [],
+      "id": "changed-group",
+      "action": "reopen",
+      "error": "ARCHIVE_CONFLICT"
+    },
+    {
+      "before": [],
+      "after": [
+        "UPDATE todos SET deleted_at=101 WHERE uuid='123e4567-e89b-42d3-a456-426614174000'"
+      ],
+      "checks": [],
+      "id": "deleted-after-preview",
+      "action": "reopen",
+      "error": "ARCHIVE_NOT_ARCHIVED"
+    },
+    {
+      "before": [],
+      "after": [
+        "UPDATE todos SET archived_at=NULL WHERE uuid='123e4567-e89b-42d3-a456-426614174000'"
+      ],
+      "checks": [],
+      "id": "already-unarchived",
+      "action": "delete",
+      "error": "ARCHIVE_NOT_ARCHIVED"
+    },
+    {
+      "before": [],
+      "after": [
+        "DELETE FROM todos WHERE uuid='123e4567-e89b-42d3-a456-426614174000'"
+      ],
+      "checks": [],
+      "id": "missing-after-preview",
+      "action": "delete",
+      "error": "ARCHIVE_NOT_FOUND"
+    },
+    {
+      "before": [
+        "INSERT INTO recurrence_rules(uuid,current_todo_uuid,active,record_json) VALUES('123e4567-e89b-42d3-a456-426614174007','123e4567-e89b-42d3-a456-426614174000',1,'{\"uuid\":\"123e4567-e89b-42d3-a456-426614174007\",\"first_todo_uuid\":\"123e4567-e89b-42d3-a456-426614174000\",\"schedule\":{\"anchor_date\":\"2026-09-05\",\"frequency\":\"daily\",\"interval\":1,\"weekdays\":[],\"month_day\":null,\"end_type\":\"never\",\"end_date\":null,\"max_occurrences\":null,\"local_time_minutes\":null},\"timezone_id\":null,\"current_todo_uuid\":\"123e4567-e89b-42d3-a456-426614174000\",\"current_date\":\"2026-09-05\",\"generated_count\":1,\"exhausted\":false,\"updated_at\":1000,\"updated_by\":\"123e4567-e89b-42d3-a456-426614174004\",\"deleted_at\":null}')"
+      ],
+      "after": [],
+      "checks": [],
+      "id": "active-rule-protection",
+      "action": "reopen",
+      "error": "ARCHIVE_RULE_ACTIVE"
+    },
+    {
+      "before": [
+        "UPDATE todos SET updated_at=9007199254740991 WHERE uuid='123e4567-e89b-42d3-a456-426614174000'"
+      ],
+      "after": [],
+      "checks": [],
+      "id": "clock-overflow",
+      "action": "reopen",
+      "error": "ARCHIVE_INVALID_VERSION"
+    },
+    {
+      "before": [],
+      "after": [],
+      "checks": [
+        {
+          "sql": "SELECT COUNT(*) FROM todos WHERE uuid='123e4567-e89b-42d3-a456-426614174000' AND updated_at=101",
+          "value": 1
+        }
+      ],
+      "id": "clock-backward",
+      "action": "unarchive",
+      "now": 2
+    },
+    {
+      "before": [],
+      "after": [
+        "INSERT INTO app_metadata(key,value) VALUES('sync.target.epoch.v1','123e4567-e89b-42d3-a456-426614174004')"
+      ],
+      "checks": [],
+      "id": "configuration-switch",
+      "action": "unarchive",
+      "error": "ARCHIVE_SCOPE_CHANGED"
+    },
+    {
+      "before": [],
+      "after": [
+        "INSERT INTO app_metadata(key,value) VALUES('sync.target.epoch.v1','pending:123e4567-e89b-42d3-a456-426614174004')"
+      ],
+      "checks": [],
+      "id": "incomplete-configuration-save",
+      "action": "reopen",
+      "error": "ARCHIVE_SCOPE_CHANGED"
+    },
+    {
+      "before": [],
+      "after": [
+        "CREATE TRIGGER fail_archive BEFORE INSERT ON app_metadata WHEN NEW.key LIKE 'archive.op.v1:%' BEGIN SELECT RAISE(ABORT,'injected'); END"
+      ],
+      "checks": [
+        {
+          "sql": "SELECT COUNT(*) FROM todos WHERE uuid='123e4567-e89b-42d3-a456-426614174000' AND archived_at=100 AND completed=1 AND reminder_at=99",
+          "value": 1
+        }
+      ],
+      "id": "receipt-failure-rolls-back-task",
+      "action": "reopen",
+      "error": "DATABASE"
+    },
+    {
+      "before": [],
+      "after": [
+        "CREATE TRIGGER fail_archive BEFORE UPDATE ON todos BEGIN SELECT RAISE(ABORT,'injected'); END"
+      ],
+      "checks": [
+        {
+          "sql": "SELECT COUNT(*) FROM todos WHERE uuid='123e4567-e89b-42d3-a456-426614174000' AND deleted_at IS NULL AND archived_at=100",
+          "value": 1
+        },
+        {
+          "sql": "SELECT COUNT(*) FROM task_note_links WHERE active=1",
+          "value": 1
+        }
+      ],
+      "id": "task-failure-rolls-back-link",
+      "action": "delete",
+      "error": "DATABASE"
+    },
+    {
+      "before": [],
+      "after": [
+        "CREATE TRIGGER fail_archive BEFORE UPDATE ON task_note_links BEGIN SELECT RAISE(ABORT,'injected'); END"
+      ],
+      "checks": [
+        {
+          "sql": "SELECT COUNT(*) FROM todos WHERE uuid='123e4567-e89b-42d3-a456-426614174000' AND deleted_at IS NULL",
+          "value": 1
+        }
+      ],
+      "id": "link-failure-rolls-back-delete",
+      "action": "delete",
+      "error": "DATABASE"
+    },
+    {
+      "id": "dirty-clock-overflow-rolls-back",
+      "action": "reopen",
+      "before": [
+        "UPDATE sync_runtime_state SET todos_dirty_version=9007199254740991"
+      ],
+      "after": [],
+      "error": "ARCHIVE_INVALID_VERSION",
+      "checks": [
+        {
+          "sql": "SELECT count(*) FROM todos WHERE uuid='123e4567-e89b-42d3-a456-426614174000' AND archived_at=100 AND completed=1",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "id": "reordered-json-is-not-a-conflict",
+      "action": "unarchive",
+      "before": [],
+      "after": [
+        "UPDATE task_checklist_items SET record_json='{\"deleted_at\":null,\"updated_by\":\"123e4567-e89b-42d3-a456-426614174004\",\"updated_at\":10,\"created_at\":1,\"completed\":true,\"sort_order\":1000,\"content\":\"Compile\",\"source_entry_uuid\":null,\"source_rule_uuid\":null,\"todo_uuid\":\"123e4567-e89b-42d3-a456-426614174000\",\"uuid\":\"123e4567-e89b-42d3-a456-42661417400a\"}' WHERE todo_uuid='123e4567-e89b-42d3-a456-426614174000'"
+      ],
+      "checks": [
+        {
+          "sql": "SELECT count(*) FROM todos WHERE uuid='123e4567-e89b-42d3-a456-426614174000' AND archived_at IS NULL",
+          "value": 1
+        }
+      ]
+    }
+  ],
+  "fingerprint": "e58eafb7f54b99b0661592f1386ea79b886b6592aabecd9f55308344da7cd3ab"
+}
