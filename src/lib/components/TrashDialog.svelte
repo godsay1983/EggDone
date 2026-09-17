@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
+  import PanelToolButton from "./PanelToolButton.svelte";
+  import "./management-dialog.css";
   import { languageState, translator, type TranslationKey } from "$lib/i18n";
   import type { TrashItem } from "$lib/api/trashApi";
   import { createTrashStore } from "$lib/stores/trashStore";
@@ -31,6 +33,12 @@
   });
   function date(value: number) {
     return new Intl.DateTimeFormat($languageState.resolvedLocale, { dateStyle: "medium", timeStyle: "short" }).format(value);
+  }
+  function listDate(value: number) {
+    return new Intl.DateTimeFormat($languageState.resolvedLocale, {
+      year: new Date(value).getFullYear() === new Date().getFullYear() ? undefined : "numeric",
+      month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+    }).format(value);
   }
   async function page(reset: boolean) {
     loadFailed = false;
@@ -83,12 +91,19 @@
   function back() { if (busy) return; if (pending) pending = null; else onClose(); }
 </script>
 
-<dialog bind:this={dialog} aria-labelledby="trash-heading" onkeydown={event => {
+<dialog class="management-dialog" bind:this={dialog} aria-labelledby="trash-heading" onkeydown={event => {
   event.stopPropagation();
   if (event.key === "Escape") { event.preventDefault(); back(); }
 }}
   oncancel={event => { event.preventDefault(); back(); }}>
-  <header><h2 id="trash-heading">{$translator(pending ? "trash.preview" : "trash.title")}</h2></header>
+  <header><h2 id="trash-heading">{$translator(pending ? "trash.preview" : "trash.title")}</h2>
+    {#if !pending}
+      <div class="header-tools">
+        <PanelToolButton icon="refresh" label={$translator("trash.refresh")} disabled={busy} onclick={() => load(true)} />
+        <PanelToolButton icon="close" label={$translator("common.close")} disabled={busy} onclick={back} />
+      </div>
+    {/if}
+  </header>
   <div class="content" bind:this={content} aria-busy={busy}>
     {#if message}<p role="status">{$translator(message)}</p>{/if}
     {#if busy}<p role="status">{$translator("common.loading")}</p>{/if}
@@ -110,41 +125,32 @@
       {#if !busy && !loadFailed && !items.length}<p>{$translator("trash.empty")}</p>{/if}
       <ul class="records">
         {#each items as item (item.kind + item.uuid)}
-          <li><button class="record action-button" disabled={busy || loadFailed} onclick={() => select(item)}>
+          <li><button class="record" disabled={busy || loadFailed} onclick={() => select(item)}>
             <strong>{item.title || $translator("trash.untitled")}</strong>
-            <span>{$translator(item.kind === "todo" ? "trash.todo" : "trash.note")} · {date(item.deleted_at)}</span>
-            <span class="excerpt">{item.content}</span>
+            <span class="meta">{$translator(item.kind === "todo" ? "trash.todo" : "trash.note")} · {listDate(item.deleted_at)}</span>
+            {#if item.content}<span class="excerpt">{item.content}</span>{/if}
           </button></li>
         {/each}
       </ul>
       {#if more}<button class="action-button" disabled={busy || loadFailed} onclick={() => load(false)}>{$translator("trash.more")}</button>{/if}
     {/if}
   </div>
-  <footer>
-    {#if pending}
+  {#if pending}
+    <footer>
       <button class="action-button" disabled={busy} onclick={back}>{$translator("common.cancel")}</button>
       <button class="action-button" data-tone="primary" disabled={busy} onclick={confirm}>{$translator("trash.restore")}</button>
-    {:else}
-      <button class="action-button" disabled={busy} onclick={() => load(true)}>{$translator("trash.refresh")}</button>
-      <button class="action-button" disabled={busy} onclick={back}>{$translator("common.close")}</button>
-    {/if}
-  </footer>
+    </footer>
+  {/if}
 </dialog>
 
 <style>
-  dialog { width: min(600px, calc(100% - 24px)); max-height: calc(100% - 24px); box-sizing: border-box; padding: 16px; border: 1px solid #d5c8ac; border-radius: 8px; background: #fffaf0; color: #463e31; }
-  dialog[open] { display: flex; flex-direction: column; gap: 12px; }
+  dialog { width: min(600px, calc(100% - 24px)); max-height: calc(100% - 24px); box-sizing: border-box; border: 1px solid #d5c8ac; border-radius: 8px; background: #fffaf0; color: #463e31; }
+  dialog[open] { display: flex; flex-direction: column; }
   dialog::backdrop { background: #0006; }
   h2 { margin: 0; font-size: 18px; } h3 { margin: 0 0 8px; font-size: 16px; overflow-wrap: anywhere; }
   p { margin: 8px 0; font-size: 14px; overflow-wrap: anywhere; }
   .content { min-height: 0; overflow: auto; }
   .body { white-space: pre-wrap; }
-  .records { list-style: none; padding: 0; margin: 0 0 12px; }
-  .records li { margin: 8px 0; }
-  .record { display: flex; flex-direction: column; align-items: stretch; gap: 6px; width: 100%; text-align: left; white-space: normal; overflow-wrap: anywhere; border-radius: 8px; padding: 12px; }
-  .record strong { font-size: 15px; font-weight: 500; }
-  .record span { font-size: 13px; }
-  .excerpt { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; white-space: pre-wrap; }
   .attachments { padding-left: 20px; overflow-wrap: anywhere; font-size: 14px; }
   footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
   :global(html[data-theme="dark"]) dialog { background: #302d27; color: #f4e7cd; border-color: #6a5842; color-scheme: dark; }

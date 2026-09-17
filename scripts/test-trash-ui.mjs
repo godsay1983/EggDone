@@ -63,6 +63,9 @@ try {
       await page.setViewportSize(size);
       await page.goto(url + '?lang=' + lang + '&theme=' + theme + '&scale=' + scale);
       await page.locator('.record').first().waitFor();
+      assert.equal(await page.locator('footer').count(),0,'ordinary list has no action footer');
+      assert.ok(await page.locator('dialog').evaluate(el=>el.scrollWidth<=el.clientWidth),'list horizontal overflow');
+      await page.screenshot({path:resolve(output,'list-'+lang+'-'+theme+'-'+size.width+'-'+scale+'.png')});
       const restore = () => page.getByRole('button', { name: lang === 'zh-CN' ? '确认恢复' : 'Restore', exact: true });
       await page.locator('.record').first().click();
       await restore().waitFor();

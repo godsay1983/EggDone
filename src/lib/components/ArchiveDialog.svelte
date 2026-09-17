@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
+  import PanelToolButton from "./PanelToolButton.svelte";
+  import "./management-dialog.css";
   import { languageState, translator, type TranslationKey } from "$lib/i18n";
   import { createArchiveStore } from "$lib/stores/archiveStore";
   import { createArchiveBatchStore } from "$lib/stores/archiveBatchStore";
@@ -30,6 +32,12 @@
   const hint = (action: ArchiveAction): TranslationKey => action === "delete" ? "archive.deleteHint" : action === "reopen" ? "archive.reopenHint" : "archive.unarchiveHint";
   function date(value: number) {
     return new Intl.DateTimeFormat($languageState.resolvedLocale, { dateStyle: "medium", timeStyle: "short" }).format(value);
+  }
+  function listDate(value: number) {
+    return new Intl.DateTimeFormat($languageState.resolvedLocale, {
+      year: new Date(value).getFullYear() === new Date().getFullYear() ? undefined : "numeric",
+      month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+    }).format(value);
   }
   onMount(() => {
     const escape = (event: KeyboardEvent) => {
@@ -170,10 +178,40 @@
   }
 </script>
 
-<dialog bind:this={dialog} aria-labelledby="archive-heading"
+<dialog class="management-dialog" bind:this={dialog} aria-labelledby="archive-heading"
   onkeydown={event => event.stopPropagation()} oncancel={event => { event.preventDefault(); back(); }}>
-  <header><h2 id="archive-heading">{$translator(batchRequest ? "archive.batchTitle" : request ? label(request.action) : "archive.title")}</h2>
-    {#if !pending && !batchRequest && !selecting}<button class="action-button" disabled={busy} onclick={back}>{$translator("common.close")}</button>{/if}</header>
+  <header><h2 id="archive-heading">{selecting && !batchRequest ? $translator("archive.batchSelected", { count: selected.length }) : $translator(batchRequest ? "archive.batchTitle" : request ? label(request.action) : "archive.title")}</h2>
+    {#if !pending && !batchRequest}
+      <div class="header-tools">
+        {#if selecting}
+          <button class="text-tool" disabled={busy} onclick={back}>{$translator("common.cancel")}</button>
+        {:else}
+          <button class="text-tool" disabled={busy || loadFailed || refreshNeeded || !items.length || jobs.length > 0}
+            onclick={() => { selecting = true; selected = []; message = null; }}>{$translator("archive.batchSelect")}</button>
+          <PanelToolButton icon="refresh" label={$translator("archive.refresh")} disabled={busy} onclick={() => load(true)} />
+          <PanelToolButton icon="close" label={$translator("common.close")} disabled={busy} onclick={back} />
+        {/if}
+      </div>
+    {/if}
+  </header>
+  {#if !pending && !batchRequest}
+    <form onsubmit={event => { event.preventDefault(); void load(true); }}>
+      <input aria-label={$translator("archive.search")} placeholder={$translator("archive.search")} maxlength="200" bind:value={query} disabled={busy} />
+      <PanelToolButton icon="search" type="submit" label={$translator("contentSearch.search")} disabled={busy} />
+    </form>
+    {#if selecting}
+      <div class="selection-tools">
+        <label class="select-loaded">
+          <input type="checkbox" checked={items.length > 0 && selected.length === items.length}
+            indeterminate={selected.length > 0 && selected.length < items.length}
+            disabled={busy || loadFailed || refreshNeeded || !items.length}
+            onchange={() => { selected = selected.length === items.length ? [] : structuredClone(items); }} />
+          <span>{$translator("archive.batchSelectLoaded")}</span>
+        </label>
+        <button class="text-tool" disabled={busy || !selected.length} onclick={() => { selected = []; }}>{$translator("common.clear")}</button>
+      </div>
+    {/if}
+  {/if}
   <div class="content" bind:this={content} aria-busy={busy}>
     {#if message}<p role="status">{$translator(message)}</p>{/if}
     {#if groupReset}<p role="status">{$translator("archive.groupReset")}</p>{/if}
@@ -211,10 +249,6 @@
         {/each}</ul>
       {/if}
     {:else}
-      <form onsubmit={event => { event.preventDefault(); void load(true); }}>
-        <input aria-label={$translator("archive.search")} placeholder={$translator("archive.search")} maxlength="200" bind:value={query} disabled={busy} />
-        <button class="action-button" disabled={busy}>{$translator("contentSearch.search")}</button>
-      </form>
       {#if !selecting}
         {#each jobs as saved (saved.operation_uuid)}
           <button class="record" disabled={busy || loadFailed} onclick={() => resumeBatch(saved)}>
@@ -222,29 +256,29 @@
             <span>{saved.results.length} / {saved.targets.length}</span>
           </button>
         {/each}
-        <button class="action-button" disabled={busy || loadFailed || refreshNeeded || !items.length || jobs.length > 0}
-          onclick={() => { selecting = true; selected = []; message = null; }}>{$translator("archive.batchSelect")}</button>
-      {:else}
-        <div class="selection-tools"><span>{$translator("archive.batchSelected", { count: selected.length })}</span>
-          <button class="action-button" disabled={busy || loadFailed || refreshNeeded} onclick={() => { selected = structuredClone(items); }}>{$translator("archive.batchSelectLoaded")}</button>
-          <button class="action-button" disabled={busy} onclick={() => { selected = []; }}>{$translator("common.clear")}</button></div>
       {/if}
       {#if loadFailed}<p role="alert">{$translator("archive.loadFailed")}</p>{/if}
       {#if !busy && !loadFailed && !items.length}<p class="empty">{$translator("archive.empty")}</p>{/if}
       <ul class="records">{#each items as item (item.expected.uuid)}
         <li class:selected={selecting && selected.some(v => v.expected.uuid === item.expected.uuid)}>
+        {#if selecting}
+          <label class="selection-check">
+            <input type="checkbox" checked={selected.some(v => v.expected.uuid === item.expected.uuid)}
+              aria-label={item.title} disabled={busy || loadFailed || refreshNeeded} onchange={() => toggle(item)} />
+          </label>
+        {/if}
         <button class="record" aria-pressed={selecting ? selected.some(v => v.expected.uuid === item.expected.uuid) : undefined}
           disabled={busy || loadFailed || refreshNeeded} onclick={() => selecting ? toggle(item) : select(item)}>
-          {#if selecting}<input type="checkbox" tabindex="-1" checked={selected.some(v => v.expected.uuid === item.expected.uuid)} aria-hidden="true" />{/if}
           <strong>{item.title}</strong>
-          <span class="meta">{$translator(item.completed ? "trash.completed" : "trash.incomplete")} · {date(item.archived_at)}</span>
+          <span class="meta">{$translator(item.completed ? "trash.completed" : "trash.incomplete")} · {listDate(item.archived_at)}</span>
           {#if item.content}<span class="excerpt">{item.content}</span>{/if}
         </button></li>
       {/each}</ul>
       {#if cursor}<button class="action-button" disabled={busy || loadFailed} onclick={() => load(false)}>{$translator("trash.more")}</button>{/if}
     {/if}
   </div>
-  <footer>
+  {#if batchRequest || selecting || pending || (lastUuid && !refreshNeeded)}
+  <footer class:batch-actions={selecting && !batchRequest}>
     {#if batchRequest}
       {#if stopConfirm}
         <button class="action-button" disabled={busy} onclick={back}>{$translator("common.cancel")}</button>
@@ -259,7 +293,6 @@
         <button class="action-button" disabled={busy || (batchComplete && refreshNeeded)} onclick={finishBatch}>{$translator(batchComplete ? "common.done" : "archive.batchStop")}</button>
       {/if}
     {:else if selecting}
-      <button class="action-button" disabled={busy} onclick={back}>{$translator("common.cancel")}</button>
       <button class="action-button" data-tone="danger" disabled={busy || !selected.length || refreshNeeded} onclick={() => chooseBatch("delete")}>{$translator("archive.delete")}</button>
       <button class="action-button" data-tone="primary" disabled={busy || !selected.length || refreshNeeded} onclick={() => chooseBatch("unarchive")}>{$translator("archive.unarchive")}</button>
     {:else if request}
@@ -272,38 +305,32 @@
       <button class="action-button" data-tone="primary" disabled={busy || blocked} onclick={() => choose("unarchive")}>{$translator("archive.unarchive")}</button>
     {:else}
       {#if lastUuid && !refreshNeeded}<button class="action-button" disabled={busy} onclick={viewTask}>{$translator("archive.viewTask")}</button>{/if}
-      <button class="action-button" disabled={busy} onclick={() => load(true)}>{$translator("archive.refresh")}</button>
     {/if}
   </footer>
+  {/if}
 </dialog>
 <style>
-  dialog { width: min(600px, calc(100% - 24px)); max-height: calc(100% - 24px); box-sizing: border-box; padding: 16px; border: 1px solid #d5c8ac; border-radius: 8px; background: #fffaf0; color: #463e31; font-size: 14px; }
-  dialog[open] { display: flex; flex-direction: column; gap: 12px; }
+  dialog { width: min(600px, calc(100% - 24px)); max-height: calc(100% - 24px); box-sizing: border-box; border: 1px solid #d5c8ac; border-radius: 8px; background: #fffaf0; color: #463e31; font-size: 14px; }
+  dialog[open] { display: flex; flex-direction: column; }
   dialog::backdrop { background: #0006; }
-  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   h2 { margin: 0; font-size: 18px; } h3 { margin: 0; font-size: 16px; overflow-wrap: anywhere; }
   h4 { font-size: 14px; margin: 16px 0 8px; }
   p { margin: 8px 0; overflow-wrap: anywhere; }
   .content { min-height: 0; overflow: auto; }
   .body { white-space: pre-wrap; }
-  form { display: flex; gap: 8px; margin-bottom: 12px; }
-  form input { flex: 1; min-width: 0; border: 1px solid #998969; border-radius: 8px; padding: 10px; font: inherit; color: inherit; background: transparent; }
-  form input:focus-visible { outline: 2px solid #a47e13; outline-offset: -2px; }
-  .records { margin: 0; padding: 0; list-style: none; }
-  .record { display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 12px 4px; border: 0; border-bottom: 1px solid #9c8a6333; background: transparent; color: inherit; text-align: left; cursor: pointer; font: inherit; overflow-wrap: anywhere; }
-  .record:hover:not(:disabled) { background: #9c8a6314; }
-  .record strong { font-size: 14px; font-weight: 500; }
-  .record:disabled { opacity: .6; cursor: default; }
-  .meta, .excerpt { font-size: 12px; opacity: .85; }
-  .excerpt { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; white-space: pre-wrap; }
+  form { display: flex; flex: none; align-items: center; gap: 4px; border: 1px solid #9c8a6355; border-radius: 8px; padding: 2px 4px; background: #9c8a6310; }
+  form input { flex: 1; min-width: 0; width: 0; border: 0; border-radius: 4px; padding: 8px; font: inherit; color: inherit; background: transparent; }
+  form:focus-within { outline: 2px solid #a47e13; outline-offset: -2px; }
+  form input:focus-visible { outline: none; }
+  .meta { font-size: 12px; opacity: .85; }
   .confirmation { padding: 12px 0; border-block: 1px solid #9c8a6355; }
   .checklist { list-style: none; padding: 0; }
   .checklist li { display: flex; gap: 8px; align-items: flex-start; margin: 10px 0; overflow-wrap: anywhere; }
   .checklist input { flex: none; margin: 3px 0; }
   .empty { padding: 16px 0; }
-  .selection-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0; }
-  .selected { background: #c59a2630; }
-  .record input { pointer-events: none; margin: 0; }
+  .selection-tools { display: flex; flex: none; align-items: center; justify-content: space-between; gap: 4px; font-size: 12px; }
+  .select-loaded { display: flex; flex: 1; min-width: 0; align-items: center; gap: 10px; min-height: 36px; padding: 0 8px; cursor: pointer; }
+  .select-loaded span { min-width: 0; overflow-wrap: anywhere; }
   .batch-results { list-style: none; padding: 0; }
   .batch-results li { display: flex; flex-direction: column; gap: 4px; padding: 8px 0; overflow-wrap: anywhere; }
   .batch-results strong { font-weight: 500; } .batch-results span { font-size: 12px; }

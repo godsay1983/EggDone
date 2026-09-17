@@ -94,6 +94,10 @@ try{
  for(const size of [{width:320,height:480},{width:480,height:720},{width:1000,height:760}])for(const scale of [1,1.5]){
   await page.setViewportSize(size);await page.goto(url+'?lang='+lang+'&theme='+theme+'&scale='+scale);
   const button=(zh,en)=>page.getByRole('button',{name:lang==='zh-CN'?zh:en,exact:true});
+  await page.locator('.record').first().waitFor();
+  assert.equal(await page.locator('footer').count(),0,'no empty list footer');
+  assert(await page.locator('dialog').evaluate(e=>e.scrollWidth<=e.clientWidth),'list horizontal overflow');
+  await page.screenshot({path:resolve(output,'list-'+lang+'-'+theme+'-'+size.width+'-'+scale+'.png')});
   await page.locator('.record').first().click();
   await button('重新打开','Reopen').click();await page.keyboard.press('Escape');
   assert.equal(await page.evaluate(()=>window.writes.length),0);
@@ -136,14 +140,36 @@ try{
  assert(await page.getByRole('button',{name:'Confirm action',exact:true}).isDisabled());
  await page.keyboard.press('Escape');await page.keyboard.press('Escape');
  assert.equal(await page.getByRole('textbox').inputValue(),'Task 50');
- for(const size of [{width:320,height:480},{width:1000,height:760}])for(const lang of ['zh-CN','en-US']){
-  await page.setViewportSize(size);await page.goto(url+'?pages=1&lang='+lang+'&theme=dark');
+ for(const size of [{width:320,height:480},{width:1000,height:760}])for(const lang of ['zh-CN','en-US'])for(const scale of [1,1.5]){
+  await page.setViewportSize(size);await page.goto(url+'?pages=1&lang='+lang+'&theme=dark&scale='+scale);
   const button=(zh,en)=>page.getByRole('button',{name:lang==='zh-CN'?zh:en,exact:true});
-  await button('批量选择','Select tasks').click();await button('全选已加载','Select loaded tasks').click();
+  await button('批量选择','Select tasks').click();
+  const selectLoaded=page.getByRole('checkbox',{name:lang==='zh-CN'?'全选已加载':'Select loaded tasks',exact:true});
+  const firstCheck=page.locator('.selection-check input').first();
+  await firstCheck.check();
+  assert.equal(await page.locator('.record[aria-pressed=true]').count(),1,'checkbox toggles once');
+  assert(await selectLoaded.evaluate(e=>e.indeterminate),'partial loaded selection');
+  await page.locator('.record').first().click();
+  assert.equal(await page.locator('.record[aria-pressed=true]').count(),0,'row toggles once');
+  await firstCheck.focus();await page.keyboard.press('Space');
+  assert.equal(await page.locator('.record[aria-pressed=true]').count(),1,'keyboard checkbox');
+  const checkboxBox=await firstCheck.boundingBox(),titleBox=await page.locator('.record strong').first().boundingBox();
+  assert(checkboxBox.x+checkboxBox.width<titleBox.x,'checkbox is left of title');
+  assert(Math.abs(checkboxBox.y-titleBox.y)<12,'checkbox aligns with title');
+  await selectLoaded.check();
+  const searchTop=await page.getByRole('textbox').boundingBox();
+  await page.locator('.content').evaluate(e=>e.scrollTop=e.scrollHeight);
+  assert.equal((await page.getByRole('textbox').boundingBox()).y,searchTop.y,'search stays fixed while list scrolls');
+  await page.locator('.content').evaluate(e=>e.scrollTop=0);
+  for(const b of await page.locator('footer button').all()){
+   const box=await b.boundingBox();assert(box.x>=0&&box.y>=0&&box.x+box.width<=size.width+1&&box.y+box.height<=size.height+1,'batch footer clipped');
+  }
+  await page.screenshot({path:resolve(output,'selection-'+lang+'-'+size.width+'-'+scale+'.png')});
   await button('加载更多','Load more').click();
   await page.waitForFunction(()=>document.querySelectorAll('.record').length===51);
   assert.equal(await page.locator('.record[aria-pressed=true]').count(),50);
-  await button('全选已加载','Select loaded tasks').click();await button('移入回收站','Move to trash').click();
+  assert(await selectLoaded.evaluate(e=>e.indeterminate),'new page stays unselected');
+  await selectLoaded.check();await button('移入回收站','Move to trash').click();
   await button('取消','Cancel').click();assert.equal(await page.evaluate(()=>window.batchPrepares.length),0);
   await button('移入回收站','Move to trash').click();
   await page.evaluate(()=>{window.loseBatchReply=true;window.changedUuid='1';});
@@ -152,19 +178,19 @@ try{
   assert.equal(await page.evaluate(()=>Object.values(window.jobs)[0].targets.length),51);
   assert.equal(await page.evaluate(()=>window.rows.length),2);
   const op=await page.evaluate(()=>Object.keys(window.jobs)[0]);
-  await page.goto(url+'?recover=1&lang='+lang+'&theme=dark');
+  await page.goto(url+'?recover=1&lang='+lang+'&theme=dark&scale='+scale);
   await page.getByRole('button').filter({hasText:lang==='zh-CN'?'查看批量进度':'Review batch progress'}).click();
   assert.equal(await page.evaluate(()=>window.batchRuns.length),0);
   await button('继续处理','Continue').click();await button('完成','Done').waitFor();
   assert.equal(await page.evaluate(()=>window.rows.length),1);assert.deepEqual(await page.evaluate(()=>window.batchRuns),[op]);
   assert(await page.locator('dialog').evaluate(e=>e.scrollWidth<=e.clientWidth));
-  await page.screenshot({path:resolve(output,'batch-'+lang+'-'+size.width+'.png')});
+  await page.screenshot({path:resolve(output,'batch-'+lang+'-'+size.width+'-'+scale+'.png')});
   await button('完成','Done').click();await page.waitForFunction(()=>window.dismissed.length===1);
   await page.getByRole('button',{name:lang==='zh-CN'?'批量选择':'Select tasks',exact:true}).waitFor();
  }
  await page.goto(url+'?lang=en-US&theme=light');
  await page.getByRole('button',{name:'Select tasks',exact:true}).click();
- await page.getByRole('button',{name:'Select loaded tasks',exact:true}).click();
+ await page.getByRole('checkbox',{name:'Select loaded tasks',exact:true}).check();
  await page.getByRole('button',{name:'Unarchive',exact:true}).click();
  await page.evaluate(()=>{window.loseBatchReply=true;});
  await page.getByRole('button',{name:'Confirm action',exact:true}).click();
@@ -177,7 +203,7 @@ try{
  await page.getByRole('button',{name:'Done',exact:true}).click();
  await page.waitForFunction(()=>window.dismissed.length===1);
  assert.deepEqual(errors,[]);
- console.log('PASS: '+count+' archive locale/theme/window/zoom combinations plus 4 batch recovery layouts and lost final reply recovery. Cancel, fixed selection, conflict skip, busy/back and refresh-only retry passed. Screenshots: '+output);
+ console.log('PASS: '+count+' archive locale/theme/window/zoom combinations plus 8 batch recovery layouts and lost final reply recovery. Left checkbox, keyboard selection, fixed toolbar, cancel, conflict skip, busy/back and refresh-only retry passed. Screenshots: '+output);
 }catch(e){
  if(page)await page.screenshot({path:resolve(output,'failure.png')});
  console.error('Screenshots: '+output);throw e;

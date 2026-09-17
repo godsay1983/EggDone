@@ -1,0 +1,37 @@
+.management-dialog { padding: 16px; }
+.management-dialog[open] { gap: 12px; }
+.management-dialog header { flex: none; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.management-dialog header h2 { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.management-dialog .header-tools { display: flex; align-items: center; gap: 2px; margin-left: auto; }
+.management-dialog .text-tool { min-height: 36px; padding: 6px 8px; font: inherit; color: inherit;
+  border: 0; border-radius: 6px; background: transparent; cursor: pointer; }
+.management-dialog .text-tool:hover:not(:disabled) { background: #9c8a6320; }
+.management-dialog .text-tool:disabled { opacity: .55; cursor: default; }
+.management-dialog .text-tool:focus-visible, .management-dialog .record:focus-visible {
+  outline: 2px solid #b28b20; outline-offset: -2px;
+}
+.management-dialog .records { margin: 0; padding: 0; list-style: none; }
+.management-dialog .records li { display: flex; align-items: flex-start; margin: 0; border-bottom: 1px solid #9c8a632b; border-radius: 4px; }
+.management-dialog .record { display: flex; flex: 1; min-width: 0; flex-direction: column; align-items: stretch;
+  gap: 4px; padding: 12px 8px; width: 100%; border: 0; border-radius: 4px; background: transparent;
+  color: inherit; text-align: left; white-space: normal; overflow-wrap: anywhere; font: inherit; cursor: pointer; }
+.management-dialog .record:hover:not(:disabled) { background: #9c8a6314; }
+.management-dialog .record:disabled { opacity: .6; cursor: default; }
+.management-dialog .record strong { font-size: 14px; line-height: 1.45; font-weight: 500;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.management-dialog .record .meta, .management-dialog .record .excerpt { font-size: 12px; line-height: 1.5; opacity: .8; }
+.management-dialog .record .excerpt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.management-dialog .records .selected { background: #c59a2620; }
+.management-dialog .selection-check { display: flex; align-items: center; justify-content: center; width: 36px; min-height: 44px; flex: none; cursor: pointer; }
+.management-dialog input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: #b88c16; flex: none; }
+.management-dialog footer { flex: none; padding-top: 12px; border-top: 1px solid #9c8a632b; }
+.management-dialog footer.batch-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }
+.management-dialog footer.batch-actions button { min-width: 0; width: 100%; white-space: normal; overflow-wrap: anywhere; padding: 6px 4px; }
+.management-dialog .content { scrollbar-width: thin; scrollbar-gutter: stable; }
+@media (max-width: 480px) {
+  dialog.management-dialog { padding: 10px; }
+  dialog.management-dialog[open] { gap: 8px; }
+  .management-dialog header { gap: 4px; }
+  .management-dialog header h2 { font-size: 16px; }
+  .management-dialog footer { padding-top: 8px; }
+}
