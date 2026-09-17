@@ -1,6 +1,6 @@
 # EggDone（蛋定 Todo）
 
-下一阶段方案（2026-09-17，仅文档，未实现）：依次补齐归档管理与恢复、安全清空回收站、今日计划和等待处理。两端统一状态、同步与验收规则，清空功能以旧端隔离和删除防复活验证为开放门槛；不调整正在审核的小艺意图。见[实现方案](docs/TASK_LIFECYCLE_IMPLEMENTATION_PLAN.md)和[roadmap](docs/TASK_LIFECYCLE_ROADMAP.md)。当前仅完成 LC0a，下一步 LC0b 共享契约，不将下方历史阶段状态当成本轮进度。
+任务生命周期（2026-09-17，LC0b 候选契约完成，产品未接入）：依次补齐归档管理与恢复、安全清空回收站、今日计划和等待处理。[共享契约](docs/TASK_LIFECYCLE_CONTRACT.md)与共享样例已落地，两仓库各通过 69 项候选检查；没有界面、数据库或同步协议改动。下一步 LC1a 归档内核；清空仍以旧端隔离和防复活验证为门槛，不调整小艺意图。见[实现方案](docs/TASK_LIFECYCLE_IMPLEMENTATION_PLAN.md)和[roadmap](docs/TASK_LIFECYCLE_ROADMAP.md)，下方历史阶段状态不是本轮进度。
 
 Windows 窗口缩放修复（2026-09-16，未发布）：拖动主窗口边缘时，先区分原生边框接管焦点与真正切换到其他窗口，避免调整大小触发自动隐藏。保留失焦隐藏、托盘切换及尺寸保存；不影响鸿蒙端。验证范围见[窗口缩放回归](docs/WINDOW_RESIZE_REGRESSION.md)。
 

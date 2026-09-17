@@ -1,0 +1,744 @@
+{
+  "contract_version": 1,
+  "scope": "candidate-only-no-production-io",
+  "base_archive": {
+    "uuid": "123e4567-e89b-42d3-a456-426614174000",
+    "title": "Report",
+    "note": "Keep this",
+    "completed": true,
+    "completed_at": 100,
+    "archived_at": 110,
+    "deleted_at": null,
+    "updated_at": 110,
+    "updated_by": "123e4567-e89b-42d3-a456-426614174004",
+    "due_date": "2026-09-16",
+    "due_at": null,
+    "reminder_at": 80,
+    "group_uuid": "123e4567-e89b-42d3-a456-426614174001",
+    "group_valid": true,
+    "repeat_rule": "daily",
+    "repeat_series_uuid": "123e4567-e89b-42d3-a456-426614174001",
+    "repeat_next_due_date": "2026-09-17",
+    "current_rule_active": false,
+    "checklist": [
+      {
+        "uuid": "123e4567-e89b-42d3-a456-426614174002",
+        "completed": true,
+        "content": "Draft"
+      }
+    ],
+    "links": [
+      {
+        "uuid": "123e4567-e89b-42d3-a456-426614174003",
+        "deleted_at": null
+      }
+    ]
+  },
+  "archive_cases": [
+    {
+      "id": "unarchive-retains-completion-checklist-dates-links",
+      "action": "unarchive",
+      "patch": {},
+      "expectedPatch": {
+        "updated_at": 200,
+        "updated_by": "123e4567-e89b-42d3-a456-426614174005",
+        "reminder_at": null,
+        "archived_at": null
+      }
+    },
+    {
+      "id": "reopen-one-off-retains-checkmarks-and-overdue-date",
+      "action": "reopen",
+      "patch": {},
+      "expectedPatch": {
+        "updated_at": 200,
+        "updated_by": "123e4567-e89b-42d3-a456-426614174005",
+        "reminder_at": null,
+        "archived_at": null,
+        "completed": false,
+        "completed_at": null,
+        "repeat_rule": null,
+        "repeat_series_uuid": null,
+        "repeat_next_due_date": null
+      }
+    },
+    {
+      "id": "archive-delete-does-not-advance-repeat",
+      "action": "delete",
+      "patch": {},
+      "expectedPatch": {
+        "updated_at": 200,
+        "updated_by": "123e4567-e89b-42d3-a456-426614174005",
+        "reminder_at": null,
+        "deleted_at": 200
+      }
+    },
+    {
+      "id": "unarchive-missing-group",
+      "action": "unarchive",
+      "patch": {
+        "group_valid": false
+      },
+      "expectedPatch": {
+        "updated_at": 200,
+        "updated_by": "123e4567-e89b-42d3-a456-426614174005",
+        "reminder_at": null,
+        "archived_at": null,
+        "group_uuid": null
+      }
+    },
+    {
+      "id": "reopen-missing-group",
+      "action": "reopen",
+      "patch": {
+        "group_valid": false
+      },
+      "expectedPatch": {
+        "updated_at": 200,
+        "updated_by": "123e4567-e89b-42d3-a456-426614174005",
+        "reminder_at": null,
+        "archived_at": null,
+        "completed": false,
+        "completed_at": null,
+        "repeat_rule": null,
+        "repeat_series_uuid": null,
+        "repeat_next_due_date": null,
+        "group_uuid": null
+      }
+    },
+    {
+      "id": "legacy-incomplete-archive-keeps-state",
+      "action": "unarchive",
+      "patch": {
+        "completed": false,
+        "completed_at": null
+      },
+      "expectedPatch": {
+        "updated_at": 200,
+        "updated_by": "123e4567-e89b-42d3-a456-426614174005",
+        "reminder_at": null,
+        "archived_at": null
+      }
+    },
+    {
+      "id": "clock-backward-still-monotonic",
+      "action": "unarchive",
+      "patch": {},
+      "now": 10,
+      "expectedPatch": {
+        "updated_at": 111,
+        "updated_by": "123e4567-e89b-42d3-a456-426614174005",
+        "reminder_at": null,
+        "archived_at": null
+      }
+    },
+    {
+      "id": "clock-equal-still-monotonic",
+      "action": "unarchive",
+      "patch": {},
+      "now": 110,
+      "expectedPatch": {
+        "updated_at": 111,
+        "updated_by": "123e4567-e89b-42d3-a456-426614174005",
+        "reminder_at": null,
+        "archived_at": null
+      }
+    },
+    {
+      "id": "terminal-precedes-archive",
+      "action": "reopen",
+      "patch": {},
+      "terminal": true,
+      "error": "ARCHIVE_TERMINAL"
+    },
+    {
+      "id": "missing-target",
+      "action": "reopen",
+      "patch": {},
+      "missing": true,
+      "error": "ARCHIVE_NOT_FOUND"
+    },
+    {
+      "id": "stale-title-same-version",
+      "action": "reopen",
+      "patch": {},
+      "concurrent": {
+        "title": "Updated remotely"
+      },
+      "error": "ARCHIVE_CONFLICT"
+    },
+    {
+      "id": "stale-device-same-timestamp",
+      "action": "unarchive",
+      "patch": {},
+      "concurrent": {
+        "updated_by": "123e4567-e89b-42d3-a456-426614174006"
+      },
+      "error": "ARCHIVE_CONFLICT"
+    },
+    {
+      "id": "stale-checklist-same-parent-version",
+      "action": "reopen",
+      "patch": {},
+      "concurrent": {
+        "checklist": []
+      },
+      "error": "ARCHIVE_CONFLICT"
+    },
+    {
+      "id": "stale-link-same-parent-version",
+      "action": "delete",
+      "patch": {},
+      "concurrent": {
+        "links": []
+      },
+      "error": "ARCHIVE_CONFLICT"
+    },
+    {
+      "id": "deleted-after-preview",
+      "action": "reopen",
+      "patch": {},
+      "concurrent": {
+        "deleted_at": 150
+      },
+      "error": "ARCHIVE_CONFLICT"
+    },
+    {
+      "id": "unarchived-after-preview",
+      "action": "delete",
+      "patch": {},
+      "concurrent": {
+        "archived_at": null
+      },
+      "error": "ARCHIVE_CONFLICT"
+    },
+    {
+      "id": "already-active",
+      "action": "unarchive",
+      "patch": {
+        "archived_at": null
+      },
+      "error": "ARCHIVE_NOT_ARCHIVED"
+    },
+    {
+      "id": "trash-is-not-archive",
+      "action": "reopen",
+      "patch": {
+        "deleted_at": 120
+      },
+      "error": "ARCHIVE_NOT_ARCHIVED"
+    },
+    {
+      "id": "active-rule-blocks-reopen",
+      "action": "reopen",
+      "patch": {
+        "current_rule_active": true
+      },
+      "error": "ARCHIVE_RULE_ACTIVE"
+    },
+    {
+      "id": "active-rule-blocks-unarchive",
+      "action": "unarchive",
+      "patch": {
+        "current_rule_active": true
+      },
+      "error": "ARCHIVE_RULE_ACTIVE"
+    },
+    {
+      "id": "active-rule-blocks-delete",
+      "action": "delete",
+      "patch": {
+        "current_rule_active": true
+      },
+      "error": "ARCHIVE_RULE_ACTIVE"
+    },
+    {
+      "id": "version-overflow",
+      "action": "reopen",
+      "patch": {
+        "updated_at": 9007199254740991
+      },
+      "error": "ARCHIVE_INVALID_VERSION"
+    },
+    {
+      "id": "invalid-time",
+      "action": "reopen",
+      "patch": {},
+      "now": -1,
+      "error": "INVALID_VERSION"
+    },
+    {
+      "id": "blank-device",
+      "action": "reopen",
+      "patch": {},
+      "by": " ",
+      "error": "ARCHIVE_INVALID_VERSION"
+    },
+    {
+      "id": "unknown-command",
+      "action": "restore",
+      "patch": {},
+      "error": "ARCHIVE_INVALID_ACTION"
+    }
+  ],
+  "base_projection": {
+    "parent": {
+      "uuid": "123e4567-e89b-42d3-a456-426614174000",
+      "completed": false,
+      "archived_at": null,
+      "deleted_at": null
+    },
+    "terminal": false,
+    "barriers": [],
+    "plan": {
+      "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+      "basis": [],
+      "plan_date": "2026-09-17",
+      "removed": false
+    },
+    "workflow": {
+      "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+      "basis": [],
+      "state": "ready",
+      "review_date": null
+    },
+    "today": "2026-09-17"
+  },
+  "projection_cases": [
+    {
+      "id": "plan-without-due-date",
+      "patch": {},
+      "expected": {
+        "state": "ready",
+        "planned": true,
+        "actionable": true,
+        "review_due": false
+      }
+    },
+    {
+      "id": "no-plan",
+      "patch": {
+        "plan": null
+      },
+      "expected": {
+        "state": "ready",
+        "planned": false,
+        "actionable": false,
+        "review_due": false
+      }
+    },
+    {
+      "id": "explicit-removed-plan",
+      "patch": {
+        "plan": {
+          "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+          "basis": [],
+          "plan_date": "2026-09-17",
+          "removed": true
+        }
+      },
+      "expected": {
+        "state": "ready",
+        "planned": false,
+        "actionable": false,
+        "review_due": false
+      }
+    },
+    {
+      "id": "different-local-calendar-day",
+      "patch": {
+        "today": "2026-09-18"
+      },
+      "expected": {
+        "state": "ready",
+        "planned": false,
+        "actionable": false,
+        "review_due": false
+      }
+    },
+    {
+      "id": "waiting-retains-plan-but-not-actionable",
+      "patch": {
+        "workflow": {
+          "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+          "basis": [],
+          "state": "waiting",
+          "review_date": null
+        }
+      },
+      "expected": {
+        "state": "waiting",
+        "planned": true,
+        "actionable": false,
+        "review_due": false
+      }
+    },
+    {
+      "id": "review-today-no-auto-ready",
+      "patch": {
+        "workflow": {
+          "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+          "basis": [],
+          "state": "waiting",
+          "review_date": "2026-09-17"
+        }
+      },
+      "expected": {
+        "state": "waiting",
+        "planned": true,
+        "actionable": false,
+        "review_due": true
+      }
+    },
+    {
+      "id": "review-past-no-auto-ready",
+      "patch": {
+        "workflow": {
+          "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+          "basis": [],
+          "state": "waiting",
+          "review_date": "2026-09-16"
+        }
+      },
+      "expected": {
+        "state": "waiting",
+        "planned": true,
+        "actionable": false,
+        "review_due": true
+      }
+    },
+    {
+      "id": "review-future",
+      "patch": {
+        "workflow": {
+          "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+          "basis": [],
+          "state": "waiting",
+          "review_date": "2026-09-18"
+        }
+      },
+      "expected": {
+        "state": "waiting",
+        "planned": true,
+        "actionable": false,
+        "review_due": false
+      }
+    },
+    {
+      "id": "explicit-ready-clears-wait",
+      "patch": {
+        "workflow": {
+          "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+          "basis": [],
+          "state": "ready",
+          "review_date": null
+        }
+      },
+      "expected": {
+        "state": "ready",
+        "planned": true,
+        "actionable": true,
+        "review_due": false
+      }
+    },
+    {
+      "id": "waiting-without-plan",
+      "patch": {
+        "plan": null,
+        "workflow": {
+          "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+          "basis": [],
+          "state": "waiting",
+          "review_date": null
+        }
+      },
+      "expected": {
+        "state": "waiting",
+        "planned": false,
+        "actionable": false,
+        "review_due": false
+      }
+    },
+    {
+      "id": "parent-complete-suppresses-children",
+      "patch": {
+        "parent": {
+          "uuid": "123e4567-e89b-42d3-a456-426614174000",
+          "completed": true,
+          "archived_at": null,
+          "deleted_at": null
+        }
+      },
+      "expected": {
+        "state": "completed",
+        "planned": false,
+        "actionable": false,
+        "review_due": false
+      }
+    },
+    {
+      "id": "parent-archive-suppresses-children",
+      "patch": {
+        "parent": {
+          "uuid": "123e4567-e89b-42d3-a456-426614174000",
+          "completed": true,
+          "archived_at": 110,
+          "deleted_at": null
+        }
+      },
+      "expected": {
+        "state": "archived",
+        "planned": false,
+        "actionable": false,
+        "review_due": false
+      }
+    },
+    {
+      "id": "parent-delete-suppresses-children",
+      "patch": {
+        "parent": {
+          "uuid": "123e4567-e89b-42d3-a456-426614174000",
+          "completed": true,
+          "archived_at": 110,
+          "deleted_at": 120
+        }
+      },
+      "expected": {
+        "state": "deleted",
+        "planned": false,
+        "actionable": false,
+        "review_due": false
+      }
+    },
+    {
+      "id": "parent-missing-suppresses-children",
+      "patch": {
+        "parent": null
+      },
+      "expected": {
+        "state": "missing",
+        "planned": false,
+        "actionable": false,
+        "review_due": false
+      }
+    },
+    {
+      "id": "terminal-no-parent",
+      "patch": {
+        "parent": null,
+        "terminal": true
+      },
+      "expected": {
+        "state": "purged",
+        "planned": false,
+        "actionable": false,
+        "review_due": false
+      }
+    },
+    {
+      "id": "terminal-with-live-parent",
+      "patch": {
+        "terminal": true
+      },
+      "expected": {
+        "state": "purged",
+        "planned": false,
+        "actionable": false,
+        "review_due": false
+      }
+    },
+    {
+      "id": "reopened-old-arrangements-stay-invalid",
+      "patch": {
+        "barriers": [
+          "123e4567-e89b-42d3-a456-426614174002"
+        ]
+      },
+      "expected": {
+        "state": "ready",
+        "planned": false,
+        "actionable": false,
+        "review_due": false
+      }
+    },
+    {
+      "id": "fresh-plan-after-reopen",
+      "patch": {
+        "barriers": [
+          "123e4567-e89b-42d3-a456-426614174002"
+        ],
+        "plan": {
+          "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+          "basis": [
+            "123e4567-e89b-42d3-a456-426614174002"
+          ],
+          "plan_date": "2026-09-17",
+          "removed": false
+        }
+      },
+      "expected": {
+        "state": "ready",
+        "planned": true,
+        "actionable": true,
+        "review_due": false
+      }
+    },
+    {
+      "id": "late-wait-cannot-revive",
+      "patch": {
+        "barriers": [
+          "123e4567-e89b-42d3-a456-426614174002"
+        ],
+        "plan": null,
+        "workflow": {
+          "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+          "basis": [],
+          "state": "waiting",
+          "review_date": null
+        }
+      },
+      "expected": {
+        "state": "ready",
+        "planned": false,
+        "actionable": false,
+        "review_due": false
+      }
+    },
+    {
+      "id": "unknown-child-basis-not-adopted",
+      "patch": {
+        "plan": {
+          "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+          "basis": [
+            "123e4567-e89b-42d3-a456-426614174002"
+          ],
+          "plan_date": "2026-09-17",
+          "removed": false
+        }
+      },
+      "expected": {
+        "state": "ready",
+        "planned": false,
+        "actionable": false,
+        "review_due": false
+      }
+    },
+    {
+      "id": "concurrent-lower-clock-boundary-invalidates",
+      "patch": {
+        "barriers": [
+          "123e4567-e89b-42d3-a456-426614174002",
+          "123e4567-e89b-42d3-a456-426614174003"
+        ],
+        "plan": {
+          "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+          "basis": [
+            "123e4567-e89b-42d3-a456-426614174002"
+          ],
+          "plan_date": "2026-09-17",
+          "removed": false
+        }
+      },
+      "expected": {
+        "state": "ready",
+        "planned": false,
+        "actionable": false,
+        "review_due": false
+      }
+    },
+    {
+      "id": "explicit-replan-after-both-boundaries",
+      "patch": {
+        "barriers": [
+          "123e4567-e89b-42d3-a456-426614174002",
+          "123e4567-e89b-42d3-a456-426614174003"
+        ],
+        "plan": {
+          "todo_uuid": "123e4567-e89b-42d3-a456-426614174000",
+          "basis": [
+            "123e4567-e89b-42d3-a456-426614174003",
+            "123e4567-e89b-42d3-a456-426614174002"
+          ],
+          "plan_date": "2026-09-17",
+          "removed": false
+        }
+      },
+      "expected": {
+        "state": "ready",
+        "planned": true,
+        "actionable": true,
+        "review_due": false
+      }
+    },
+    {
+      "id": "other-parent-plan-cannot-leak",
+      "patch": {
+        "plan": {
+          "todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+          "basis": [],
+          "plan_date": "2026-09-17",
+          "removed": false
+        }
+      },
+      "expected": {
+        "state": "ready",
+        "planned": false,
+        "actionable": false,
+        "review_due": false
+      }
+    },
+    {
+      "id": "other-parent-wait-cannot-leak",
+      "patch": {
+        "workflow": {
+          "todo_uuid": "123e4567-e89b-42d3-a456-426614174001",
+          "basis": [],
+          "state": "waiting",
+          "review_date": null
+        }
+      },
+      "expected": {
+        "state": "ready",
+        "planned": true,
+        "actionable": true,
+        "review_due": false
+      }
+    },
+    {
+      "id": "copied-task-has-no-arrangements",
+      "patch": {
+        "parent": {
+          "uuid": "123e4567-e89b-42d3-a456-426614174001",
+          "completed": false,
+          "archived_at": null,
+          "deleted_at": null
+        }
+      },
+      "expected": {
+        "state": "ready",
+        "planned": false,
+        "actionable": false,
+        "review_due": false
+      }
+    }
+  ],
+  "barrier_ids": [
+    "123e4567-e89b-42d3-a456-426614174002",
+    "123e4567-e89b-42d3-a456-426614174003"
+  ],
+  "valid_dates": [
+    "0001-01-01",
+    "2024-02-29",
+    "2026-09-17",
+    "9999-12-31"
+  ],
+  "invalid_dates": [
+    "2026-02-29",
+    "2026-04-31",
+    "2026-9-17",
+    "2026-09-17T00:00:00Z",
+    "0000-01-01",
+    "tomorrow",
+    null
+  ]
+}
