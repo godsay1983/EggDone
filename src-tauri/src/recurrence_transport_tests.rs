@@ -52,6 +52,12 @@ pub(crate) struct Reply {
 }
 
 impl Reply {
+    pub(crate) fn with_header(mut self, name: &str, value: &str) -> Self {
+        assert!(!name.contains(['\r', '\n']));
+        assert!(!value.contains(['\r', '\n']));
+        self.headers.push_str(&format!("{name}: {value}\r\n"));
+        self
+    }
     pub(crate) fn with_hook(mut self, hook: impl FnOnce() + Send + 'static) -> Self {
         self.before_reply = Some(Box::new(hook));
         self

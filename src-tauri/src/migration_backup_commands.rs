@@ -23,7 +23,31 @@ pub async fn migration_local_backup(
         if action == "prepare" {
             let work = backup::prepare(&mut *lock_database(&db)?, now_millis())?;
             // Do not keep the database locked while copying files; finish rejects concurrent edits.
-            backup::copy(&work, &root, &app_data.join("note-assets"))?;
+            let mut source = None;
+            backup::copy_with_missing(&work, &root, &app_data.join("note-assets"), |entry| {
+                {
+                    let connection = lock_database(&db)?;
+                    backup::require_current(&connection, &work.plan)?;
+                    if source.is_none() {
+                        source = Some(crate::s3_sync::prepare_migration_asset_source(&connection)?);
+                    }
+                }
+                let bytes = tauri::async_runtime::block_on(
+                    source
+                        .as_ref()
+                        .ok_or("MIGRATION_BACKUP_ASSET_CONFIG")?
+                        .download(
+                            &runtime,
+                            &entry.name[..36],
+                            &entry.name[37..],
+                            entry.size as i64,
+                            &entry.sha256,
+                        ),
+                )?;
+                backup::require_current(&*lock_database(&db)?, &work.plan)?;
+                Ok(bytes)
+            })?;
+            backup::rehearse(&root, &work.plan)?;
             return backup::finish(&mut *lock_database(&db)?, &work.plan, now_millis()).map(Some);
         }
         let plan = backup::latest(&*lock_database(&db)?)?;
@@ -32,6 +56,7 @@ pub async fn migration_local_backup(
         };
         if action == "verify" {
             backup::verify_files(&root, &plan)?;
+            backup::rehearse(&root, &plan)?;
             backup::finish(&mut *lock_database(&db)?, &plan, now_millis()).map(Some)
         } else if action == "status" {
             backup::report(&mut *lock_database(&db)?, &plan).map(Some)

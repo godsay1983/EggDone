@@ -10,6 +10,7 @@ use http::{HeaderMap, HeaderName, HeaderValue};
 use keyring::{Entry, Error as KeyringError};
 use rusqlite::{params, Connection};
 use s3::{bucket::Bucket, creds::Credentials, region::Region};
+use s3::{command::Command, request::tokio_backend::ReqwestRequest, request::Request};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use url::Url;
@@ -226,6 +227,7 @@ pub enum UploadOutcome {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RemoteAssetState {
     pub exists: bool,
+    pub etag: Option<String>,
     pub content_length: Option<i64>,
     pub content_type: Option<String>,
     pub sha256: Option<String>,
@@ -424,6 +426,46 @@ pub fn prepare_manual_sync(connection: &Connection) -> Result<PreparedManualSync
         note_asset_prefix: derive_note_asset_prefix(&settings.object_key),
         object_key: settings.object_key,
     })
+}
+
+// Deliberately exposes no write operation and does not create an epoch or clear dirty state.
+// The backup coordinator checks its complete source snapshot before and after each request.
+pub struct MigrationAssetSource(PreparedManualSync);
+
+pub fn prepare_migration_asset_source(
+    connection: &Connection,
+) -> Result<MigrationAssetSource, String> {
+    let settings = read_settings(connection).map_err(|_| "MIGRATION_BACKUP_ASSET_CONFIG")?;
+    settings
+        .validate_connection()
+        .map_err(|_| "MIGRATION_BACKUP_ASSET_CONFIG")?;
+    let credentials = load_credentials(connection)
+        .map_err(|_| "MIGRATION_BACKUP_ASSET_CREDENTIALS")?
+        .ok_or("MIGRATION_BACKUP_ASSET_CREDENTIALS")?;
+    Ok(MigrationAssetSource(PreparedManualSync {
+        target_epoch: String::new(),
+        bucket: build_bucket(&settings, credentials)
+            .map_err(|_| "MIGRATION_BACKUP_ASSET_CONFIG")?,
+        note_object_key: derive_note_object_key(&settings.object_key),
+        note_attachment_object_key: derive_note_attachment_object_key(&settings.object_key),
+        note_asset_prefix: derive_note_asset_prefix(&settings.object_key),
+        object_key: settings.object_key,
+    }))
+}
+
+impl MigrationAssetSource {
+    pub async fn download(
+        &self,
+        runtime: &SyncRuntime,
+        uuid: &str,
+        name: &str,
+        size: i64,
+        sha256: &str,
+    ) -> Result<Vec<u8>, String> {
+        download_asset_bytes(runtime, &self.0, uuid, name, size, sha256)
+            .await
+            .map_err(|_| "MIGRATION_BACKUP_ASSET_DOWNLOAD".into())
+    }
 }
 
 pub async fn download_remote(prepared: &PreparedManualSync) -> Result<RemoteSyncObject, String> {
@@ -695,14 +737,16 @@ pub async fn head_asset_object(
         .await
         .map_err(|error| format!("检查远端附件失败，请检查网络后重试：{error}"))?;
     match status {
-        200..=299 => Ok(RemoteAssetState {
+        200 => Ok(RemoteAssetState {
             exists: true,
+            etag: headers.e_tag,
             content_length: headers.content_length,
             content_type: headers.content_type,
             sha256: metadata_value(headers.metadata.as_ref(), "sha256"),
         }),
         404 => Ok(RemoteAssetState {
             exists: false,
+            etag: None,
             content_length: None,
             content_type: None,
             sha256: None,
@@ -765,14 +809,32 @@ pub async fn download_asset_bytes(
     validate_asset_identity(file_name, expected_size, expected_sha256)?;
     let _guard = runtime.acquire_asset(attachment_uuid)?;
     let object_key = asset_object_key(prepared, attachment_uuid, file_name)?;
-    let response = prepared
-        .bucket
-        .get_object(&object_key)
+    let request = ReqwestRequest::new(&prepared.bucket, &object_key, Command::GetObject)
+        .await
+        .map_err(|_| "下载附件失败：无法创建读取请求")?;
+    let mut response = request
+        .response()
         .await
         .map_err(|error| format!("下载附件失败，请检查网络后重试：{error}"))?;
-    match response.status_code() {
-        200..=299 => {
-            let bytes = response.to_vec();
+    match response.status().as_u16() {
+        200 => {
+            if response
+                .content_length()
+                .is_some_and(|n| n != expected_size as u64)
+            {
+                return Err("下载附件失败：文件大小与同步元数据不一致".into());
+            }
+            let mut bytes = Vec::new();
+            while let Some(chunk) = response
+                .chunk()
+                .await
+                .map_err(|_| "下载附件失败：读取中断")?
+            {
+                if chunk.len() > expected_size as usize - bytes.len() {
+                    return Err("下载附件失败：文件超过预期大小".into());
+                }
+                bytes.extend_from_slice(&chunk);
+            }
             if bytes.len() as i64 != expected_size {
                 return Err("下载附件失败：文件大小与同步元数据不一致".to_string());
             }
@@ -804,14 +866,32 @@ pub async fn delete_asset_if_matches(
     if !asset_matches_without_type(&remote, expected_size, expected_sha256) {
         return Err("拒绝删除远端附件：对象大小或 SHA-256 与元数据不一致".to_string());
     }
+    let etag = remote
+        .etag
+        .as_deref()
+        .filter(|value| {
+            let bytes = value.as_bytes();
+            (3..=1024).contains(&bytes.len())
+                && bytes[0] == b'"'
+                && bytes[bytes.len() - 1] == b'"'
+                && bytes[1..bytes.len() - 1]
+                    .iter()
+                    .all(|b| *b == 0x21 || (0x23..=0x7e).contains(b))
+        })
+        .ok_or("拒绝删除远端附件：缺少有效 ETag，请保留文件并重试")?;
+    let mut bucket = prepared.bucket.clone();
+    bucket.extra_headers.insert(
+        HeaderName::from_static("if-match"),
+        HeaderValue::from_str(etag).map_err(|_| "拒绝删除远端附件：ETag 无效")?,
+    );
     let object_key = asset_object_key(prepared, attachment_uuid, file_name)?;
-    let response = prepared
-        .bucket
+    let response = bucket
         .delete_object(&object_key)
         .await
         .map_err(|error| format!("删除远端附件失败，请检查网络后重试：{error}"))?;
     match response.status_code() {
-        200..=299 | 404 => Ok(true),
+        200 | 204 | 404 => Ok(true),
+        409 | 412 => Err("远端附件已变化，未删除；请重新同步后重试".into()),
         401 | 403 => Err("删除远端附件失败：凭据无效或没有对象删除权限".to_string()),
         status => Err(format!("删除远端附件失败，S3 服务返回状态码 {status}")),
     }
@@ -1173,6 +1253,10 @@ fn build_bucket(
 }
 
 #[cfg(test)]
+#[path = "s3_asset_safety_tests.rs"]
+mod asset_safety_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -1315,6 +1399,7 @@ mod tests {
 
         let remote = RemoteAssetState {
             exists: true,
+            etag: Some("\"fixture-etag\"".into()),
             content_length: Some(bytes.len() as i64),
             content_type: Some("image/jpeg".to_string()),
             sha256: Some(sha256.clone()),

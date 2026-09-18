@@ -38,12 +38,16 @@ const TABLES: &[&str] = &[
     "app_metadata",
 ];
 
+#[path = "migration_recovery.rs"]
+mod recovery;
+pub use recovery::rehearse;
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct FileEntry {
-    name: String,
-    size: u64,
-    sha256: String,
+    pub name: String,
+    pub size: u64,
+    pub sha256: String,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
@@ -335,7 +339,18 @@ fn writable(path: &Path) -> Result<(), String> {
         Err(e) => Err(io(e)),
     }
 }
+#[cfg(test)]
 pub fn copy(work: &Work, root: &Path, assets: &Path) -> Result<(), String> {
+    copy_with_missing(work, root, assets, |_| Err("MIGRATION_BACKUP_ASSET".into()))
+}
+
+// Downloads are only allowed into the private snapshot, never the live attachment cache.
+pub fn copy_with_missing(
+    work: &Work,
+    root: &Path,
+    assets: &Path,
+    mut download: impl FnMut(&FileEntry) -> Result<Vec<u8>, String>,
+) -> Result<(), String> {
     let target = folder(root, &work.plan, true)?;
     let manifest = manifest(&work.plan)?;
     let manifest_path = target.join("manifest.json");
@@ -355,12 +370,23 @@ pub fn copy(work: &Work, root: &Path, assets: &Path) -> Result<(), String> {
             file.write_all(&work.data).map_err(io)?;
             file.sync_all().map_err(io)?;
         } else {
-            directory(assets, false).map_err(|_| "MIGRATION_BACKUP_ASSET")?;
             let parent = assets.join(&entry.name[..36]);
-            directory(&parent, false).map_err(|_| "MIGRATION_BACKUP_ASSET")?;
             let source = parent.join(&entry.name[37..]);
-            verify(&source, entry).map_err(|_| "MIGRATION_BACKUP_ASSET".to_string())?;
-            fs::copy(&source, &output).map_err(io)?;
+            let available = directory(assets, false)
+                .and_then(|_| directory(&parent, false))
+                .and_then(|_| verify(&source, entry));
+            if available.is_ok() {
+                fs::copy(&source, &output).map_err(io)?;
+            } else {
+                let bytes = download(entry)?;
+                if bytes.len() as u64 != entry.size || digest(&bytes) != entry.sha256 {
+                    return Err("MIGRATION_BACKUP_ASSET_INVALID".into());
+                }
+                writable(&output)?;
+                let mut file = fs::File::create(&output).map_err(io)?;
+                file.write_all(&bytes).map_err(io)?;
+                file.sync_all().map_err(io)?;
+            }
             fs::OpenOptions::new()
                 .write(true)
                 .open(&output)
@@ -399,18 +425,23 @@ pub fn verify_files(root: &Path, plan: &BackupPlan) -> Result<(), String> {
 }
 pub fn finish(c: &mut Connection, plan: &BackupPlan, now: i64) -> Result<BackupReport, String> {
     let tx = c.transaction().map_err(db)?;
+    require_current(&tx, plan)?;
     let mut current = latest(&tx)?.ok_or("MIGRATION_BACKUP_CHANGED")?;
-    if current.operation != plan.operation
-        || current.files != plan.files
-        || assets(&tx)? != plan.files[1..]
-        || digest(&capture(&tx)?) != plan.data_hash
-    {
-        return Err("MIGRATION_BACKUP_CHANGED".into());
-    }
     current.verified_at = Some(now);
     save(&tx, &current)?;
     tx.commit().map_err(db)?;
     report(c, &current)
+}
+pub fn require_current(c: &Connection, plan: &BackupPlan) -> Result<(), String> {
+    let current = latest(c)?.ok_or("MIGRATION_BACKUP_CHANGED")?;
+    if current.operation != plan.operation
+        || current.files != plan.files
+        || assets(c)? != plan.files[1..]
+        || digest(&capture(c)?) != plan.data_hash
+    {
+        return Err("MIGRATION_BACKUP_CHANGED".into());
+    }
+    Ok(())
 }
 pub fn report(c: &mut Connection, plan: &BackupPlan) -> Result<BackupReport, String> {
     let tx = c.transaction().map_err(db)?;

@@ -165,3 +165,82 @@ fn source_ledger_history_and_receipts_are_bound_not_only_preflight_counts() {
     drop(c);
     fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn missing_deleted_asset_download_is_verified_and_never_replaces_live_cache() {
+    let root = directory_fixture();
+    let mut c = database(&root.join("db.sqlite"));
+    let assets = source(&c, &root);
+    let uuid = "00000000-0000-4000-8000-000000000002";
+    let original = assets.join(uuid).join("original");
+    fs::write(&original, b"corrupt").unwrap();
+    let work = prepare(&mut c, 10).unwrap();
+    let backup = root.join("migration-backups");
+    let mut requests = 0;
+    copy_with_missing(&work, &backup, &assets, |entry| {
+        assert_eq!(entry.name, format!("{uuid}-original"));
+        require_current(&c, &work.plan)?;
+        requests += 1;
+        Ok(b"data".to_vec())
+    })
+    .unwrap();
+    assert_eq!(requests, 1);
+    assert_eq!(fs::read(&original).unwrap(), b"corrupt");
+    rehearse(&backup, &work.plan).unwrap();
+    finish(&mut c, &work.plan, 20).unwrap();
+    drop(c);
+    let mut c = database(&root.join("db.sqlite"));
+    let retry = prepare(&mut c, 30).unwrap();
+    assert_eq!(retry.plan.operation, work.plan.operation);
+    copy_with_missing(&retry, &backup, &assets, |_| {
+        panic!("valid copy must not redownload")
+    })
+    .unwrap();
+    finish(&mut c, &retry.plan, 40).unwrap();
+    drop(c);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn download_failure_corruption_and_target_change_cannot_certify_snapshot() {
+    let root = directory_fixture();
+    let mut c = database(&root.join("db.sqlite"));
+    let assets = source(&c, &root);
+    fs::remove_file(assets.join("00000000-0000-4000-8000-000000000002/original")).unwrap();
+    let work = prepare(&mut c, 10).unwrap();
+    let backup = root.join("migration-backups");
+    assert_eq!(
+        copy_with_missing(&work, &backup, &assets, |_| Err(
+            "MIGRATION_BACKUP_ASSET_DOWNLOAD".into()
+        ))
+        .unwrap_err(),
+        "MIGRATION_BACKUP_ASSET_DOWNLOAD"
+    );
+    for bytes in [b"bad".to_vec(), b"xxxx".to_vec()] {
+        assert_eq!(
+            copy_with_missing(&work, &backup, &assets, |_| Ok(bytes.clone())).unwrap_err(),
+            "MIGRATION_BACKUP_ASSET_INVALID"
+        );
+        assert!(latest(&c).unwrap().unwrap().verified_at.is_none());
+    }
+    copy_with_missing(&work, &backup, &assets, |_| {
+        c.execute(
+            "UPDATE sync_settings SET endpoint='https://changed.example'",
+            [],
+        )
+        .unwrap();
+        Ok(b"data".to_vec())
+    })
+    .unwrap();
+    assert_eq!(
+        require_current(&c, &work.plan).unwrap_err(),
+        "MIGRATION_BACKUP_CHANGED"
+    );
+    assert_eq!(
+        finish(&mut c, &work.plan, 20).err().unwrap(),
+        "MIGRATION_BACKUP_CHANGED"
+    );
+    assert!(latest(&c).unwrap().unwrap().verified_at.is_none());
+    drop(c);
+    fs::remove_dir_all(root).unwrap();
+}

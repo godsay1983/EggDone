@@ -13,7 +13,9 @@
     try { report = await migrationBackupApi(action); verifiedNow = action !== 'status' && !!report?.current; }
     catch (error) {
       const code = error instanceof Error ? error.message : String(error);
-      message = code.includes('ASSET') ? 'migrationBackup.assetMissing' :
+      message = code.includes('ASSET_CONFIG') || code.includes('ASSET_CREDENTIALS') ? 'migrationBackup.assetConfig' :
+        code.includes('ASSET_DOWNLOAD') ? 'migrationBackup.assetDownload' :
+        code.includes('RECOVERY') ? 'migrationBackup.recoveryFailed' : code.includes('ASSET') ? 'migrationBackup.assetMissing' :
         code.includes('CHANGED') ? 'migrationBackup.changed' : code.includes('BUSY') ? 'migrationBackup.busy' :
         code.includes('LIMIT') ? 'migrationBackup.limit' : 'migrationBackup.failed';
     } finally { busy = false; onBusy(false); }

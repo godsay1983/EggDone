@@ -18,7 +18,9 @@ export async function invoke(command,args){
     window.backupCalls=(window.backupCalls||[]).concat(args.action);
     if(args.action==='status')return null;
     if(window.backupFail){window.backupFail=false;throw Error('MIGRATION_BACKUP_ASSET');}
+    if(window.backupRemoteFail){const code=window.backupRemoteFail;window.backupRemoteFail=null;throw Error(code);}
     if(window.backupChanged)throw Error('MIGRATION_BACKUP_CHANGED');
+    if(window.recoveryFail)throw Error('MIGRATION_RECOVERY_FAILED');
     return {operation:'backup-operation',files:2,bytes:1024,verifiedAt:1,current:true,blockers:['pending_notes']};
   }
   if(command==='unfinished_trash_purge')return null;
@@ -145,8 +147,19 @@ try {
     await prepareBackup.waitFor();
     await page.evaluate(()=>window.backupFail=true);await prepareBackup.click();
     await page.getByRole('alert').filter({hasText:lang==='zh-CN'?'附件缺失':'attachment is missing'}).waitFor();
+    for(const code of ['MIGRATION_BACKUP_ASSET_CONFIG','MIGRATION_BACKUP_ASSET_DOWNLOAD']){
+      await page.evaluate(code=>window.backupRemoteFail=code,code);await prepareBackup.click();
+      await page.getByRole('alert').filter({hasText:code.endsWith('CONFIG')?(lang==='zh-CN'?'当前同步配置或凭据不可用':'sync settings or credentials are unavailable'):(lang==='zh-CN'?'未能从当前同步空间下载':'could not be downloaded or verified')}).waitFor();
+    }
     await prepareBackup.click();
     await page.getByRole('status').filter({hasText:lang==='zh-CN'?'重新读取并校验':'reopened and verified'}).waitFor();
+    await page.evaluate(()=>window.recoveryFail=true);
+    await page.getByRole('button',{name:lang==='zh-CN'?'重新校验':'Recheck',exact:true}).click();
+    await page.getByRole('alert').filter({hasText:lang==='zh-CN'?'隔离恢复验证未通过':'Isolated recovery or temporary file cleanup failed'}).waitFor();
+    assert.equal(await page.getByRole('status').filter({hasText:lang==='zh-CN'?'隔离恢复验证通过':'Isolated recovery passed'}).count(),0);
+    await page.evaluate(()=>window.recoveryFail=false);
+    await prepareBackup.click();
+    await page.getByRole('status').filter({hasText:lang==='zh-CN'?'隔离恢复验证通过':'Isolated recovery passed'}).waitFor();
     assert.equal(await page.evaluate(()=>window.purgeCalls.length),0,'backup never deletes');
     assert.ok(await page.locator('dialog').evaluate(el=>el.scrollWidth<=el.clientWidth),'migration panel overflow');
     await page.screenshot({path:resolve(output,'migration-'+lang+'-'+theme+'.png')});

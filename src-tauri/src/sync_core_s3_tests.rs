@@ -1,6 +1,7 @@
 //! Opt-in real-S3 integration for the complete desktop synchronization core.
 use super::*;
 use s3::{creds::Credentials, region::Region, BucketConfiguration};
+use sha2::Digest;
 
 const ACCESS: &str = "eggdone-ns7-test-access";
 const SECRET: &str = "eggdone-ns7-public-test-fixture";
@@ -16,6 +17,75 @@ mod purge_compat;
 
 #[path = "sync_core_migration_s3_tests.rs"]
 mod migration;
+
+#[test]
+#[ignore = "Use run-sync-core-s3.ps1 -AssetSafetySessions; disposable bucket only"]
+fn asset_safety_prepare() {
+    tauri::async_runtime::block_on(async {
+        let target = bucket(SECRET);
+        let response = Bucket::create_with_path_style(
+            &target.name,
+            target.region.clone(),
+            Credentials::new(Some(ACCESS), Some(SECRET), None, None, None).unwrap(),
+            BucketConfiguration::default(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(response.response_code, 200);
+        let client = Client::new(TODO, NOTE);
+        let prepared = s3_sync::PreparedManualSync::from_test_bucket(
+            &client.db.connection.lock().unwrap(),
+            bucket(SECRET),
+        );
+        let content = b"data";
+        let digest = format!("{:x}", sha2::Sha256::digest(content));
+        s3_sync::upload_immutable_asset(
+            &client.runtime,
+            &prepared,
+            ASSET,
+            "original",
+            content,
+            "text/plain",
+            &digest,
+        )
+        .await
+        .unwrap();
+        let key = format!("account/assets/{ASSET}/original");
+        let mut stale = target.clone();
+        stale.extra_headers.insert(
+            http::HeaderName::from_static("if-match"),
+            http::HeaderValue::from_static("\"stale-version\""),
+        );
+        let refused = stale.delete_object(&key).await.unwrap();
+        assert_eq!(
+            refused.status_code(),
+            412,
+            "S3 must enforce conditional DELETE"
+        );
+        assert_eq!(target.get_object(&key).await.unwrap().as_slice(), content);
+        assert!(s3_sync::delete_asset_if_matches(
+            &client.runtime,
+            &prepared,
+            ASSET,
+            "original",
+            4,
+            &digest
+        )
+        .await
+        .unwrap());
+        assert!(!s3_sync::delete_asset_if_matches(
+            &client.runtime,
+            &prepared,
+            ASSET,
+            "original",
+            4,
+            &digest
+        )
+        .await
+        .unwrap());
+        println!("ASSET_SAFETY_DESKTOP_OK: conditional DELETE enforced, production deletion and idempotent retry passed");
+    });
+}
 
 #[test]
 #[ignore = "Use run-sync-core-s3.ps1 -TrashRecoverySessions with the Harmony peer"]
