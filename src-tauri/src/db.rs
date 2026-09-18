@@ -9,7 +9,7 @@ use rusqlite::{params, Connection, Transaction};
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
-const CURRENT_SCHEMA_VERSION: i64 = 21;
+const CURRENT_SCHEMA_VERSION: i64 = 22;
 const DEVICE_ID_KEY: &str = "device_id";
 
 pub struct Database {
@@ -94,6 +94,9 @@ pub(crate) fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {
     })?;
     apply_migration(connection, 21, |transaction| {
         transaction.execute_batch(include_str!("migrations/021_task_templates.sql"))
+    })?;
+    apply_migration(connection, 22, |transaction| {
+        transaction.execute_batch(include_str!("migrations/022_purge.sql"))
     })?;
     debug_assert_eq!(schema_version(connection)?, CURRENT_SCHEMA_VERSION);
     Ok(())

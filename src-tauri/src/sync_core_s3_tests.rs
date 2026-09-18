@@ -186,6 +186,8 @@ fn full_session_prepare() {
         assert_eq!(response.response_code, 200);
         let desktop = Client::new(TODO, NOTE);
         desktop.add_file();
+        let pending = crate::migration_preflight::inspect(&desktop.db, &desktop.runtime).unwrap();
+        assert!(pending.blockers().contains(&"pending_uploads".into()));
         let result = desktop.sync(bucket(SECRET)).await.unwrap();
         assert_eq!(
             (
@@ -196,6 +198,16 @@ fn full_session_prepare() {
             (1, 1, 1)
         );
         assert!(desktop.state().dirty_domains.is_empty());
+        // The native command records success after sync_now_inner; Client exercises the inner core.
+        sync_runtime_state::record_success(&desktop.db.connection.lock().unwrap()).unwrap();
+        let ready = crate::migration_preflight::inspect(&desktop.db, &desktop.runtime).unwrap();
+        assert!(ready.blockers().is_empty(), "{:?}", ready.blockers());
+        ready
+            .require_unchanged(
+                &crate::migration_preflight::inspect(&desktop.db, &desktop.runtime).unwrap(),
+            )
+            .unwrap();
+        assert!(pending.require_unchanged(&ready).is_err());
         println!("FULL_SESSION_DESKTOP_PREPARE_OK");
     });
 }

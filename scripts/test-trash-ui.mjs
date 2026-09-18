@@ -14,6 +14,19 @@ const output = resolve(tmpdir(), 'eggdone-trash-ui-' + Date.now());
 mkdirSync(output, { recursive: true });
 const native = `export const isTauri=()=>false;
 export async function invoke(command,args){
+  if(command==='unfinished_trash_purge')return null;
+  if(command==='prepare_trash_purge'){
+    if(window.legacy)throw Error('PURGE_MIGRATION_REQUIRED');
+    window.purgeTargets=structuredClone(args.selected||window.rows.map(({kind,uuid})=>({kind,uuid})));
+    return window.purgePlan={operation_uuid:'test-operation',total:window.purgeTargets.length,attachments:1,bytes:100,
+      state:'prepared',pending:window.purgeTargets.length,purged:0,skipped:0,cleanup_pending:0};
+  }
+  if(command==='run_trash_purge'){
+    window.purgeCalls.push(args.operationUuid);
+    if(window.purgeFail){window.purgeFail=false;throw Error('PURGE_DATABASE_FAILED');}
+    window.rows=window.rows.filter(row=>!window.purgeTargets.some(t=>t.kind===row.kind&&t.uuid===row.uuid));
+    return {...window.purgePlan,state:'complete',pending:0,purged:window.purgeTargets.length};
+  }
   if(command==='list_trash'){if(window.failLoad)throw Error('read');return structuredClone(window.rows.slice(args.offset,args.offset+args.limit));}
   if(command==='preview_trash')return structuredClone(window.rows.find(r=>r.uuid===args.uuid));
   if(command==='restore_trash'){
@@ -31,7 +44,7 @@ import {setLanguageMode} from '/src/lib/i18n/index.ts';
 import '/src/app.css';
 const p=new URLSearchParams(location.search);setLanguageMode(p.get('lang'));
 document.documentElement.dataset.theme=p.get('theme');document.documentElement.style.zoom=p.get('scale')||'1';
-window.writes=[];window.trashClosed=false;window.failRefresh=false;window.failLoad=p.has('failLoad');window.hold=false;
+window.writes=[];window.purgeCalls=[];window.trashClosed=false;window.failRefresh=false;window.failLoad=p.has('failLoad');window.hold=false;
 window.rows=Array.from({length:p.has('pages')?51:2},(_,i)=>({kind:i%2?'note':'todo',uuid:String(i),
 title:i===0?'Long task title '.repeat(7):'Note '+i,content:'Full body line\n'.repeat(35),
 deleted_at:1789190000000,updated_at:1789190000000,updated_by:'test',completed:true,repeating:true,
@@ -111,8 +124,42 @@ try {
   await page.locator('.record').first().waitFor(); assert.equal(await page.locator('.record').count(), 50);
   await page.getByRole('button', { name: 'Load more', exact: true }).click();
   await page.waitForFunction(() => document.querySelectorAll('.record').length === 51);
+  for (const lang of ['zh-CN','en-US']) for (const theme of ['light','dark']) {
+    await page.setViewportSize({width:480,height:720});
+    await page.goto(url+'?lang='+lang+'&theme='+theme+'&scale=1.5');
+    await page.locator('.record').first().waitFor();
+    const all=lang==='zh-CN'?'清空回收站':'Empty trash';
+    await page.evaluate(()=>window.legacy=true);
+    await page.getByRole('button',{name:all,exact:true}).click();
+    await page.getByRole('status').filter({hasText:lang==='zh-CN'?'同步空间':'sync space'}).waitFor();
+    assert.equal(await page.evaluate(()=>window.purgeCalls.length),0);
+    await page.evaluate(()=>window.legacy=false);
+    await page.getByRole('button',{name:all,exact:true}).click();
+    const execute=page.locator('footer button').last();
+    assert.equal(await execute.isDisabled(),true);
+    await page.locator('.purge-agreement input').check();
+    await page.evaluate(()=>{window.purgeFail=true;window.rows.push({...window.rows[0],uuid:'late'});});
+    await execute.click();
+    await page.getByRole('status').filter({hasText:lang==='zh-CN'?'未全部完成':'did not finish'}).waitFor();
+    assert.equal(await page.evaluate(()=>window.rows.length),3);
+    await page.screenshot({path:resolve(output,'purge-'+lang+'-'+theme+'.png')});
+    for(const button of await page.locator('footer button').all()) {
+      const b=await button.boundingBox(); assert.ok(b.x>=0&&b.y>=0&&b.x+b.width<=481&&b.y+b.height<=721,'purge footer clipped');
+    }
+    await execute.click();
+    await page.waitForFunction(()=>window.rows.length===1);
+    assert.deepEqual(await page.evaluate(()=>window.purgeCalls),['test-operation','test-operation']);
+    assert.equal(await page.evaluate(()=>window.rows[0].uuid),'late');
+    await page.keyboard.press('Escape');
+    await page.locator('.record').first().waitFor();
+    await page.getByRole('button',{name:lang==='zh-CN'?'批量选择':'Select items',exact:true}).click();
+    await page.locator('.selection-check input').check();
+    assert.equal(await page.locator('footer button').isDisabled(),false);
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('.selection-check').count(),0);
+  }
   assert.deepEqual(errors, []);
-  console.log('Trash UI: ' + count + ' locale/theme/window/zoom combinations, cancel/conflict/busy/refresh retry/pagination passed. Screenshots: ' + output);
+  console.log('Trash UI: ' + count + ' locale/theme/window/zoom combinations plus 4 purge confirmation/gate/retry scenarios passed. Screenshots: ' + output);
 } catch (error) {
   if (page) {
     await page.screenshot({ path: resolve(output, 'failure.png') });

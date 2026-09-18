@@ -406,6 +406,9 @@ impl Drop for AssetTransferGuard<'_> {
 }
 
 pub fn prepare_manual_sync(connection: &Connection) -> Result<PreparedManualSync, String> {
+    if !crate::purge::terminals(connection)?.is_empty() {
+        return Err("PURGE_MIGRATION_REQUIRED".into());
+    }
     let settings = read_settings(connection)?;
     if !settings.enabled {
         return Err("请先启用并保存同步配置".to_string());

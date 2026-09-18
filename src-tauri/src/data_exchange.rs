@@ -22,7 +22,7 @@ use crate::{
     tray::PanelState,
 };
 
-const FORMAT_VERSION: u32 = 5;
+const FORMAT_VERSION: u32 = 6;
 const BACKUP_FORMAT_VERSION: u32 = 1;
 const BACKUP_MAX_ENTRY_COUNT: usize = 10_000;
 const BACKUP_MAX_TOTAL_BYTES: u64 = 512 * 1024 * 1024;
@@ -1064,8 +1064,20 @@ fn capture_export(
     } else {
         note_attachment_sync::build_document(&tx, exported_at)?
     };
+    let terminals = crate::purge::terminals(&tx)?;
+    let mut extra = std::collections::BTreeMap::new();
+    if !terminals.is_empty() {
+        extra.insert(
+            "lifecycle_terminals".into(),
+            serde_json::to_value(&terminals).map_err(|_| "PURGE_LEDGER_INVALID")?,
+        );
+    }
     let export = TodoExport {
-        format_version: FORMAT_VERSION,
+        format_version: if terminals.is_empty() {
+            5
+        } else {
+            FORMAT_VERSION
+        },
         exported_at,
         groups: read_all_groups(&tx)?,
         todos: read_all_todos(&tx)?,
@@ -1077,7 +1089,7 @@ fn capture_export(
         task_checklist_items: Some(checklist.items),
         task_checklist_definitions: Some(checklist.definitions),
         task_templates: Some(crate::task_template_store::read_in_transaction(&tx)?.document),
-        extra: Default::default(),
+        extra,
     };
     validate_import_mode(&export, full)?;
     tx.commit().map_err(database_error)?;
@@ -1093,6 +1105,102 @@ fn read_import_file(path: &Path) -> Result<TodoExport, String> {
     Ok(import)
 }
 
+#[cfg(test)]
+mod purge_backup_tests {
+    use super::*;
+    const ID: &str = "123e4567-e89b-42d3-a456-426614174000";
+    fn database() -> Connection {
+        let mut db = Connection::open_in_memory().unwrap();
+        crate::db::migrate(&mut db).unwrap();
+        db
+    }
+    #[test]
+    #[ignore = "Invoked by the isolated Harmony purge backup harness"]
+    fn purge_backup_cross_client_exchange() {
+        let input = std::env::var("EGGDONE_PURGE_BACKUP_INPUT").unwrap();
+        let output = std::env::var("EGGDONE_PURGE_BACKUP_OUTPUT").unwrap();
+        let mut db = database();
+        merge_import(&mut db, read_import_file(Path::new(&input)).unwrap()).unwrap();
+        assert!(!crate::purge::terminals(&db).unwrap().is_empty());
+        let export = capture_export(&mut db, false, 4000).unwrap();
+        assert_eq!(export.format_version, 6);
+        fs::write(output, serde_json::to_vec(&export).unwrap()).unwrap();
+    }
+    #[test]
+    fn terminal_backup_roundtrip_and_legacy_import_cannot_revive() {
+        let mut source = database();
+        source.execute("INSERT INTO todos(uuid,title,sort_order,created_at,updated_at,updated_by,deleted_at) VALUES(?1,'private text',0,1,1,'test',2)",[ID]).unwrap();
+        let legacy =
+            serde_json::to_string(&capture_export(&mut source, false, 10).unwrap()).unwrap();
+        let plan = crate::purge::prepare(&mut source, None, 20).unwrap();
+        crate::purge::execute_batch(&mut source, &plan.operation_uuid, 30).unwrap();
+        let export = capture_export(&mut source, false, 40).unwrap();
+        assert_eq!(export.format_version, 6);
+        let bytes = serde_json::to_string(&export).unwrap();
+        assert!(!bytes.contains("private text"));
+        let mut target = database();
+        merge_import(&mut target, serde_json::from_str(&bytes).unwrap()).unwrap();
+        assert_eq!(
+            crate::purge::terminals(&target).unwrap(),
+            crate::purge::terminals(&source).unwrap()
+        );
+        assert!(merge_import(&mut target, serde_json::from_str(&legacy).unwrap()).is_err());
+        assert_eq!(
+            target
+                .query_row("SELECT COUNT(*) FROM todos", [], |r| r.get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+        let mut invalid: TodoExport = serde_json::from_str(&bytes).unwrap();
+        invalid.extra.clear();
+        assert!(validate_import(&invalid).is_err());
+        let mut invalid: TodoExport = serde_json::from_str(&bytes).unwrap();
+        invalid.format_version = 5;
+        assert!(validate_import(&invalid).is_err());
+    }
+    #[test]
+    fn terminal_backup_cannot_silently_delete_an_existing_item() {
+        let mut target = database();
+        target.execute("INSERT INTO todos(uuid,title,sort_order,created_at,updated_at,updated_by) VALUES(?1,'keep',0,1,1,'test')",[ID]).unwrap();
+        let mut empty = database();
+        let mut export = capture_export(&mut empty, false, 10).unwrap();
+        export.format_version = 6;
+        export.extra.insert("lifecycle_terminals".into(),serde_json::json!([{"kind":"todo","uuid":ID,"operation_uuid":uuid::Uuid::new_v4().to_string(),"purged_at":20}]));
+        assert_eq!(
+            merge_import(&mut target, export).unwrap_err(),
+            "PURGE_IMPORT_CONFLICT"
+        );
+        assert_eq!(
+            target
+                .query_row("SELECT title FROM todos", [], |r| r.get::<_, String>(0))
+                .unwrap(),
+            "keep"
+        );
+    }
+}
+
+fn import_terminals(import: &TodoExport) -> Result<Vec<crate::purge::Terminal>, String> {
+    if import.format_version < 6 {
+        if import.extra.contains_key("lifecycle_terminals") {
+            return Err("PURGE_BACKUP_VERSION".into());
+        }
+        return Ok(Vec::new());
+    }
+    if import.format_version != 6 || import.extra.len() != 1 {
+        return Err("PURGE_BACKUP_VERSION".into());
+    }
+    let records: Vec<crate::purge::Terminal> = serde_json::from_value(
+        import
+            .extra
+            .get("lifecycle_terminals")
+            .ok_or("PURGE_BACKUP_VERSION")?
+            .clone(),
+    )
+    .map_err(|_| "PURGE_LEDGER_INVALID")?;
+    crate::purge::validate_terminals(&records)?;
+    Ok(records)
+}
+
 fn validate_import(import: &TodoExport) -> Result<(), String> {
     validate_import_mode(import, false)
 }
@@ -1102,9 +1210,19 @@ fn validate_complete_import(import: &TodoExport) -> Result<(), String> {
 }
 
 fn validate_import_mode(import: &TodoExport, expect_attachment_files: bool) -> Result<(), String> {
+    let terminals = import_terminals(import)?;
+    if terminals.iter().any(|terminal| {
+        if terminal.kind == "todo" {
+            import.todos.iter().any(|todo| todo.uuid == terminal.uuid)
+        } else {
+            import.notes.iter().any(|note| note.uuid == terminal.uuid)
+        }
+    }) {
+        return Err("PURGE_LEDGER_CONTRADICTION".into());
+    }
     match (import.format_version, &import.recurrence) {
         (1, None) => {}
-        (2 | 3 | 4 | 5, Some(backup)) => {
+        (2 | 3 | 4 | 5 | 6, Some(backup)) => {
             crate::recurrence_backup::validate(backup)?;
             if backup
                 .instances
@@ -1118,7 +1236,7 @@ fn validate_import_mode(import: &TodoExport, expect_attachment_files: bool) -> R
     }
     match (import.format_version, &import.task_note_links) {
         (1 | 2, None) => {}
-        (3 | 4 | 5, Some(links)) => {
+        (3 | 4 | 5 | 6, Some(links)) => {
             crate::task_note_link_protocol::encode_document(links)?;
         }
         _ => return Err("INVALID_TASK_NOTE_LINK_BACKUP_VERSION".into()),
@@ -1129,13 +1247,18 @@ fn validate_import_mode(import: &TodoExport, expect_attachment_files: bool) -> R
         &import.task_checklist_definitions,
     ) {
         (1..=3, None, None) => {}
-        (4 | 5, Some(items), Some(definitions)) if import.extra.is_empty() => {
+        (4 | 5 | 6, Some(items), Some(definitions))
+            if import.extra.is_empty() || import.format_version == 6 =>
+        {
             crate::task_checklist_protocol::encode_items(items)?;
             crate::task_checklist_protocol::encode_definitions(definitions)?;
         }
         _ => return Err("INVALID_CHECKLIST_BACKUP_VERSION".into()),
     }
-    crate::task_template_backup::validate(import.format_version, import.task_templates.as_ref())?;
+    crate::task_template_backup::validate(
+        import.format_version.min(5),
+        import.task_templates.as_ref(),
+    )?;
     if import.format_version > FORMAT_VERSION {
         return Err(format!(
             "导入文件版本 {} 高于当前支持的版本 {}",
@@ -1473,6 +1596,8 @@ fn merge_import_in_transaction(
     connection: &rusqlite::Transaction<'_>,
     import: TodoExport,
 ) -> Result<ImportResult, String> {
+    let terminals = import_terminals(&import)?;
+    crate::purge::restore_terminals(connection, &terminals)?;
     let note_changes = count_note_changes(connection, &import.notes)?;
     let attachment_changes = count_attachment_changes(connection, &import.note_attachments)?;
     let mut result = merge_transfer(connection, &import.groups, &import.todos)?;

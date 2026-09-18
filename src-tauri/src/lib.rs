@@ -14,6 +14,9 @@ mod db;
 mod error_codes;
 mod general_preferences;
 mod i18n;
+mod migration_preflight;
+#[cfg(test)]
+mod migration_preflight_tests;
 mod note_asset_store;
 mod note_attachment_sync;
 mod note_attachments;
@@ -24,6 +27,10 @@ mod note_history_tests;
 mod note_sync;
 mod notes;
 mod panel_position;
+mod purge;
+mod purge_commands;
+#[cfg(test)]
+mod purge_tests;
 pub mod recurrence;
 mod recurrence_backup;
 mod recurrence_commands;
@@ -242,6 +249,9 @@ pub fn run() {
             note_history_commands::restore_note_history,
             trash_commands::preview_trash,
             trash_commands::restore_trash,
+            purge_commands::prepare_trash_purge,
+            purge_commands::run_trash_purge,
+            purge_commands::unfinished_trash_purge,
             commands::list_note_attachments,
             commands::reorder_note_attachments,
             commands::create_note_image_attachment,

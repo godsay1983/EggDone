@@ -1,0 +1,279 @@
+{
+  "format_version": 1,
+  "baseline_sql": "INSERT INTO app_metadata(key,value) VALUES('sync.target.epoch.v1','123e4567-e89b-42d3-a456-426614174099');\nUPDATE sync_runtime_state SET last_result='success',last_success_at=1000,dirty_domains='[]';",
+  "cases": [
+    {
+      "id": "clean",
+      "sql": "",
+      "blockers": [],
+      "invalid": false
+    },
+    {
+      "id": "todo_insert",
+      "sql": "INSERT INTO todos(uuid,title,sort_order,created_at,updated_at,updated_by) VALUES('t','fixture',0,1,1,'fixture');",
+      "blockers": [
+        "pending_todos"
+      ],
+      "invalid": false
+    },
+    {
+      "id": "group_insert",
+      "sql": "INSERT INTO groups(uuid,name,color,sort_order,created_at,updated_at,updated_by) VALUES('g','fixture','yellow',0,1,1,'fixture');",
+      "blockers": [
+        "pending_todos"
+      ],
+      "invalid": false
+    },
+    {
+      "id": "note_insert",
+      "sql": "INSERT INTO notes(uuid,title,created_at,updated_at,updated_by) VALUES('n','fixture',1,1,'fixture');",
+      "blockers": [
+        "pending_notes"
+      ],
+      "invalid": false
+    },
+    {
+      "id": "rules_insert",
+      "sql": "INSERT INTO recurrence_rules(uuid,current_todo_uuid,active,record_json) VALUES('r','t',1,'{}');",
+      "blockers": [
+        "pending_rules"
+      ],
+      "invalid": false
+    },
+    {
+      "id": "links_insert",
+      "sql": "INSERT INTO task_note_links(uuid,todo_uuid,note_uuid,active,record_json) VALUES('l','t','n',1,'{}');",
+      "blockers": [
+        "pending_links"
+      ],
+      "invalid": false
+    },
+    {
+      "id": "items_insert",
+      "sql": "INSERT INTO task_checklist_items(uuid,todo_uuid,active,record_json) VALUES('i','t',1,'{}');",
+      "blockers": [
+        "pending_items"
+      ],
+      "invalid": false
+    },
+    {
+      "id": "definitions_insert",
+      "sql": "INSERT INTO task_checklist_definitions(rule_uuid,active,record_json) VALUES('r',1,'{}');",
+      "blockers": [
+        "pending_definitions"
+      ],
+      "invalid": false
+    },
+    {
+      "id": "templates_insert",
+      "sql": "INSERT INTO task_templates(uuid,active,record_json) VALUES('tp',1,'{}');",
+      "blockers": [
+        "pending_templates"
+      ],
+      "invalid": false
+    },
+    {
+      "id": "binary_not_metadata_flag",
+      "sql": "INSERT INTO note_attachments(uuid,note_uuid,kind,display_name,mime_type,byte_size,sha256,created_at,updated_at,updated_by) VALUES('a','n','file','fixture.txt','text/plain',1,'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',1,1,'fixture');\nUPDATE sync_runtime_state SET dirty_domains='[]';",
+      "blockers": [
+        "pending_uploads",
+        "pending_asset_metadata"
+      ],
+      "invalid": false
+    },
+    {
+      "id": "uploaded_not_published",
+      "sql": "INSERT INTO note_attachments(uuid,note_uuid,kind,display_name,mime_type,byte_size,sha256,created_at,updated_at,updated_by) VALUES('a','n','file','fixture.txt','text/plain',1,'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',1,1,'fixture');\nUPDATE sync_runtime_state SET dirty_domains='[]';UPDATE note_attachments SET remote_uploaded=1,transfer_state='uploaded';",
+      "blockers": [
+        "pending_asset_metadata"
+      ],
+      "invalid": false
+    },
+    {
+      "id": "remote_only_is_not_local_backup",
+      "sql": "INSERT INTO note_attachments(uuid,note_uuid,kind,display_name,mime_type,byte_size,sha256,created_at,updated_at,updated_by) VALUES('a','n','file','fixture.txt','text/plain',1,'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',1,1,'fixture');\nUPDATE sync_runtime_state SET dirty_domains='[]';UPDATE note_attachments SET remote_uploaded=1,transfer_state='remote_only';",
+      "blockers": [],
+      "invalid": false
+    },
+    {
+      "id": "failed_download_is_not_pending_upload",
+      "sql": "INSERT INTO note_attachments(uuid,note_uuid,kind,display_name,mime_type,byte_size,sha256,created_at,updated_at,updated_by) VALUES('a','n','file','fixture.txt','text/plain',1,'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',1,1,'fixture');\nUPDATE sync_runtime_state SET dirty_domains='[]';UPDATE note_attachments SET remote_uploaded=1,transfer_state='failed';",
+      "blockers": [],
+      "invalid": false
+    },
+    {
+      "id": "deleted_unuploaded_requires_resolution",
+      "sql": "INSERT INTO note_attachments(uuid,note_uuid,kind,display_name,mime_type,byte_size,sha256,created_at,updated_at,updated_by) VALUES('a','n','file','fixture.txt','text/plain',1,'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',1,1,'fixture');\nUPDATE sync_runtime_state SET dirty_domains='[]';UPDATE note_attachments SET deleted_at=2; UPDATE sync_runtime_state SET dirty_domains='[]';",
+      "blockers": [
+        "unuploaded_deleted_assets"
+      ],
+      "invalid": false
+    },
+    {
+      "id": "offline",
+      "sql": "UPDATE sync_runtime_state SET last_result='offline';",
+      "blockers": [
+        "sync_not_successful"
+      ],
+      "invalid": false
+    },
+    {
+      "id": "interrupted",
+      "sql": "UPDATE sync_runtime_state SET last_result='interrupted';",
+      "blockers": [
+        "sync_not_successful"
+      ],
+      "invalid": false
+    },
+    {
+      "id": "no_success",
+      "sql": "UPDATE sync_runtime_state SET last_success_at=NULL;",
+      "blockers": [
+        "sync_not_successful"
+      ],
+      "invalid": false
+    },
+    {
+      "id": "pending_target",
+      "sql": "UPDATE app_metadata SET value='pending:fixture' WHERE key='sync.target.epoch.v1';",
+      "blockers": [
+        "target_unconfirmed"
+      ],
+      "invalid": false
+    },
+    {
+      "id": "missing_target",
+      "sql": "DELETE FROM app_metadata WHERE key='sync.target.epoch.v1';",
+      "blockers": [
+        "target_unconfirmed"
+      ],
+      "invalid": false
+    },
+    {
+      "id": "target_changed_clean",
+      "sql": "UPDATE app_metadata SET value='other-epoch' WHERE key='sync.target.epoch.v1';",
+      "blockers": [],
+      "invalid": false
+    },
+    {
+      "id": "acked_edit_changed_clean",
+      "sql": "UPDATE sync_runtime_state SET todos_dirty_version=todos_dirty_version+1;",
+      "blockers": [],
+      "invalid": false
+    },
+    {
+      "id": "generation_changed_clean",
+      "sql": "UPDATE task_checklist_sync_state SET generation=generation+1 WHERE domain='items';",
+      "blockers": [],
+      "invalid": false
+    },
+    {
+      "id": "etag_changed_clean",
+      "sql": "UPDATE task_template_sync_state SET etag='\"changed\"';",
+      "blockers": [],
+      "invalid": false
+    },
+    {
+      "id": "missing_runtime",
+      "sql": "DELETE FROM sync_runtime_state;",
+      "blockers": [],
+      "invalid": true
+    },
+    {
+      "id": "missing_rule_ack",
+      "sql": "DELETE FROM recurrence_sync_state;",
+      "blockers": [],
+      "invalid": true
+    },
+    {
+      "id": "missing_checklist_ack",
+      "sql": "DELETE FROM task_checklist_sync_state WHERE domain='definitions';",
+      "blockers": [],
+      "invalid": true
+    },
+    {
+      "id": "missing_template_ack",
+      "sql": "DELETE FROM task_template_sync_state;",
+      "blockers": [],
+      "invalid": true
+    },
+    {
+      "id": "malformed_dirty",
+      "sql": "UPDATE sync_runtime_state SET dirty_domains='not JSON';",
+      "blockers": [],
+      "invalid": true
+    },
+    {
+      "id": "unknown_dirty",
+      "sql": "UPDATE sync_runtime_state SET dirty_domains='[\"future\"]';",
+      "blockers": [],
+      "invalid": true
+    },
+    {
+      "id": "duplicate_dirty",
+      "sql": "UPDATE sync_runtime_state SET dirty_domains='[\"todos\",\"todos\"]';",
+      "blockers": [],
+      "invalid": true
+    },
+    {
+      "id": "overflow_revision",
+      "sql": "UPDATE sync_runtime_state SET todos_dirty_version=9007199254740992;",
+      "blockers": [],
+      "invalid": true
+    },
+    {
+      "id": "fractional_revision",
+      "sql": "UPDATE sync_runtime_state SET todos_dirty_version=1.5;",
+      "blockers": [],
+      "invalid": true
+    },
+    {
+      "id": "empty_legacy_rules_after_target_switch",
+      "sql": "UPDATE recurrence_sync_state SET revision=1;",
+      "blockers": [],
+      "invalid": false
+    },
+    {
+      "id": "empty_previously_published_rules_still_need_ack",
+      "sql": "UPDATE recurrence_sync_state SET revision=1,etag='previous';",
+      "blockers": ["pending_rules"],
+      "invalid": false
+    },
+    {
+      "id": "stopped_rule_still_needs_ack",
+      "sql": "INSERT INTO recurrence_rules(uuid,current_todo_uuid,active,record_json) VALUES('r','t',0,'{}');",
+      "blockers": ["pending_rules"],
+      "invalid": false
+    },
+    {
+      "id": "text_revision",
+      "sql": "UPDATE sync_runtime_state SET todos_dirty_version='garbage';",
+      "blockers": [],
+      "invalid": true
+    },
+    {
+      "id": "local_terminal_not_covered_by_legacy_migration",
+      "sql": "INSERT INTO lifecycle_terminals(kind,uuid,operation_uuid,purged_at) VALUES('todo','123e4567-e89b-42d3-a456-426614174000','123e4567-e89b-42d3-a456-426614174001',1);",
+      "blockers": ["local_purge_terminals"],
+      "invalid": false
+    },
+    {
+      "id": "unfinished_purge_not_settled",
+      "sql": "INSERT INTO purge_plans(operation_uuid,target_epoch,created_at,total,attachments,bytes,state) VALUES('p','e',1,1,0,0,'running'); INSERT INTO purge_targets(operation_uuid,kind,uuid,fingerprint) VALUES('p','todo','t','hash');",
+      "blockers": ["pending_purge_targets"],
+      "invalid": false
+    },
+    {
+      "id": "purge_files_not_settled",
+      "sql": "INSERT INTO purge_cleanup(attachment_uuid,note_uuid) VALUES('a','n');",
+      "blockers": ["pending_purge_assets"],
+      "invalid": false
+    },
+    {
+      "id": "negative_revision",
+      "sql": "UPDATE sync_runtime_state SET todos_dirty_version=-1;",
+      "blockers": [],
+      "invalid": true
+    }
+  ]
+}

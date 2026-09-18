@@ -308,6 +308,19 @@ impl NoteAssetStore {
         if !directory.exists() {
             return Ok(());
         }
+        let root = self
+            .app_data_root
+            .join(ASSET_DIRECTORY)
+            .canonicalize()
+            .map_err(|_| "PURGE_ASSET_PATH")?;
+        let metadata = fs::symlink_metadata(&directory).map_err(|_| "PURGE_ASSET_PATH")?;
+        let resolved = directory.canonicalize().map_err(|_| "PURGE_ASSET_PATH")?;
+        if metadata.file_type().is_symlink()
+            || !metadata.is_dir()
+            || resolved.parent() != Some(root.as_path())
+        {
+            return Err("PURGE_ASSET_PATH".into());
+        }
         fs::remove_dir_all(directory).map_err(|error| format!("删除附件文件失败：{error}"))
     }
 
