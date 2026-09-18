@@ -53,6 +53,7 @@ mod schedule;
 mod shortcut_preferences;
 mod sync;
 mod sync_runtime_state;
+mod sync_space;
 mod sync_target;
 mod task_batch;
 mod task_batch_commands;

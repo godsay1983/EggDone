@@ -148,6 +148,21 @@ impl PreparedManualSync {
             note_asset_prefix: "account/assets/".into(),
         }
     }
+    #[cfg(test)]
+    pub(crate) fn from_test_space(
+        connection: &Connection,
+        bucket: Box<Bucket>,
+        main: &str,
+    ) -> Self {
+        Self {
+            target_epoch: crate::sync_target::capture(connection).unwrap(),
+            bucket,
+            object_key: main.into(),
+            note_object_key: derive_note_object_key(main),
+            note_attachment_object_key: derive_note_attachment_object_key(main),
+            note_asset_prefix: derive_note_asset_prefix(main),
+        }
+    }
     pub(crate) fn target_is_current(&self, connection: &Connection) -> Result<bool, String> {
         crate::sync_target::is_current(connection, &self.target_epoch)
     }
@@ -412,6 +427,7 @@ pub fn prepare_manual_sync(connection: &Connection) -> Result<PreparedManualSync
         return Err("PURGE_MIGRATION_REQUIRED".into());
     }
     let settings = read_settings(connection)?;
+    crate::sync_space::require_runtime_ready(&settings.object_key)?;
     if !settings.enabled {
         return Err("请先启用并保存同步配置".to_string());
     }
@@ -663,7 +679,59 @@ impl MigrationAssetSource {
     }
 }
 
+pub(crate) async fn download_space_json(
+    bucket: &Bucket,
+    key: &str,
+) -> Result<(String, String), String> {
+    let request = ReqwestRequest::new(bucket, key, Command::GetObject)
+        .await
+        .map_err(|_| "SYNC_SPACE_NETWORK")?;
+    let mut response = request.response().await.map_err(|_| "SYNC_SPACE_NETWORK")?;
+    if response.status().as_u16() == 404 {
+        return Err("SYNC_SPACE_INCOMPLETE".into());
+    }
+    if response.status().as_u16() != 200 {
+        return Err("SYNC_SPACE_RESPONSE".into());
+    }
+    let mut tags = response.headers().get_all("etag").iter();
+    let etag = tags
+        .next()
+        .and_then(|v| v.to_str().ok())
+        .filter(|v| crate::migration_backup::cloud::valid_etag(v))
+        .ok_or("SYNC_SPACE_ETAG")?
+        .to_string();
+    if tags.next().is_some() {
+        return Err("SYNC_SPACE_ETAG".into());
+    }
+    // Match the native mobile base-domain response cap before buffering the envelope.
+    const LIMIT: usize = 5 * 1024 * 1024;
+    if response.content_length().is_some_and(|n| n > LIMIT as u64) {
+        return Err("SYNC_SPACE_LIMIT".into());
+    }
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(|_| "SYNC_SPACE_NETWORK")? {
+        if chunk.len() > LIMIT - bytes.len() {
+            return Err("SYNC_SPACE_LIMIT".into());
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    let text = crate::sync_space::decode(
+        key,
+        std::str::from_utf8(&bytes).map_err(|_| "SYNC_SPACE_UTF8")?,
+    )?;
+    Ok((text, etag))
+}
+
 pub async fn download_remote(prepared: &PreparedManualSync) -> Result<RemoteSyncObject, String> {
+    if crate::sync_space::scope(&prepared.object_key)?.is_some() {
+        let (text, etag) = download_space_json(&prepared.bucket, &prepared.object_key).await?;
+        let document = serde_json::from_str(&text).map_err(|_| "SYNC_SPACE_INVALID")?;
+        sync::validate_document(&document)?;
+        return Ok(RemoteSyncObject {
+            document: Some(document),
+            etag: Some(etag),
+        });
+    }
     let response = prepared
         .bucket
         .get_object(&prepared.object_key)
@@ -685,10 +753,13 @@ pub async fn download_remote(prepared: &PreparedManualSync) -> Result<RemoteSync
                 etag: Some(etag),
             })
         }
-        404 => Ok(RemoteSyncObject {
-            document: None,
-            etag: None,
-        }),
+        404 => {
+            crate::sync_space::require_existing(&prepared.object_key, None)?;
+            Ok(RemoteSyncObject {
+                document: None,
+                etag: None,
+            })
+        }
         401 | 403 => Err("下载失败：凭据无效或没有对象读取权限".to_string()),
         status => Err(format!("下载同步文件失败，S3 服务返回状态码 {status}")),
     }
@@ -704,11 +775,17 @@ async fn get_object_state(
         .await
         .map_err(|error| format!("检查远端同步文件失败：{error}"))?;
 
+    crate::sync_space::require_probe(object_key, status)?;
     match status {
         200..=299 => {
             let etag = headers
                 .e_tag
                 .ok_or_else(|| "远端同步文件缺少 ETag".to_string())?;
+            if crate::sync_space::scope(object_key)?.is_some()
+                && !crate::migration_backup::cloud::valid_etag(&etag)
+            {
+                return Err("SYNC_SPACE_ETAG".into());
+            }
             Ok((true, Some(etag)))
         }
         404 => Ok((false, None)),
@@ -777,6 +854,16 @@ pub async fn get_remote_state(
 pub async fn download_note_attachment_remote(
     prepared: &PreparedManualSync,
 ) -> Result<RemoteNoteAttachmentSyncObject, String> {
+    if crate::sync_space::scope(&prepared.note_attachment_object_key)?.is_some() {
+        let (text, etag) =
+            download_space_json(&prepared.bucket, &prepared.note_attachment_object_key).await?;
+        let document = serde_json::from_str(&text).map_err(|_| "SYNC_SPACE_INVALID")?;
+        note_attachment_sync::validate_document(&document)?;
+        return Ok(RemoteNoteAttachmentSyncObject {
+            document: Some(document),
+            etag: Some(etag),
+        });
+    }
     let response = prepared
         .bucket
         .get_object(&prepared.note_attachment_object_key)
@@ -799,10 +886,13 @@ pub async fn download_note_attachment_remote(
                 etag: Some(etag),
             })
         }
-        404 => Ok(RemoteNoteAttachmentSyncObject {
-            document: None,
-            etag: None,
-        }),
+        404 => {
+            crate::sync_space::require_existing(&prepared.note_attachment_object_key, None)?;
+            Ok(RemoteNoteAttachmentSyncObject {
+                document: None,
+                etag: None,
+            })
+        }
         401 | 403 => Err("下载附件元数据失败：凭据无效或没有对象读取权限".to_string()),
         status => Err(format!("下载附件元数据失败，S3 服务返回状态码 {status}")),
     }
@@ -811,6 +901,15 @@ pub async fn download_note_attachment_remote(
 pub async fn download_note_remote(
     prepared: &PreparedManualSync,
 ) -> Result<RemoteNoteSyncObject, String> {
+    if crate::sync_space::scope(&prepared.note_object_key)?.is_some() {
+        let (text, etag) = download_space_json(&prepared.bucket, &prepared.note_object_key).await?;
+        let document = serde_json::from_str(&text).map_err(|_| "SYNC_SPACE_INVALID")?;
+        note_sync::validate_document(&document)?;
+        return Ok(RemoteNoteSyncObject {
+            document: Some(document),
+            etag: Some(etag),
+        });
+    }
     let response = prepared
         .bucket
         .get_object(&prepared.note_object_key)
@@ -832,10 +931,13 @@ pub async fn download_note_remote(
                 etag: Some(etag),
             })
         }
-        404 => Ok(RemoteNoteSyncObject {
-            document: None,
-            etag: None,
-        }),
+        404 => {
+            crate::sync_space::require_existing(&prepared.note_object_key, None)?;
+            Ok(RemoteNoteSyncObject {
+                document: None,
+                etag: None,
+            })
+        }
         401 | 403 => Err("下载便签失败：凭据无效或没有对象读取权限".to_string()),
         status => Err(format!("下载便签同步文件失败，S3 服务返回状态码 {status}")),
     }
@@ -848,6 +950,12 @@ pub async fn upload_document(
 ) -> Result<UploadOutcome, String> {
     let content = serde_json::to_vec_pretty(document)
         .map_err(|error| format!("生成同步文件失败：{error}"))?;
+    crate::sync_space::require_existing(&prepared.object_key, remote.etag.as_deref())?;
+    let content = crate::sync_space::encode(
+        &prepared.object_key,
+        std::str::from_utf8(&content).map_err(|_| "SYNC_SPACE_UTF8")?,
+    )?
+    .into_bytes();
     let (header_name, header_value) = upload_condition(remote.etag.as_deref());
     let mut headers = HeaderMap::new();
     headers.insert(
@@ -874,6 +982,12 @@ pub async fn upload_note_document(
 ) -> Result<UploadOutcome, String> {
     let content = serde_json::to_vec_pretty(document)
         .map_err(|error| format!("生成便签同步文件失败：{error}"))?;
+    crate::sync_space::require_existing(&prepared.note_object_key, remote.etag.as_deref())?;
+    let content = crate::sync_space::encode(
+        &prepared.note_object_key,
+        std::str::from_utf8(&content).map_err(|_| "SYNC_SPACE_UTF8")?,
+    )?
+    .into_bytes();
     let (header_name, header_value) = upload_condition(remote.etag.as_deref());
     let mut headers = HeaderMap::new();
     headers.insert(
@@ -901,6 +1015,15 @@ pub async fn upload_note_attachment_document(
     note_attachment_sync::validate_document(document)?;
     let content = serde_json::to_vec_pretty(document)
         .map_err(|error| format!("生成附件元数据失败：{error}"))?;
+    crate::sync_space::require_existing(
+        &prepared.note_attachment_object_key,
+        remote.etag.as_deref(),
+    )?;
+    let content = crate::sync_space::encode(
+        &prepared.note_attachment_object_key,
+        std::str::from_utf8(&content).map_err(|_| "SYNC_SPACE_UTF8")?,
+    )?
+    .into_bytes();
     let (header_name, header_value) = upload_condition(remote.etag.as_deref());
     let mut headers = HeaderMap::new();
     headers.insert(

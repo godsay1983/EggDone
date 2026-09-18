@@ -62,6 +62,7 @@ impl RecurrenceTransport {
             .response()
             .await
             .map_err(|_| "RECURRENCE_TRANSPORT_NETWORK")?;
+        crate::sync_space::require_probe(&self.object_key, response.status().as_u16())?;
         match response.status().as_u16() {
             200 => Ok(format!("etag:{}", response_etag(response.headers())?)),
             404 => Ok("missing".into()),
@@ -91,13 +92,15 @@ impl RecurrenceTransport {
             .response()
             .await
             .map_err(|_| "RECURRENCE_TRANSPORT_NETWORK")?;
+        crate::sync_space::require_probe(&self.object_key, response.status().as_u16())?;
         match response.status().as_u16() {
             404 => {
+                crate::sync_space::require_existing(&self.object_key, None)?;
                 return Ok(RemoteRules {
                     document: None,
                     etag: None,
                     owner: self.owner,
-                })
+                });
             }
             200 => (),
             status => return Err(format!("RECURRENCE_DOWNLOAD_HTTP:{status}")),
@@ -121,8 +124,9 @@ impl RecurrenceTransport {
             bytes.extend_from_slice(&chunk);
         }
         let text = std::str::from_utf8(&bytes).map_err(|_| "INVALID_RECURRENCE_UTF8")?;
+        let text = crate::sync_space::decode(&self.object_key, text)?;
         Ok(RemoteRules {
-            document: Some(recurrence_protocol::parse_document(text)?),
+            document: Some(recurrence_protocol::parse_document(&text)?),
             etag: Some(etag),
             owner: self.owner,
         })
@@ -138,6 +142,8 @@ impl RecurrenceTransport {
             return Err("RECURRENCE_REMOTE_SCOPE_MISMATCH".to_string());
         }
         let content = recurrence_protocol::encode_document(document)?;
+        crate::sync_space::require_existing(&self.object_key, remote.etag.as_deref())?;
+        let content = crate::sync_space::encode(&self.object_key, &content)?;
         if content.len() > MAX_RULE_BYTES {
             return Err("RECURRENCE_DOCUMENT_TOO_LARGE".to_string());
         }

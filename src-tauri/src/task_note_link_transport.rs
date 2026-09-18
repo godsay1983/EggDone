@@ -66,6 +66,7 @@ impl TaskNoteLinkTransport {
             .response()
             .await
             .map_err(|_| "TASK_NOTE_LINK_TRANSPORT_NETWORK")?;
+        crate::sync_space::require_probe(&self.object_key, response.status().as_u16())?;
         match response.status().as_u16() {
             200 => Ok(format!("etag:{}", response_etag(response.headers())?)),
             404 => Ok("missing".into()),
@@ -95,13 +96,15 @@ impl TaskNoteLinkTransport {
             .response()
             .await
             .map_err(|_| "TASK_NOTE_LINK_TRANSPORT_NETWORK")?;
+        crate::sync_space::require_probe(&self.object_key, response.status().as_u16())?;
         match response.status().as_u16() {
             404 => {
+                crate::sync_space::require_existing(&self.object_key, None)?;
                 return Ok(RemoteLinks {
                     document: None,
                     etag: None,
                     owner: self.owner,
-                })
+                });
             }
             200 => (),
             status => return Err(format!("TASK_NOTE_LINK_DOWNLOAD_HTTP:{status}")),
@@ -125,8 +128,9 @@ impl TaskNoteLinkTransport {
             bytes.extend_from_slice(&chunk);
         }
         let text = std::str::from_utf8(&bytes).map_err(|_| "INVALID_TASK_NOTE_LINK_UTF8")?;
+        let text = crate::sync_space::decode(&self.object_key, text)?;
         Ok(RemoteLinks {
-            document: Some(task_note_link_protocol::parse_document(text)?),
+            document: Some(task_note_link_protocol::parse_document(&text)?),
             etag: Some(etag),
             owner: self.owner,
         })
@@ -142,6 +146,8 @@ impl TaskNoteLinkTransport {
             return Err("TASK_NOTE_LINK_REMOTE_SCOPE_MISMATCH".to_string());
         }
         let content = task_note_link_protocol::encode_document(document)?;
+        crate::sync_space::require_existing(&self.object_key, remote.etag.as_deref())?;
+        let content = crate::sync_space::encode(&self.object_key, &content)?;
         if content.len() > MAX_LINK_BYTES {
             return Err("TASK_NOTE_LINK_DOCUMENT_TOO_LARGE".to_string());
         }

@@ -12,6 +12,152 @@ fn digest(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
+const SPACE: &str = "eggdone-spaces/v2/00000000-0000-4000-8000-000000000001/";
+async fn space_roundtrip() {
+    let client = Client::new(TODO, NOTE);
+    let p = s3_sync::PreparedManualSync::from_test_space(
+        &client.db.connection.lock().unwrap(),
+        bucket(SECRET),
+        &format!("{SPACE}todos.json"),
+    );
+    let todos = s3_sync::download_remote(&p).await.unwrap();
+    assert!(matches!(
+        s3_sync::upload_document(&p, todos.document.as_ref().unwrap(), &todos)
+            .await
+            .unwrap(),
+        s3_sync::UploadOutcome::Success
+    ));
+    let notes = s3_sync::download_note_remote(&p).await.unwrap();
+    assert!(matches!(
+        s3_sync::upload_note_document(&p, notes.document.as_ref().unwrap(), &notes)
+            .await
+            .unwrap(),
+        s3_sync::UploadOutcome::Success
+    ));
+    let assets = s3_sync::download_note_attachment_remote(&p).await.unwrap();
+    assert!(matches!(
+        s3_sync::upload_note_attachment_document(&p, assets.document.as_ref().unwrap(), &assets)
+            .await
+            .unwrap(),
+        s3_sync::UploadOutcome::Success
+    ));
+    let rules = p.recurrence_transport().unwrap();
+    let r = rules.download().await.unwrap();
+    assert!(matches!(
+        rules
+            .upload(r.document.as_ref().unwrap(), &r)
+            .await
+            .unwrap(),
+        crate::recurrence_transport::RuleUploadOutcome::Uploaded { .. }
+    ));
+    let links = p.link_transport().unwrap();
+    let r = links.download().await.unwrap();
+    assert!(matches!(
+        links
+            .upload(r.document.as_ref().unwrap(), &r)
+            .await
+            .unwrap(),
+        crate::task_note_link_transport::LinkUploadOutcome::Uploaded { .. }
+    ));
+    for domain in [
+        crate::task_checklist_sync::Domain::Items,
+        crate::task_checklist_sync::Domain::Definitions,
+    ] {
+        let t = p.checklist_transport(domain).unwrap();
+        let r = t.download().await.unwrap();
+        assert!(matches!(
+            t.upload(r.document.as_ref().unwrap(), &r).await.unwrap(),
+            crate::task_checklist_transport::ChecklistUploadOutcome::Uploaded { .. }
+        ));
+    }
+    let t = p.template_transport().unwrap();
+    let r = t.download().await.unwrap();
+    assert!(matches!(
+        t.upload(r.document.as_ref().unwrap(), &r).await.unwrap(),
+        crate::task_checklist_transport::ChecklistUploadOutcome::Uploaded { .. }
+    ));
+}
+
+#[test]
+#[ignore = "Use run-sync-core-s3.ps1 -SpaceProtocolSessions"]
+fn space_protocol_prepare() {
+    tauri::async_runtime::block_on(async {
+        let target = bucket(SECRET);
+        for (i, key) in keys().iter().enumerate() {
+            let source = target.get_object(key).await.unwrap();
+            let text = std::str::from_utf8(source.as_slice()).unwrap();
+            let dest = format!("{SPACE}{}", crate::sync_space::FILES[i]);
+            let wire = crate::sync_space::encode(&dest, text).unwrap();
+            assert!(
+                validate(i, &wire).is_err(),
+                "legacy parser must reject new space"
+            );
+            assert_eq!(
+                target
+                    .put_object(&dest, wire.as_bytes())
+                    .await
+                    .unwrap()
+                    .status_code(),
+                200
+            );
+        }
+        space_roundtrip().await;
+        println!("SPACE_PROTOCOL_DESKTOP_PREPARE_OK: eight production transports write/read v2; legacy parsers reject envelopes");
+    });
+}
+
+#[test]
+#[ignore = "Use run-sync-core-s3.ps1 -SpaceProtocolSessions"]
+fn space_protocol_verify() {
+    tauri::async_runtime::block_on(async {
+        space_roundtrip().await;
+        let target = bucket(SECRET);
+        for (i, key) in keys().iter().enumerate() {
+            let source = target.get_object(key).await.unwrap();
+            let dest = format!("{SPACE}{}", crate::sync_space::FILES[i]);
+            let raw = target.get_object(&dest).await.unwrap();
+            let wire = std::str::from_utf8(raw.as_slice()).unwrap();
+            assert!(validate(i, wire).is_err());
+            let inner = crate::sync_space::decode(&dest, wire).unwrap();
+            validate(i, &inner).unwrap();
+            assert_eq!(
+                serde_json::from_str::<Value>(&inner).unwrap(),
+                serde_json::from_slice::<Value>(source.as_slice()).unwrap()
+            );
+        }
+        let client = Client::new(TODO, NOTE);
+        let p = s3_sync::PreparedManualSync::from_test_space(
+            &client.db.connection.lock().unwrap(),
+            bucket(SECRET),
+            &format!("{SPACE}todos.json"),
+        );
+        let t = p.recurrence_transport().unwrap();
+        let r = t.download().await.unwrap();
+        let key = format!("{SPACE}recurrence-rules.json");
+        let original = target.get_object(&key).await.unwrap();
+        target
+            .put_object(&key, b"{\"format_version\":1,\"rules\":[]}")
+            .await
+            .unwrap();
+        assert!(t.download().await.is_err());
+        assert!(matches!(
+            t.upload(r.document.as_ref().unwrap(), &r).await.unwrap(),
+            crate::recurrence_transport::RuleUploadOutcome::Conflict
+        ));
+        target.delete_object(&key).await.unwrap();
+        assert!(matches!(t.download().await, Err(e) if e == "SYNC_SPACE_INCOMPLETE"));
+        target.put_object(&key, original.as_slice()).await.unwrap();
+        let main = format!("{SPACE}todos.json");
+        let original = target.get_object(&main).await.unwrap();
+        target.delete_object(&main).await.unwrap();
+        assert!(
+            matches!(s3_sync::download_remote(&p).await, Err(e) if e == "SYNC_SPACE_INCOMPLETE")
+        );
+        target.put_object(&main, original.as_slice()).await.unwrap();
+        println!("SPACE_PROTOCOL_DESKTOP_VERIFY_OK: Harmony roundtrip, unchanged legacy data, mixed format/missing objects refused, stale ETag cannot overwrite");
+    });
+}
+
 fn keys() -> Vec<String> {
     vec![
         MAIN.into(),

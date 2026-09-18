@@ -1,0 +1,126 @@
+[
+  {
+    "name": "todos",
+    "key": "eggdone-spaces/v2/00000000-0000-4000-8000-000000000001/todos.json",
+    "raw": "{\"format_version\":2,\"space_uuid\":\"00000000-0000-4000-8000-000000000001\",\"domain\":\"todos\",\"payload\":\"{\\\"format_version\\\":1,\\\"todos\\\":[]}\"}",
+    "decoded": "{\"format_version\":1,\"todos\":[]}"
+  },
+  {
+    "name": "notes",
+    "key": "eggdone-spaces/v2/00000000-0000-4000-8000-000000000001/notes.json",
+    "raw": "{\"format_version\":2,\"space_uuid\":\"00000000-0000-4000-8000-000000000001\",\"domain\":\"notes\",\"payload\":\"{\\\"format_version\\\":1,\\\"notes\\\":[]}\"}",
+    "decoded": "{\"format_version\":1,\"notes\":[]}"
+  },
+  {
+    "name": "attachments",
+    "key": "eggdone-spaces/v2/00000000-0000-4000-8000-000000000001/note-attachments.json",
+    "raw": "{\"format_version\":2,\"space_uuid\":\"00000000-0000-4000-8000-000000000001\",\"domain\":\"attachments\",\"payload\":\"{\\\"format_version\\\":1,\\\"attachments\\\":[]}\"}",
+    "decoded": "{\"format_version\":1,\"attachments\":[]}"
+  },
+  {
+    "name": "rules",
+    "key": "eggdone-spaces/v2/00000000-0000-4000-8000-000000000001/recurrence-rules.json",
+    "raw": "{\"format_version\":2,\"space_uuid\":\"00000000-0000-4000-8000-000000000001\",\"domain\":\"rules\",\"payload\":\"{\\\"format_version\\\":1,\\\"rules\\\":[]}\"}",
+    "decoded": "{\"format_version\":1,\"rules\":[]}"
+  },
+  {
+    "name": "links",
+    "key": "eggdone-spaces/v2/00000000-0000-4000-8000-000000000001/task-note-links.json",
+    "raw": "{\"format_version\":2,\"space_uuid\":\"00000000-0000-4000-8000-000000000001\",\"domain\":\"links\",\"payload\":\"{\\\"format_version\\\":1,\\\"links\\\":[]}\"}",
+    "decoded": "{\"format_version\":1,\"links\":[]}"
+  },
+  {
+    "name": "items",
+    "key": "eggdone-spaces/v2/00000000-0000-4000-8000-000000000001/task-checklist-items.json",
+    "raw": "{\"format_version\":2,\"space_uuid\":\"00000000-0000-4000-8000-000000000001\",\"domain\":\"items\",\"payload\":\"{\\\"format_version\\\":1,\\\"items\\\":[]}\"}",
+    "decoded": "{\"format_version\":1,\"items\":[]}"
+  },
+  {
+    "name": "definitions",
+    "key": "eggdone-spaces/v2/00000000-0000-4000-8000-000000000001/task-checklist-definitions.json",
+    "raw": "{\"format_version\":2,\"space_uuid\":\"00000000-0000-4000-8000-000000000001\",\"domain\":\"definitions\",\"payload\":\"{\\\"format_version\\\":1,\\\"definitions\\\":[]}\"}",
+    "decoded": "{\"format_version\":1,\"definitions\":[]}"
+  },
+  {
+    "name": "templates",
+    "key": "eggdone-spaces/v2/00000000-0000-4000-8000-000000000001/task-templates.json",
+    "raw": "{\"format_version\":2,\"space_uuid\":\"00000000-0000-4000-8000-000000000001\",\"domain\":\"templates\",\"payload\":\"{\\\"format_version\\\":1,\\\"templates\\\":[]}\"}",
+    "decoded": "{\"format_version\":1,\"templates\":[]}"
+  },
+  {
+    "name": "legacy byte preservation",
+    "key": "account/todos.json",
+    "raw": " \nlegacy",
+    "decoded": " \nlegacy"
+  },
+  {
+    "name": "v1 in v2",
+    "key": "eggdone-spaces/v2/00000000-0000-4000-8000-000000000001/todos.json",
+    "raw": "{\"format_version\":1,\"todos\":[]}"
+  },
+  {
+    "name": "foreign space",
+    "key": "eggdone-spaces/v2/00000000-0000-4000-8000-000000000001/todos.json",
+    "raw": "{\"format_version\":2,\"space_uuid\":\"00000000-0000-4000-8000-000000000002\",\"domain\":\"todos\",\"payload\":\"{\\\"format_version\\\":1,\\\"todos\\\":[]}\"}"
+  },
+  {
+    "name": "foreign domain",
+    "key": "eggdone-spaces/v2/00000000-0000-4000-8000-000000000001/todos.json",
+    "raw": "{\"format_version\":2,\"space_uuid\":\"00000000-0000-4000-8000-000000000001\",\"domain\":\"notes\",\"payload\":\"{\\\"format_version\\\":1,\\\"todos\\\":[]}\"}"
+  },
+  {
+    "name": "future version",
+    "key": "eggdone-spaces/v2/00000000-0000-4000-8000-000000000001/todos.json",
+    "raw": "{\"format_version\":3,\"space_uuid\":\"00000000-0000-4000-8000-000000000001\",\"domain\":\"todos\",\"payload\":\"{\\\"format_version\\\":1,\\\"todos\\\":[]}\"}"
+  },
+  {
+    "name": "nested envelope",
+    "key": "eggdone-spaces/v2/00000000-0000-4000-8000-000000000001/todos.json",
+    "raw": "{\"format_version\":2,\"space_uuid\":\"00000000-0000-4000-8000-000000000001\",\"domain\":\"todos\",\"payload\":\"{\\\"format_version\\\":2,\\\"space_uuid\\\":\\\"00000000-0000-4000-8000-000000000001\\\",\\\"domain\\\":\\\"todos\\\",\\\"payload\\\":\\\"{\\\\\\\"format_version\\\\\\\":1,\\\\\\\"todos\\\\\\\":[]}\\\"}\"}"
+  },
+  {
+    "name": "unknown field",
+    "key": "eggdone-spaces/v2/00000000-0000-4000-8000-000000000001/todos.json",
+    "raw": "{\"format_version\":2,\"space_uuid\":\"00000000-0000-4000-8000-000000000001\",\"domain\":\"todos\",\"payload\":\"{\\\"format_version\\\":1,\\\"todos\\\":[]}\",\"extra\":true}"
+  },
+  {
+    "name": "bad payload",
+    "key": "eggdone-spaces/v2/00000000-0000-4000-8000-000000000001/todos.json",
+    "raw": "{\"format_version\":2,\"space_uuid\":\"00000000-0000-4000-8000-000000000001\",\"domain\":\"todos\",\"payload\":\"not-json\"}"
+  },
+  {
+    "name": "numeric payload",
+    "key": "eggdone-spaces/v2/00000000-0000-4000-8000-000000000001/todos.json",
+    "raw": "{\"format_version\":2,\"space_uuid\":\"00000000-0000-4000-8000-000000000001\",\"domain\":\"todos\",\"payload\":1}"
+  },
+  {
+    "name": "null",
+    "key": "eggdone-spaces/v2/00000000-0000-4000-8000-000000000001/todos.json",
+    "raw": "null"
+  },
+  {
+    "name": "bad key v1/00000000-0000-4000-8000-000000000001/todos.json",
+    "key": "eggdone-spaces/v1/00000000-0000-4000-8000-000000000001/todos.json",
+    "raw": "{\"format_version\":2,\"space_uuid\":\"00000000-0000-4000-8000-000000000001\",\"domain\":\"todos\",\"payload\":\"{\\\"format_version\\\":1,\\\"todos\\\":[]}\"}"
+  },
+  {
+    "name": "bad key v2/00000000-0000-4000-8000-000000000001/../todos.json",
+    "key": "eggdone-spaces/v2/00000000-0000-4000-8000-000000000001/../todos.json",
+    "raw": "{\"format_version\":2,\"space_uuid\":\"00000000-0000-4000-8000-000000000001\",\"domain\":\"todos\",\"payload\":\"{\\\"format_version\\\":1,\\\"todos\\\":[]}\"}"
+  },
+  {
+    "name": "bad key v2/no-id/todos.json",
+    "key": "eggdone-spaces/v2/no-id/todos.json",
+    "raw": "{\"format_version\":2,\"space_uuid\":\"00000000-0000-4000-8000-000000000001\",\"domain\":\"todos\",\"payload\":\"{\\\"format_version\\\":1,\\\"todos\\\":[]}\"}"
+  },
+  {
+    "name": "bad key v2/00000000-0000-4000-8000-000000000001/unknown.json",
+    "key": "eggdone-spaces/v2/00000000-0000-4000-8000-000000000001/unknown.json",
+    "raw": "{\"format_version\":2,\"space_uuid\":\"00000000-0000-4000-8000-000000000001\",\"domain\":\"todos\",\"payload\":\"{\\\"format_version\\\":1,\\\"todos\\\":[]}\"}"
+  },
+  {
+    "name": "bad key v2/00000000-0000-4000-8000-000000000001/todos.json/",
+    "key": "eggdone-spaces/v2/00000000-0000-4000-8000-000000000001/todos.json/",
+    "raw": "{\"format_version\":2,\"space_uuid\":\"00000000-0000-4000-8000-000000000001\",\"domain\":\"todos\",\"payload\":\"{\\\"format_version\\\":1,\\\"todos\\\":[]}\"}"
+  }
+]

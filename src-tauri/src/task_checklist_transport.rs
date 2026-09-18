@@ -81,6 +81,7 @@ impl TaskChecklistTransport {
             .response()
             .await
             .map_err(|_| "CHECKLIST_TRANSPORT_NETWORK")?;
+        crate::sync_space::require_probe(&self.object_key, response.status().as_u16())?;
         match response.status().as_u16() {
             200 => Ok(format!("etag:{}", response_etag(response.headers())?)),
             404 => Ok("missing".into()),
@@ -132,14 +133,16 @@ impl TaskChecklistTransport {
             .response()
             .await
             .map_err(|_| "CHECKLIST_TRANSPORT_NETWORK")?;
+        crate::sync_space::require_probe(&self.object_key, response.status().as_u16())?;
         match response.status().as_u16() {
             404 => {
+                crate::sync_space::require_existing(&self.object_key, None)?;
                 return Ok(RemoteChecklist {
                     document: None,
                     etag: None,
                     owner: self.owner,
                     domain: self.domain,
-                })
+                });
             }
             200 => (),
             status => return Err(format!("CHECKLIST_DOWNLOAD_HTTP:{status}")),
@@ -163,10 +166,11 @@ impl TaskChecklistTransport {
             bytes.extend_from_slice(&chunk);
         }
         let text = std::str::from_utf8(&bytes).map_err(|_| "INVALID_CHECKLIST_UTF8")?;
+        let text = crate::sync_space::decode(&self.object_key, text)?;
         Ok(RemoteChecklist {
             document: Some(
                 self.domain
-                    .canonical(text)
+                    .canonical(&text)
                     .map_err(|_| "INVALID_CHECKLIST_DOCUMENT")?,
             ),
             etag: Some(etag),
@@ -185,6 +189,8 @@ impl TaskChecklistTransport {
             return Err("CHECKLIST_REMOTE_SCOPE_MISMATCH".to_string());
         }
         let content = self.domain.canonical(document)?;
+        crate::sync_space::require_existing(&self.object_key, remote.etag.as_deref())?;
+        let content = crate::sync_space::encode(&self.object_key, &content)?;
         if content.len() > MAX_CHECKLIST_BYTES {
             return Err("CHECKLIST_DOCUMENT_TOO_LARGE".to_string());
         }
