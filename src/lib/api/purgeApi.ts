@@ -12,9 +12,12 @@ export interface PurgePlan {
   purged: number;
   skipped: number;
   cleanup_pending: number;
+  sync_pending: boolean;
+  remote_pending: number;
 }
 export const purgeApi = {
   prepare: (selected: PurgeTarget[] | null) => invoke<PurgePlan>("prepare_trash_purge", { selected }),
   run: (operationUuid: string) => invoke<PurgePlan>("run_trash_purge", { operationUuid }),
   unfinished: () => invoke<PurgePlan | null>("unfinished_trash_purge"),
+  status: (operationUuid: string) => invoke<PurgePlan>("trash_purge_status", { operationUuid }),
 };

@@ -7,6 +7,7 @@
   import type { TrashItem } from "$lib/api/trashApi";
   import { createTrashStore } from "$lib/stores/trashStore";
   import { purgeApi, type PurgePlan, type PurgeTarget } from "$lib/api/purgeApi";
+  import { syncNow } from '$lib/api/syncApi';
   export let onClose: () => void;
   export let afterCommit: () => Promise<void>;
   const store = createTrashStore();
@@ -58,13 +59,34 @@
         purge = await purgeApi.run(operation);
         moreWork = purge.pending > 0 || (purge.cleanup_pending > 0 && (previous.pending > 0 || purge.cleanup_pending < previous.cleanup_pending));
       } while (moreWork && !stopRequested);
-      unfinished = purge.pending || purge.cleanup_pending ? purge : null;
+      if (!stopRequested && !purge.pending && (purge.sync_pending || purge.remote_pending)) await syncPurgeProgress(operation);
+      unfinished = purge.pending || purge.cleanup_pending || purge.sync_pending || purge.remote_pending ? purge : null;
       selected = []; selecting = false; pending = null;
     } catch (error) { message = purgeFailure(error); }
     finally {
       try { await afterCommit(); } catch { refreshNeeded = true; message = 'purge.refreshFailed'; }
       await page(true); busy = false;
     }
+  }
+
+  async function syncPurgeProgress(operation: string) {
+    try { await syncNow(); } catch { message = 'space.syncFailed'; }
+    purge = await purgeApi.status(operation);
+    unfinished = purge.pending || purge.cleanup_pending || purge.sync_pending || purge.remote_pending ? purge : null;
+  }
+  async function retryPurgeSync() {
+    if (busy || !purge) return;
+    busy = true; message = null;
+    try { await syncPurgeProgress(purge.operation_uuid); await afterCommit(); await page(true); }
+    catch { message = 'space.syncFailed'; }
+    finally { busy = false; }
+  }
+
+  async function migrationActivated() {
+    items = []; pending = null; selected = []; selecting = false; message = null;
+    await afterCommit();
+    await page(true);
+    unfinished = await purgeApi.unfinished();
   }
 
   onMount(() => {
@@ -169,13 +191,13 @@
   {#if !migrationPreparation && unfinished && !purge}<button class="text-tool" disabled={busy} onclick={() => { purge = unfinished; agreed = true; }}>{$translator('purge.resume')}</button>{/if}
   <div class="content" bind:this={content} aria-busy={busy}>
     {#if message && !migrationPreparation}<p role="status">{$translator(message)}</p>{/if}
-    {#if message === 'purge.migration' && !migrationPreparation}
+    {#if !migrationPreparation && !purge && !pending}
       <button class="text-tool" disabled={busy} onclick={async () => { pending = null; selecting = false; migrationPreparation = true; await tick(); content.scrollTop = 0; }}>{$translator('migrationBackup.title')}</button>
     {/if}
     {#if busy && !migrationPreparation}<p role="status">{$translator("common.loading")}</p>{/if}
     {#if loadFailed && !migrationPreparation}<p role="alert">{$translator("trash.loadFailed")}</p>{/if}
     {#if migrationPreparation}
-      <MigrationPreparation onBusy={value => { busy = value; }} />
+      <MigrationPreparation onBusy={value => { busy = value; }} onActivated={migrationActivated} />
     {:else if purge}
       <h3>{$translator('purge.count', {count:purge.total,attachments:purge.attachments})}</h3>
       {#if purge.state === 'prepared'}
@@ -187,6 +209,9 @@
         <p>{$translator('purge.result',{purged:purge.purged,skipped:purge.skipped})}</p>
         {#if purge.skipped}<p>{$translator('purge.skipped')}</p>{/if}
         {#if purge.cleanup_pending}<p role="status">{$translator('purge.cleanup',{count:purge.cleanup_pending})}</p>{/if}
+        {#if purge.sync_pending}<p role="status">{$translator('space.syncPending')}</p>{/if}
+        {#if purge.remote_pending}<p role="status">{$translator('space.remotePending',{count:purge.remote_pending})}</p>{/if}
+        {#if !purge.pending && !purge.cleanup_pending && !purge.sync_pending && !purge.remote_pending}<p role="status">{$translator('space.complete')}</p>{/if}
       {/if}
     {:else if pending}
       <h3>{pending.title || $translator("trash.untitled")}</h3>
@@ -221,6 +246,7 @@
     <footer class="batch-actions">
       <button class="action-button" onclick={() => busy ? stopRequested = true : back()} disabled={busy && stopRequested}>{$translator(busy ? 'purge.pause' : 'common.close')}</button>
       {#if purge.pending || purge.cleanup_pending}<button class="action-button" data-tone="danger" disabled={busy || (purge.state === 'prepared' && !agreed)} onclick={runPurge}>{$translator(purge.state === 'prepared' ? 'purge.title' : 'common.retry')}</button>{/if}
+      {#if purge.sync_pending || purge.remote_pending}<button class="action-button" disabled={busy} onclick={retryPurgeSync}>{$translator('space.syncRetry')}</button>{/if}
     </footer>
   {:else if selecting}
     <footer><button class="action-button" data-tone="danger" disabled={busy || !selected.length} onclick={() => preparePurge(items.filter(item => selected.includes(key(item))).map(({kind,uuid}) => ({kind,uuid})))}>{$translator('purge.title')}</button></footer>

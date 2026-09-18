@@ -48,6 +48,11 @@ pub(crate) fn invalidate(connection: &Connection) -> Result<(), String> {
     let tx = connection
         .unchecked_transaction()
         .map_err(|_| "SYNC_TARGET_DATABASE")?;
+    invalidate_in_transaction(&tx)?;
+    tx.commit().map_err(|_| "SYNC_TARGET_DATABASE".into())
+}
+
+pub(crate) fn invalidate_in_transaction(tx: &Connection) -> Result<(), String> {
     tx.execute("INSERT INTO app_metadata(key,value) VALUES(?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
         params![KEY,format!("pending:{}", Uuid::new_v4())]).map_err(|_| "SYNC_TARGET_DATABASE")?;
     let changed=tx.execute("UPDATE sync_runtime_state SET
@@ -72,7 +77,7 @@ pub(crate) fn invalidate(connection: &Connection) -> Result<(), String> {
         .map_err(|_| "SYNC_TARGET_DATABASE")? != 1 { return Err("SYNC_TARGET_REVISION_LIMIT".into()); }
     if tx.execute("UPDATE lifecycle_sync_state SET revision=revision+1,etag=NULL WHERE id=1 AND revision<9007199254740991",[])
         .map_err(|_| "SYNC_TARGET_DATABASE")? != 1 { return Err("SYNC_TARGET_REVISION_LIMIT".into()); }
-    tx.commit().map_err(|_| "SYNC_TARGET_DATABASE".into())
+    Ok(())
 }
 
 #[cfg(test)]

@@ -426,20 +426,38 @@ impl Drop for AssetTransferGuard<'_> {
 }
 
 pub fn prepare_manual_sync(connection: &Connection) -> Result<PreparedManualSync, String> {
-    if !crate::purge::terminals(connection)?.is_empty() {
+    prepare_manual_sync_using(connection, |settings| {
+        let credentials = load_credentials(connection)?
+            .ok_or_else(|| "请先填写并保存 Access Key 和 Secret Key".to_string())?;
+        build_bucket(settings, credentials)
+    })
+}
+#[cfg(test)]
+pub(crate) fn prepare_with_fixture_credentials(
+    connection: &Connection,
+    bucket: Box<Bucket>,
+) -> Result<PreparedManualSync, String> {
+    prepare_manual_sync_using(connection, |_| Ok(bucket))
+}
+fn prepare_manual_sync_using(
+    connection: &Connection,
+    credentials: impl FnOnce(&StoredSyncSettings) -> Result<Box<Bucket>, String>,
+) -> Result<PreparedManualSync, String> {
+    let settings = read_settings(connection)?;
+    if crate::sync_space::scope(&settings.object_key)?.is_none()
+        && !crate::purge::terminals(connection)?.is_empty()
+    {
         return Err("PURGE_MIGRATION_REQUIRED".into());
     }
-    let settings = read_settings(connection)?;
-    crate::sync_space::require_runtime_ready(&settings.object_key)?;
+    crate::space_activation::admit(connection, &settings.object_key)?;
     if !settings.enabled {
         return Err("请先启用并保存同步配置".to_string());
     }
     settings.validate_connection()?;
-    let credentials = load_credentials(connection)?
-        .ok_or_else(|| "请先填写并保存 Access Key 和 Secret Key".to_string())?;
+    let bucket = credentials(&settings)?;
     Ok(PreparedManualSync {
         target_epoch: crate::sync_target::capture(connection)?,
-        bucket: build_bucket(&settings, credentials)?,
+        bucket,
         note_object_key: derive_note_object_key(&settings.object_key),
         note_attachment_object_key: derive_note_attachment_object_key(&settings.object_key),
         note_asset_prefix: derive_note_asset_prefix(&settings.object_key),
@@ -481,69 +499,157 @@ impl MigrationStagingTarget {
 impl crate::migration_backup::publication::Storage for MigrationStagingTarget {
     fn read(&mut self, key: &str, limit: usize) -> Result<Option<Vec<u8>>, String> {
         self.allowed(key)?;
-        if limit > 20 * 1024 * 1024 {
-            return Err("MIGRATION_BACKUP_LIMIT".into());
-        }
-        tauri::async_runtime::block_on(async {
-            let req = ReqwestRequest::new(&self.bucket, key, Command::GetObject)
-                .await
-                .map_err(|_| "MIGRATION_PUBLICATION_NETWORK")?;
-            let mut response = req
-                .response()
-                .await
-                .map_err(|_| "MIGRATION_PUBLICATION_NETWORK")?;
-            if response.status().as_u16() == 404 {
-                return Ok(None);
-            }
-            if response.status().as_u16() != 200 {
-                return Err("MIGRATION_PUBLICATION_NETWORK".into());
-            }
-            let tags = response
-                .headers()
-                .get_all("etag")
-                .iter()
-                .collect::<Vec<_>>();
-            if tags.len() != 1
-                || !tags[0]
-                    .to_str()
-                    .is_ok_and(crate::migration_backup::cloud::valid_etag)
-            {
-                return Err("MIGRATION_PUBLICATION_CONFLICT".into());
-            }
-            if response.content_length().is_some_and(|n| n > limit as u64) {
-                return Err("MIGRATION_PUBLICATION_CONFLICT".into());
-            }
-            let mut bytes = Vec::new();
-            while let Some(chunk) = response
-                .chunk()
-                .await
-                .map_err(|_| "MIGRATION_PUBLICATION_NETWORK")?
-            {
-                if chunk.len() > limit - bytes.len() {
-                    return Err("MIGRATION_PUBLICATION_CONFLICT".into());
-                }
-                bytes.extend_from_slice(&chunk);
-            }
-            Ok(Some(bytes))
-        })
+        read_migration_object(&self.bucket, key, limit)
     }
     fn create(&mut self, key: &str, bytes: &[u8]) -> Result<(), String> {
         self.allowed(key)?;
-        if bytes.len() > 20 * 1024 * 1024 {
-            return Err("MIGRATION_BACKUP_LIMIT".into());
-        }
-        let mut bucket = self.bucket.clone();
-        bucket.extra_headers.insert(
-            http::HeaderName::from_static("if-none-match"),
-            http::HeaderValue::from_static("*"),
-        );
-        let response = tauri::async_runtime::block_on(bucket.put_object(key, bytes))
+        create_migration_object(&self.bucket, key, bytes, "application/octet-stream")
+    }
+}
+
+fn read_migration_object(
+    bucket: &Bucket,
+    key: &str,
+    limit: usize,
+) -> Result<Option<Vec<u8>>, String> {
+    if limit > 20 * 1024 * 1024 {
+        return Err("MIGRATION_BACKUP_LIMIT".into());
+    }
+    tauri::async_runtime::block_on(async {
+        let req = ReqwestRequest::new(bucket, key, Command::GetObject)
+            .await
             .map_err(|_| "MIGRATION_PUBLICATION_NETWORK")?;
-        if ![200, 201, 204, 409, 412].contains(&response.status_code()) {
+        let mut response = req
+            .response()
+            .await
+            .map_err(|_| "MIGRATION_PUBLICATION_NETWORK")?;
+        if response.status().as_u16() == 404 {
+            return Ok(None);
+        }
+        if response.status().as_u16() != 200 {
             return Err("MIGRATION_PUBLICATION_NETWORK".into());
         }
-        // A conflict is not success: the coordinator must read back the exact expected bytes.
-        Ok(())
+        let tags = response
+            .headers()
+            .get_all("etag")
+            .iter()
+            .collect::<Vec<_>>();
+        if tags.len() != 1
+            || !tags[0]
+                .to_str()
+                .is_ok_and(crate::migration_backup::cloud::valid_etag)
+        {
+            return Err("MIGRATION_PUBLICATION_CONFLICT".into());
+        }
+        if response.content_length().is_some_and(|n| n > limit as u64) {
+            return Err("MIGRATION_PUBLICATION_CONFLICT".into());
+        }
+        let mut bytes = Vec::new();
+        while let Some(chunk) = response
+            .chunk()
+            .await
+            .map_err(|_| "MIGRATION_PUBLICATION_NETWORK")?
+        {
+            if chunk.len() > limit - bytes.len() {
+                return Err("MIGRATION_PUBLICATION_CONFLICT".into());
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        Ok(Some(bytes))
+    })
+}
+fn create_migration_object(
+    bucket: &Bucket,
+    key: &str,
+    bytes: &[u8],
+    mime: &str,
+) -> Result<(), String> {
+    if bytes.len() > 20 * 1024 * 1024 {
+        return Err("MIGRATION_BACKUP_LIMIT".into());
+    }
+    let mut bucket = bucket.clone();
+    bucket.extra_headers.insert(
+        http::HeaderName::from_static("if-none-match"),
+        http::HeaderValue::from_static("*"),
+    );
+    bucket.extra_headers.insert(
+        http::HeaderName::from_static("x-amz-meta-sha256"),
+        http::HeaderValue::from_str(&sha256_hex(bytes)).map_err(|_| "MIGRATION_SPACE_INVALID")?,
+    );
+    let response =
+        tauri::async_runtime::block_on(bucket.put_object_with_content_type(key, bytes, mime))
+            .map_err(|_| "MIGRATION_PUBLICATION_NETWORK")?;
+    if ![200, 201, 204, 409, 412].contains(&response.status_code()) {
+        return Err("MIGRATION_PUBLICATION_NETWORK".into());
+    }
+    // A conflict is not success: the coordinator must read back the exact expected bytes.
+    Ok(())
+}
+pub struct MigrationSpaceTarget {
+    bucket: Box<Bucket>,
+    main: String,
+    claim: Option<crate::space_activation::Claim>,
+}
+impl MigrationSpaceTarget {
+    pub fn new(
+        source: &MigrationAssetSource,
+        claim: Option<crate::space_activation::Claim>,
+    ) -> Result<Self, String> {
+        if claim.as_ref().is_some_and(|c| c.1 != source.main_key()) {
+            return Err("MIGRATION_SPACE_CHANGED".into());
+        }
+        Ok(Self {
+            bucket: source.0.bucket.clone(),
+            main: source.main_key().into(),
+            claim,
+        })
+    }
+    fn allowed(&self, key: &str, write: bool) -> Result<(), String> {
+        if key == crate::space_activation::claim_key(&self.main) {
+            return Ok(());
+        }
+        if let Some(claim) = &self.claim {
+            let p = claim.plan()?;
+            if !write
+                && (key == crate::migration_backup::publication::marker_key(&p)?
+                    || p.files.iter().any(|f| {
+                        crate::migration_backup::publication::object_key(&p, f).as_deref()
+                            == Ok(key)
+                    }))
+            {
+                return Ok(());
+            }
+            let main = claim.main()?;
+            let prefix = main.trim_end_matches("todos.json");
+            if key == claim.ready_key()?
+                || crate::sync_space::scope(key)
+                    .ok()
+                    .flatten()
+                    .is_some_and(|(id, _)| id == p.operation)
+            {
+                return Ok(());
+            }
+            if let Some(asset) = key.strip_prefix(&format!("{prefix}note-assets/v1/")) {
+                if let Some((id, suffix)) = asset.split_once('/') {
+                    if uuid::Uuid::parse_str(id).is_ok()
+                        && ["original", "preview.jpg"].contains(&suffix)
+                    {
+                        return Ok(());
+                    }
+                }
+            }
+        }
+        Err("MIGRATION_PUBLICATION_SCOPE".into())
+    }
+}
+impl crate::space_activation::Storage for MigrationSpaceTarget {
+    fn read(&mut self, key: &str, limit: usize) -> Result<Option<Vec<u8>>, String> {
+        self.allowed(key, false)?;
+        read_migration_object(&self.bucket, key, limit)
+    }
+    fn create(&mut self, key: &str, bytes: &[u8], mime: &str) -> Result<(), String> {
+        self.allowed(key, true)?;
+        create_migration_object(&self.bucket, key, bytes, mime)
     }
 }
 

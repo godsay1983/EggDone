@@ -54,6 +54,8 @@ mod reminders;
 mod s3_sync;
 mod schedule;
 mod shortcut_preferences;
+mod space_activation;
+mod space_activation_commands;
 mod sync;
 mod sync_runtime_state;
 mod sync_space;
@@ -258,6 +260,7 @@ pub fn run() {
             purge_commands::prepare_trash_purge,
             purge_commands::run_trash_purge,
             purge_commands::unfinished_trash_purge,
+            purge_commands::trash_purge_status,
             commands::list_note_attachments,
             commands::reorder_note_attachments,
             commands::create_note_image_attachment,
@@ -312,6 +315,7 @@ pub fn run() {
             data_exchange::export_todos,
             data_exchange::export_full_backup,
             migration_backup_commands::migration_local_backup,
+            space_activation_commands::migration_space,
             data_exchange::preview_todo_import,
             data_exchange::confirm_todo_import,
             data_exchange::preview_full_backup_import,

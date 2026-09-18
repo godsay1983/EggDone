@@ -101,6 +101,8 @@ pub struct Plan {
     pub purged: i64,
     pub skipped: i64,
     pub cleanup_pending: i64,
+    pub sync_pending: bool,
+    pub remote_pending: i64,
 }
 
 fn db_error(_: rusqlite::Error) -> String {
@@ -123,6 +125,9 @@ fn validate(target: &Target) -> Result<(), String> {
 
 // A configured legacy target remains unsafe even while its sync toggle is off.
 pub fn require_safe(connection: &Connection) -> Result<(), String> {
+    if crate::space_activation::is_active(connection)? {
+        return Ok(());
+    }
     let legacy: bool = connection.query_row(
         "SELECT EXISTS(SELECT 1 FROM sync_settings WHERE enabled=1 OR length(trim(endpoint))>0 OR length(trim(bucket))>0)",
         [], |r| r.get(0)).map_err(db_error)?;
@@ -313,6 +318,8 @@ pub fn status(connection: &Connection, operation: &str) -> Result<Plan, String> 
                     purged: 0,
                     skipped: 0,
                     cleanup_pending: 0,
+                    sync_pending: false,
+                    remote_pending: 0,
                 })
             },
         )
@@ -338,11 +345,23 @@ pub fn status(connection: &Connection, operation: &str) -> Result<Plan, String> 
         }
     }
     result.cleanup_pending = connection.query_row("SELECT COUNT(*) FROM purge_cleanup c JOIN purge_targets t ON t.uuid=c.note_uuid AND t.kind='note' WHERE t.operation_uuid=?1 AND c.local_done=0", [operation], |r| r.get(0)).map_err(db_error)?;
+    result.remote_pending = connection.query_row("SELECT COUNT(*) FROM purge_cleanup c JOIN purge_targets t ON t.uuid=c.note_uuid AND t.kind='note' WHERE t.operation_uuid=?1 AND c.remote_done=0", [operation], |r| r.get(0)).map_err(db_error)?;
+    let active = crate::space_activation::is_active(connection)?;
+    let was_synced: bool = connection
+        .query_row(
+            "SELECT length(target_epoch)>0 FROM purge_plans WHERE operation_uuid=?1",
+            [operation],
+            |r| r.get(0),
+        )
+        .map_err(db_error)?;
+    if result.purged > 0 && (active || was_synced) {
+        result.sync_pending = !active || connection.query_row("SELECT revision<>synced_revision OR etag IS NULL OR EXISTS(SELECT 1 FROM sync_runtime_state WHERE last_result<>'success' OR dirty_domains<>'[]') FROM lifecycle_sync_state WHERE id=1", [], |r| r.get::<_, bool>(0)).map_err(db_error)?;
+    }
     Ok(result)
 }
 
 pub fn unfinished(connection: &Connection) -> Result<Option<Plan>, String> {
-    let operation: Option<String> = connection.query_row("SELECT p.operation_uuid FROM purge_plans p WHERE state='running' OR EXISTS(SELECT 1 FROM purge_targets t JOIN purge_cleanup c ON t.kind='note' AND t.uuid=c.note_uuid WHERE t.operation_uuid=p.operation_uuid AND c.local_done=0) ORDER BY created_at DESC,p.operation_uuid LIMIT 1", [], |r| r.get(0)).optional().map_err(db_error)?;
+    let operation: Option<String> = connection.query_row("SELECT p.operation_uuid FROM purge_plans p WHERE state='running' OR EXISTS(SELECT 1 FROM purge_targets t JOIN purge_cleanup c ON t.kind='note' AND t.uuid=c.note_uuid WHERE t.operation_uuid=p.operation_uuid AND (c.local_done=0 OR c.remote_done=0)) OR (state='complete' AND length(target_epoch)>0 AND EXISTS(SELECT 1 FROM lifecycle_sync_state WHERE revision<>synced_revision OR etag IS NULL OR EXISTS(SELECT 1 FROM sync_runtime_state WHERE last_result<>'success' OR dirty_domains<>'[]'))) ORDER BY created_at DESC,p.operation_uuid LIMIT 1", [], |r| r.get(0)).optional().map_err(db_error)?;
     operation.map(|id| status(connection, &id)).transpose()
 }
 
@@ -493,6 +512,7 @@ pub(crate) fn erase(
             .execute("DELETE FROM todos WHERE uuid=?1", [&target.uuid])
             .map_err(db_error)?;
     } else {
+        crate::purge_remote::capture_local(connection, &target.uuid)?;
         connection.execute("INSERT OR IGNORE INTO purge_cleanup(attachment_uuid,note_uuid,original_path,preview_path,remote_done) SELECT uuid,note_uuid,local_original_path,local_preview_path,CASE WHEN remote_uploaded=0 THEN 1 ELSE 0 END FROM note_attachments WHERE note_uuid=?1", [&target.uuid]).map_err(db_error)?;
         connection
             .execute(

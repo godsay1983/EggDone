@@ -51,3 +51,11 @@ pub fn unfinished_trash_purge(database: State<'_, Database>) -> Result<Option<Pl
     let connection = lock_database(&database)?;
     purge::unfinished(&connection)
 }
+
+#[tauri::command]
+pub fn trash_purge_status(
+    database: State<'_, Database>,
+    operation_uuid: String,
+) -> Result<Plan, String> {
+    purge::status(&*lock_database(&database)?, &operation_uuid)
+}

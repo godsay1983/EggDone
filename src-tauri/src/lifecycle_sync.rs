@@ -140,6 +140,17 @@ pub fn prepare(c: &mut Connection, epoch: &str, incoming: &Document) -> Result<S
     let tx = c
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(db)?;
+    let snapshot = prepare_in_transaction(&tx, epoch, incoming)?;
+    tx.commit().map_err(db)?;
+    Ok(snapshot)
+}
+
+pub(crate) fn prepare_in_transaction(
+    tx: &Connection,
+    epoch: &str,
+    incoming: &Document,
+) -> Result<Snapshot, String> {
+    validate(incoming)?;
     let key = guard(&tx, epoch)?;
     crate::purge_remote::bind_target(&tx, epoch)?;
     let local = Document {
@@ -217,7 +228,6 @@ pub fn prepare(c: &mut Connection, epoch: &str, incoming: &Document) -> Result<S
             |r| r.get(0),
         )
         .map_err(db)?;
-    tx.commit().map_err(db)?;
     Ok(Snapshot {
         document: merged,
         revision,

@@ -429,6 +429,25 @@ pub fn verify_files(root: &Path, plan: &BackupPlan) -> Result<(), String> {
     }
     Ok(())
 }
+pub(crate) fn asset_files(plan: &BackupPlan) -> &[FileEntry] {
+    &plan.files[1..]
+}
+pub(crate) fn read_asset(
+    root: &Path,
+    plan: &BackupPlan,
+    entry: &FileEntry,
+) -> Result<Vec<u8>, String> {
+    if !asset_files(plan).contains(entry) {
+        return Err("MIGRATION_BACKUP_FILE".into());
+    }
+    let path = folder(root, plan, false)?.join(&entry.name);
+    verify(&path, entry)?;
+    let bytes = fs::read(path).map_err(io)?;
+    if bytes.len() as u64 != entry.size || digest(&bytes) != entry.sha256 {
+        return Err("MIGRATION_BACKUP_FILE".into());
+    }
+    Ok(bytes)
+}
 pub fn finish(c: &mut Connection, plan: &BackupPlan, now: i64) -> Result<BackupReport, String> {
     let tx = c.transaction().map_err(db)?;
     require_current(&tx, plan)?;

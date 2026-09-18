@@ -12,6 +12,48 @@ use sha2::{Digest, Sha256};
 const PREFIX: &str = "purge.remote.evidence.v1:";
 const DONE: &str = "purge.remote.done.v1:";
 const TARGET: &str = "purge.remote.target.v1:";
+pub(crate) fn capture_local(c: &Connection, note: &str) -> Result<(), String> {
+    let main: String = c
+        .query_row("SELECT object_key FROM sync_settings WHERE id=1", [], |r| {
+            r.get(0)
+        })
+        .map_err(|_| "PURGE_DATABASE_FAILED")?;
+    if crate::sync_space::scope(&main)?.is_none() {
+        return Ok(());
+    }
+    let epoch = crate::sync_target::capture(c)?;
+    bind_target(c, &epoch)?;
+    let mut q = c.prepare("SELECT uuid,kind,byte_size,sha256,preview_byte_size,preview_sha256 FROM note_attachments WHERE note_uuid=?1 AND remote_uploaded=1").map_err(|_| "PURGE_DATABASE_FAILED")?;
+    let rows = q
+        .query_map([note], |r| {
+            Ok(Evidence(
+                1,
+                epoch.clone(),
+                main.clone(),
+                note.into(),
+                r.get(0)?,
+                r.get(1)?,
+                r.get(2)?,
+                r.get(3)?,
+                r.get(4)?,
+                r.get(5)?,
+            ))
+        })
+        .map_err(|_| "PURGE_DATABASE_FAILED")?;
+    for row in rows {
+        let evidence = row.map_err(|_| "PURGE_DATABASE_FAILED")?;
+        evidence.validate()?;
+        c.execute(
+            "INSERT OR IGNORE INTO app_metadata(key,value) VALUES(?1,?2)",
+            params![
+                format!("{PREFIX}{epoch}:{}", evidence.4),
+                serde_json::to_string(&evidence).map_err(|_| "PURGE_REMOTE_INVALID")?
+            ],
+        )
+        .map_err(|_| "PURGE_DATABASE_FAILED")?;
+    }
+    Ok(())
+}
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 // Stable v1 wire: version, epoch, main key, note/asset UUID, kind, original size/hash, preview size/hash.
 pub(crate) struct Evidence(

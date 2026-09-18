@@ -14,38 +14,40 @@ const output = resolve(tmpdir(), 'eggdone-trash-ui-' + Date.now());
 mkdirSync(output, { recursive: true });
 const native = `export const isTauri=()=>false;
 export async function invoke(command,args){
-  if(command==='migration_local_backup'){
+  if(command==='migration_space'){
     window.backupCalls=(window.backupCalls||[]).concat(args.action);
-    if(args.action==='publish'){
-      if(args.expected!=='preview-digest')throw Error('MIGRATION_PUBLICATION_CONFIRMATION');
-      window.publicationConfirmed=true;
-      if(window.publicationFail){window.publicationFail=false;throw Error('MIGRATION_PUBLICATION_NETWORK');}
-      window.publicationDone=true;
-    }
-    if(args.action==='status')return null;
+    if(args.action==='status')return {state:'idle',mode:'',confirmation:null,objectKey:null};
     if(window.backupFail){window.backupFail=false;throw Error('MIGRATION_BACKUP_ASSET');}
-    if(window.backupRemoteFail){const code=window.backupRemoteFail;window.backupRemoteFail=null;throw Error(code);}
     if(window.backupChanged)throw Error('MIGRATION_BACKUP_CHANGED');
-    if(window.recoveryFail)throw Error('MIGRATION_RECOVERY_FAILED');
-    if(args.action==='preparePublication')window.publicationPrepared=true;
-    return {operation:'backup-operation',files:2,bytes:1024,verifiedAt:1,current:true,blockers:window.settled?[]:['pending_notes'],
-      publication:window.publicationPrepared?{operation:'staging-operation',digest:'preview-digest',total:3,completed:window.publicationDone?3:0,bytes:4096,confirmed:!!window.publicationConfirmed,published:!!window.publicationDone,current:true}:null,
-      cloud:['prepareCloud','preparePublication','publish'].includes(args.action)?{operation:'cloud-operation',objects:8,files:3,bytes:4096,verifiedAt:2,current:true}:null};
+    if(args.action==='activate'){
+      if(args.expected!=='preview-digest')throw Error('MIGRATION_SPACE_CONFIRMATION');
+      if(window.publicationFail){window.publicationFail=false;throw Error('MIGRATION_PUBLICATION_NETWORK');}
+      window.legacy=false;
+      window.loadsBeforeActivation=window.listCalls||0;
+      return {state:'active',mode:'',confirmation:null,objectKey:null};
+    }
+    return {state:'prepared',mode:window.joinSpace?'join':'create',confirmation:'preview-digest',objectKey:'destination'};
   }
+  if(command==='sync_now'){
+    if(window.syncFail)throw Error('offline');
+    window.purgePlan={...window.purgePlan,sync_pending:false,remote_pending:0};
+    return {};
+  }
+  if(command==='trash_purge_status')return structuredClone(window.purgePlan);
   if(command==='unfinished_trash_purge')return null;
   if(command==='prepare_trash_purge'){
     if(window.legacy)throw Error('PURGE_MIGRATION_REQUIRED');
     window.purgeTargets=structuredClone(args.selected||window.rows.map(({kind,uuid})=>({kind,uuid})));
     return window.purgePlan={operation_uuid:'test-operation',total:window.purgeTargets.length,attachments:1,bytes:100,
-      state:'prepared',pending:window.purgeTargets.length,purged:0,skipped:0,cleanup_pending:0};
+      state:'prepared',pending:window.purgeTargets.length,purged:0,skipped:0,cleanup_pending:0,sync_pending:false,remote_pending:0};
   }
   if(command==='run_trash_purge'){
     window.purgeCalls.push(args.operationUuid);
     if(window.purgeFail){window.purgeFail=false;throw Error('PURGE_DATABASE_FAILED');}
     window.rows=window.rows.filter(row=>!window.purgeTargets.some(t=>t.kind===row.kind&&t.uuid===row.uuid));
-    return {...window.purgePlan,state:'complete',pending:0,purged:window.purgeTargets.length};
+    return window.purgePlan={...window.purgePlan,state:'complete',pending:0,purged:window.purgeTargets.length,sync_pending:true,remote_pending:1};
   }
-  if(command==='list_trash'){if(window.failLoad)throw Error('read');return structuredClone(window.rows.slice(args.offset,args.offset+args.limit));}
+  if(command==='list_trash'){window.listCalls=(window.listCalls||0)+1;if(window.failLoad)throw Error('read');return structuredClone(window.rows.slice(args.offset,args.offset+args.limit));}
   if(command==='preview_trash')return structuredClone(window.rows.find(r=>r.uuid===args.uuid));
   if(command==='restore_trash'){
     window.writes.push(args.expected);
@@ -152,55 +154,33 @@ try {
     await page.getByRole('status').filter({hasText:lang==='zh-CN'?'同步空间':'sync space'}).waitFor();
     assert.equal(await page.evaluate(()=>window.purgeCalls.length),0);
     await page.getByRole('button',{name:lang==='zh-CN'?'迁移准备':'Migration preparation',exact:true}).click();
-    const prepareBackup=page.getByRole('button',{name:lang==='zh-CN'?'准备本机快照':'Prepare local snapshot',exact:true});
+    const prepareBackup=page.getByRole('button',{name:lang==='zh-CN'?'检查并准备':'Check and prepare',exact:true});
     await prepareBackup.waitFor();
     await page.evaluate(()=>window.backupFail=true);await prepareBackup.click();
-    await page.getByRole('alert').filter({hasText:lang==='zh-CN'?'附件缺失':'attachment is missing'}).waitFor();
-    for(const code of ['MIGRATION_BACKUP_ASSET_CONFIG','MIGRATION_BACKUP_ASSET_DOWNLOAD']){
-      await page.evaluate(code=>window.backupRemoteFail=code,code);await prepareBackup.click();
-      await page.getByRole('alert').filter({hasText:code.endsWith('CONFIG')?(lang==='zh-CN'?'当前同步配置或凭据不可用':'sync settings or credentials are unavailable'):(lang==='zh-CN'?'未能从当前同步空间下载':'could not be downloaded or verified')}).waitFor();
-    }
+    await page.getByRole('alert').waitFor();
     await prepareBackup.click();
-    await page.getByRole('status').filter({hasText:lang==='zh-CN'?'重新读取并校验':'reopened and verified'}).waitFor();
-    await page.evaluate(()=>window.recoveryFail=true);
-    await page.getByRole('button',{name:lang==='zh-CN'?'重新校验':'Recheck',exact:true}).click();
-    await page.getByRole('alert').filter({hasText:lang==='zh-CN'?'隔离恢复验证未通过':'Isolated recovery or temporary file cleanup failed'}).waitFor();
-    assert.equal(await page.getByRole('status').filter({hasText:lang==='zh-CN'?'隔离恢复验证通过':'Isolated recovery passed'}).count(),0);
-    await page.evaluate(()=>window.recoveryFail=false);
-    await prepareBackup.click();
-    await page.getByRole('status').filter({hasText:lang==='zh-CN'?'隔离恢复验证通过':'Isolated recovery passed'}).waitFor();
-    const prepareCloud=page.getByRole('button',{name:lang==='zh-CN'?'备份并核对云端':'Back up and verify cloud',exact:true});
-    await prepareCloud.click();
-    await page.getByRole('status').filter({hasText:lang==='zh-CN'?'本次云端快照校验通过':'Cloud snapshot verified in this operation'}).waitFor();
-    await page.evaluate(()=>window.backupRemoteFail='MIGRATION_CLOUD_DOWNLOAD');
-    await prepareCloud.click();
-    await page.getByRole('alert').filter({hasText:lang==='zh-CN'?'未能读取或校验云端':'could not be read or validated'}).waitFor();
-    assert.equal(await page.getByRole('status').filter({hasText:lang==='zh-CN'?'本次云端快照校验通过':'Cloud snapshot verified in this operation'}).count(),0);
-    await prepareCloud.click();
-    assert.equal(await page.evaluate(()=>window.purgeCalls.length),0,'backup never deletes');
-    assert.equal(await page.locator('.publication-agreement').count(),0,'unsettled data cannot publish');
-    await page.evaluate(()=>window.settled=true);await prepareCloud.click();
-    await page.getByRole('button',{name:lang==='zh-CN'?'准备迁移复制':'Prepare migration copy',exact:true}).click();
-    const publish=page.getByRole('button',{name:lang==='zh-CN'?'确认复制':'Confirm copy',exact:true});
+    const publish=page.getByRole('button',{name:lang==='zh-CN'?'迁移并启用':'Migrate and activate',exact:true});
     assert.equal(await publish.isDisabled(),true);
-    assert.equal(await page.getByRole('status').filter({hasText:lang==='zh-CN'?'隔离恢复验证通过':'Isolated recovery passed'}).count(),0,'publication does not claim a new restore drill');
-    await page.locator('.publication-agreement input').check();
+    await page.locator('section input[type=checkbox]').check();
     await page.evaluate(()=>window.publicationFail=true);await publish.click();
-    await page.getByRole('alert').filter({hasText:lang==='zh-CN'?'迁移复制未完成':'Migration copy did not finish'}).waitFor();
-    await publish.click();
-    await page.getByText(lang==='zh-CN'?'已记录暂存发布完成':'Staging publication was recorded',{exact:false}).waitFor();
-    assert.equal(await page.evaluate(()=>window.backupCalls.filter(a=>a==='publish').length),2);
-    assert.equal(await page.evaluate(()=>window.purgeCalls.length),0,'staging publication never purges');
+    await page.getByRole('alert').waitFor();
+    assert.equal(await page.evaluate(()=>window.purgeCalls.length),0,'preparation never purges');
     assert.ok(await page.locator('dialog').evaluate(el=>el.scrollWidth<=el.clientWidth),'migration panel overflow');
     await page.screenshot({path:resolve(output,'migration-'+lang+'-'+theme+'.png')});
     await page.setViewportSize({width:320,height:430});
-    await prepareBackup.scrollIntoViewIfNeeded();
+    await publish.scrollIntoViewIfNeeded();
     assert.ok(await page.locator('dialog').evaluate(el=>el.scrollWidth<=el.clientWidth),'narrow migration panel overflow');
     await page.screenshot({path:resolve(output,'migration-narrow-'+lang+'-'+theme+'.png')});
     await page.setViewportSize({width:480,height:720});
-    await page.evaluate(()=>window.backupChanged=true);
-    await page.getByRole('button',{name:lang==='zh-CN'?'重新校验':'Recheck',exact:true}).click();
+    await page.evaluate(()=>window.backupChanged=true);await prepareBackup.click();
     await page.getByRole('alert').filter({hasText:lang==='zh-CN'?'本机内容已变化':'Local data has changed'}).waitFor();
+    await page.evaluate(()=>{window.backupChanged=false;window.joinSpace=true;});await prepareBackup.click();
+    const join=page.getByRole('button',{name:lang==='zh-CN'?'加入新空间':'Join new space',exact:true});
+    assert.equal(await join.isDisabled(),true);
+    await page.locator('section input[type=checkbox]').check();await join.click();
+    await page.getByRole('status').filter({hasText:lang==='zh-CN'?'新空间已启用':'New space activated'}).waitFor();
+    await page.waitForFunction(()=>window.listCalls>window.loadsBeforeActivation);
+    assert.equal(await page.evaluate(()=>window.purgeCalls.length),0,'activation never purges');
     await page.keyboard.press('Escape');
     await page.evaluate(()=>window.legacy=false);
     await page.getByRole('button',{name:all,exact:true}).click();
@@ -215,8 +195,13 @@ try {
     for(const button of await page.locator('footer button').all()) {
       const b=await button.boundingBox(); assert.ok(b.x>=0&&b.y>=0&&b.x+b.width<=481&&b.y+b.height<=721,'purge footer clipped');
     }
+    await page.evaluate(()=>window.syncFail=true);
     await execute.click();
     await page.waitForFunction(()=>window.rows.length===1);
+    await page.getByRole('status').filter({hasText:lang==='zh-CN'?'已从本机删除':'Removed locally'}).first().waitFor();
+    await page.evaluate(()=>window.syncFail=false);
+    await page.getByRole('button',{name:lang==='zh-CN'?'同步并刷新进度':'Sync and refresh progress',exact:true}).click();
+    await page.getByRole('status').filter({hasText:lang==='zh-CN'?'本次清理已完成':'This cleanup is complete'}).waitFor();
     assert.deepEqual(await page.evaluate(()=>window.purgeCalls),['test-operation','test-operation']);
     assert.equal(await page.evaluate(()=>window.rows[0].uuid),'late');
     await page.keyboard.press('Escape');

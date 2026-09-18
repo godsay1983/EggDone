@@ -15,6 +15,8 @@ mod archive;
 #[path = "sync_core_purge_compat_s3_tests.rs"]
 mod purge_compat;
 
+#[path = "sync_core_activation_s3_tests.rs"]
+mod activation;
 #[path = "sync_core_migration_s3_tests.rs"]
 mod migration;
 #[path = "sync_core_purge_remote_s3_tests.rs"]

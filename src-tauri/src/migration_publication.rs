@@ -90,7 +90,7 @@ pub fn manifest(plan: &Plan) -> Result<Vec<u8>, String> {
 pub fn plan_digest(plan: &Plan) -> Result<String, String> {
     Ok(digest(&manifest(plan)?))
 }
-fn validate(plan: &Plan) -> Result<(), String> {
+pub(crate) fn validate(plan: &Plan) -> Result<(), String> {
     if plan.version != 1
         || !id(&plan.operation)
         || !id(&plan.cloud_operation)
