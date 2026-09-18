@@ -8,6 +8,12 @@ const SECRET: &str = "eggdone-ns7-public-test-fixture";
 #[path = "sync_core_history_s3_tests.rs"]
 mod history;
 
+#[path = "sync_core_archive_s3_tests.rs"]
+mod archive;
+
+#[path = "sync_core_purge_compat_s3_tests.rs"]
+mod purge_compat;
+
 #[test]
 #[ignore = "Use run-sync-core-s3.ps1 -TrashRecoverySessions with the Harmony peer"]
 fn trash_session_prepare() {
