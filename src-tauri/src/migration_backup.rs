@@ -43,6 +43,8 @@ mod recovery;
 pub use recovery::rehearse;
 #[path = "migration_cloud_backup.rs"]
 pub mod cloud;
+#[path = "migration_publication.rs"]
+pub mod publication;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
@@ -64,6 +66,7 @@ pub struct BackupPlan {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BackupReport {
+    pub publication: Option<publication::Report>,
     pub operation: String,
     pub files: usize,
     pub bytes: u64,
@@ -459,6 +462,7 @@ pub fn report(c: &mut Connection, plan: &BackupPlan) -> Result<BackupReport, Str
         current,
         blockers,
         cloud: cloud::report(c, plan)?,
+        publication: publication::report(c, plan)?,
     })
 }
 

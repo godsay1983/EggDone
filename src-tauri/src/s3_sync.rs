@@ -432,6 +432,102 @@ pub fn prepare_manual_sync(connection: &Connection) -> Result<PreparedManualSync
 // The backup coordinator checks its complete source snapshot before and after each request.
 pub struct MigrationAssetSource(PreparedManualSync);
 
+pub struct MigrationStagingTarget {
+    bucket: Box<Bucket>,
+    prefix: String,
+}
+impl MigrationStagingTarget {
+    pub fn new(source: &MigrationAssetSource, operation: &str) -> Result<Self, String> {
+        Ok(Self {
+            bucket: source.0.bucket.clone(),
+            prefix: crate::migration_backup::publication::prefix(source.main_key(), operation)?,
+        })
+    }
+    fn allowed(&self, key: &str) -> Result<(), String> {
+        let suffix = key
+            .strip_prefix(&self.prefix)
+            .ok_or("MIGRATION_PUBLICATION_SCOPE")?;
+        if suffix != "manifest.json"
+            && !(suffix.starts_with("objects/")
+                && suffix.len() == 72
+                && suffix[8..]
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))
+        {
+            return Err("MIGRATION_PUBLICATION_SCOPE".into());
+        }
+        Ok(())
+    }
+}
+impl crate::migration_backup::publication::Storage for MigrationStagingTarget {
+    fn read(&mut self, key: &str, limit: usize) -> Result<Option<Vec<u8>>, String> {
+        self.allowed(key)?;
+        if limit > 20 * 1024 * 1024 {
+            return Err("MIGRATION_BACKUP_LIMIT".into());
+        }
+        tauri::async_runtime::block_on(async {
+            let req = ReqwestRequest::new(&self.bucket, key, Command::GetObject)
+                .await
+                .map_err(|_| "MIGRATION_PUBLICATION_NETWORK")?;
+            let mut response = req
+                .response()
+                .await
+                .map_err(|_| "MIGRATION_PUBLICATION_NETWORK")?;
+            if response.status().as_u16() == 404 {
+                return Ok(None);
+            }
+            if response.status().as_u16() != 200 {
+                return Err("MIGRATION_PUBLICATION_NETWORK".into());
+            }
+            let tags = response
+                .headers()
+                .get_all("etag")
+                .iter()
+                .collect::<Vec<_>>();
+            if tags.len() != 1
+                || !tags[0]
+                    .to_str()
+                    .is_ok_and(crate::migration_backup::cloud::valid_etag)
+            {
+                return Err("MIGRATION_PUBLICATION_CONFLICT".into());
+            }
+            if response.content_length().is_some_and(|n| n > limit as u64) {
+                return Err("MIGRATION_PUBLICATION_CONFLICT".into());
+            }
+            let mut bytes = Vec::new();
+            while let Some(chunk) = response
+                .chunk()
+                .await
+                .map_err(|_| "MIGRATION_PUBLICATION_NETWORK")?
+            {
+                if chunk.len() > limit - bytes.len() {
+                    return Err("MIGRATION_PUBLICATION_CONFLICT".into());
+                }
+                bytes.extend_from_slice(&chunk);
+            }
+            Ok(Some(bytes))
+        })
+    }
+    fn create(&mut self, key: &str, bytes: &[u8]) -> Result<(), String> {
+        self.allowed(key)?;
+        if bytes.len() > 20 * 1024 * 1024 {
+            return Err("MIGRATION_BACKUP_LIMIT".into());
+        }
+        let mut bucket = self.bucket.clone();
+        bucket.extra_headers.insert(
+            http::HeaderName::from_static("if-none-match"),
+            http::HeaderValue::from_static("*"),
+        );
+        let response = tauri::async_runtime::block_on(bucket.put_object(key, bytes))
+            .map_err(|_| "MIGRATION_PUBLICATION_NETWORK")?;
+        if ![200, 201, 204, 409, 412].contains(&response.status_code()) {
+            return Err("MIGRATION_PUBLICATION_NETWORK".into());
+        }
+        // A conflict is not success: the coordinator must read back the exact expected bytes.
+        Ok(())
+    }
+}
+
 pub fn migration_source_binding(connection: &Connection) -> Result<String, String> {
     let s = read_settings(connection).map_err(|_| "MIGRATION_BACKUP_ASSET_CONFIG")?;
     s.validate_connection()

@@ -10,6 +10,7 @@ use tauri::{AppHandle, Manager};
 pub async fn migration_local_backup(
     app: AppHandle,
     action: String,
+    expected: Option<String>,
 ) -> Result<Option<backup::BackupReport>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let db = app.state::<Database>();
@@ -54,7 +55,80 @@ pub async fn migration_local_backup(
         let Some(plan) = plan else {
             return Ok(None);
         };
-        if action == "prepareCloud" {
+        if action == "preparePublication" || action == "publish" {
+            let cloud = backup::cloud::latest(&*lock_database(&db)?)?
+                .ok_or("MIGRATION_PUBLICATION_UNVERIFIED")?;
+            backup::verify_files(&root, &plan)?;
+            backup::cloud::verify_files(&root, &plan, &cloud)?;
+            let source = {
+                let c = lock_database(&db)?;
+                backup::cloud::require_current(&c, &plan, &cloud)?;
+                crate::s3_sync::prepare_migration_asset_source(&c)?
+            };
+            backup::cloud::require_remote(
+                &cloud,
+                &tauri::async_runtime::block_on(source.metadata())?,
+            )?;
+            if action == "preparePublication" {
+                backup::publication::prepare(&mut *lock_database(&db)?, &plan, &cloud)?;
+            } else {
+                let p = backup::publication::latest(&*lock_database(&db)?)?
+                    .ok_or("MIGRATION_PUBLICATION_CONFIRMATION")?;
+                let expected = expected
+                    .as_deref()
+                    .ok_or("MIGRATION_PUBLICATION_CONFIRMATION")?;
+                if !crate::migration_preflight::read(&mut *lock_database(&db)?)?
+                    .blockers()
+                    .is_empty()
+                {
+                    return Err("MIGRATION_LOCAL_NOT_SETTLED".into());
+                }
+                backup::publication::record(
+                    &mut *lock_database(&db)?,
+                    &plan,
+                    &cloud,
+                    &p,
+                    expected,
+                    None,
+                    false,
+                )?;
+                let p = backup::publication::latest(&*lock_database(&db)?)?
+                    .ok_or("MIGRATION_PUBLICATION_CHANGED")?;
+                let mut target =
+                    crate::s3_sync::MigrationStagingTarget::new(&source, &p.operation)?;
+                backup::publication::publish(
+                    &p,
+                    &mut target,
+                    |f| backup::cloud::read_file(&root, &plan, &cloud, f),
+                    || {
+                        backup::publication::require_current(
+                            &*lock_database(&db)?,
+                            &plan,
+                            &cloud,
+                            &p,
+                        )
+                    },
+                    || {
+                        backup::cloud::require_remote(
+                            &cloud,
+                            &tauri::async_runtime::block_on(source.metadata())?,
+                        )
+                    },
+                    |done, published| {
+                        backup::publication::record(
+                            &mut *lock_database(&db)?,
+                            &plan,
+                            &cloud,
+                            &p,
+                            expected,
+                            done,
+                            published,
+                        )
+                    },
+                )?;
+            }
+            backup::report(&mut *lock_database(&db)?, &plan).map(Some)
+        } else if action == "prepareCloud" {
             if plan.verified_at.is_none() {
                 return Err("MIGRATION_CLOUD_LOCAL_REQUIRED".into());
             }

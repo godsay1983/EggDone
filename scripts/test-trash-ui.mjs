@@ -16,13 +16,21 @@ const native = `export const isTauri=()=>false;
 export async function invoke(command,args){
   if(command==='migration_local_backup'){
     window.backupCalls=(window.backupCalls||[]).concat(args.action);
+    if(args.action==='publish'){
+      if(args.expected!=='preview-digest')throw Error('MIGRATION_PUBLICATION_CONFIRMATION');
+      window.publicationConfirmed=true;
+      if(window.publicationFail){window.publicationFail=false;throw Error('MIGRATION_PUBLICATION_NETWORK');}
+      window.publicationDone=true;
+    }
     if(args.action==='status')return null;
     if(window.backupFail){window.backupFail=false;throw Error('MIGRATION_BACKUP_ASSET');}
     if(window.backupRemoteFail){const code=window.backupRemoteFail;window.backupRemoteFail=null;throw Error(code);}
     if(window.backupChanged)throw Error('MIGRATION_BACKUP_CHANGED');
     if(window.recoveryFail)throw Error('MIGRATION_RECOVERY_FAILED');
-    return {operation:'backup-operation',files:2,bytes:1024,verifiedAt:1,current:true,blockers:['pending_notes'],
-      cloud:args.action==='prepareCloud'?{operation:'cloud-operation',objects:8,files:3,bytes:4096,verifiedAt:2,current:true}:null};
+    if(args.action==='preparePublication')window.publicationPrepared=true;
+    return {operation:'backup-operation',files:2,bytes:1024,verifiedAt:1,current:true,blockers:window.settled?[]:['pending_notes'],
+      publication:window.publicationPrepared?{operation:'staging-operation',digest:'preview-digest',total:3,completed:window.publicationDone?3:0,bytes:4096,confirmed:!!window.publicationConfirmed,published:!!window.publicationDone,current:true}:null,
+      cloud:['prepareCloud','preparePublication','publish'].includes(args.action)?{operation:'cloud-operation',objects:8,files:3,bytes:4096,verifiedAt:2,current:true}:null};
   }
   if(command==='unfinished_trash_purge')return null;
   if(command==='prepare_trash_purge'){
@@ -170,6 +178,19 @@ try {
     assert.equal(await page.getByRole('status').filter({hasText:lang==='zh-CN'?'本次云端快照校验通过':'Cloud snapshot verified in this operation'}).count(),0);
     await prepareCloud.click();
     assert.equal(await page.evaluate(()=>window.purgeCalls.length),0,'backup never deletes');
+    assert.equal(await page.locator('.publication-agreement').count(),0,'unsettled data cannot publish');
+    await page.evaluate(()=>window.settled=true);await prepareCloud.click();
+    await page.getByRole('button',{name:lang==='zh-CN'?'准备迁移复制':'Prepare migration copy',exact:true}).click();
+    const publish=page.getByRole('button',{name:lang==='zh-CN'?'确认复制':'Confirm copy',exact:true});
+    assert.equal(await publish.isDisabled(),true);
+    assert.equal(await page.getByRole('status').filter({hasText:lang==='zh-CN'?'隔离恢复验证通过':'Isolated recovery passed'}).count(),0,'publication does not claim a new restore drill');
+    await page.locator('.publication-agreement input').check();
+    await page.evaluate(()=>window.publicationFail=true);await publish.click();
+    await page.getByRole('alert').filter({hasText:lang==='zh-CN'?'迁移复制未完成':'Migration copy did not finish'}).waitFor();
+    await publish.click();
+    await page.getByText(lang==='zh-CN'?'已记录暂存发布完成':'Staging publication was recorded',{exact:false}).waitFor();
+    assert.equal(await page.evaluate(()=>window.backupCalls.filter(a=>a==='publish').length),2);
+    assert.equal(await page.evaluate(()=>window.purgeCalls.length),0,'staging publication never purges');
     assert.ok(await page.locator('dialog').evaluate(el=>el.scrollWidth<=el.clientWidth),'migration panel overflow');
     await page.screenshot({path:resolve(output,'migration-'+lang+'-'+theme+'.png')});
     await page.setViewportSize({width:320,height:430});

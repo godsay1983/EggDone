@@ -111,6 +111,110 @@ fn cloud_snapshot_verify() {
     });
 }
 
+#[test]
+#[ignore = "Use run-sync-core-s3.ps1 -PublicationSessions"]
+fn publication_verify() {
+    use crate::migration_backup::{self as backup, cloud, publication as p};
+    use std::cell::RefCell;
+    let target = bucket(SECRET);
+    let source = s3_sync::MigrationAssetSource::from_test_bucket(target.clone(), MAIN);
+    let remote = tauri::async_runtime::block_on(source.metadata()).unwrap();
+    let root =
+        std::env::temp_dir().join(format!("eggdone-publication-s3-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir(&root).unwrap();
+    let mut c = Connection::open(root.join("db")).unwrap();
+    crate::db::migrate(&mut c).unwrap();
+    c.execute_batch("UPDATE sync_settings SET endpoint='https://fixture.invalid',region='us-east-1',bucket='fixture',object_key='account/todos.json';
+      INSERT INTO app_metadata(key,value) VALUES('sync.target.epoch.v1','settled');
+      UPDATE sync_runtime_state SET last_result='success',last_success_at=1,dirty_domains='[]';
+      UPDATE recurrence_sync_state SET synced_revision=revision;UPDATE task_note_link_sync_state SET synced_revision=revision;
+      UPDATE task_checklist_sync_state SET synced_revision=revision;UPDATE task_template_sync_state SET synced_revision=revision;").unwrap();
+    let work = backup::prepare(&mut c, 1).unwrap();
+    let copies = root.join("copies");
+    backup::copy(&work, &copies, &root.join("assets")).unwrap();
+    backup::finish(&mut c, &work.plan, 2).unwrap();
+    let local = backup::latest(&c).unwrap().unwrap();
+    let binding = s3_sync::migration_source_binding(&c).unwrap();
+    let cloud = cloud::prepare(&mut c, &local, &binding, MAIN, &remote, 3).unwrap();
+    let runtime = s3_sync::SyncRuntime::default();
+    cloud::copy(&copies, &local, &cloud, &remote, |f| {
+        tauri::async_runtime::block_on(source.download(
+            &runtime,
+            &f.name[..36],
+            &f.name[37..],
+            f.size as i64,
+            &f.sha256,
+        ))
+    })
+    .unwrap();
+    cloud::finish(&mut c, &local, &cloud, 4).unwrap();
+    let cloud = cloud::latest(&c).unwrap().unwrap();
+    let plan = p::prepare(&mut c, &local, &cloud).unwrap();
+    let hash = p::plan_digest(&plan).unwrap();
+    p::record(&mut c, &local, &cloud, &plan, &hash, None, false).unwrap();
+    let plan = p::latest(&c).unwrap().unwrap();
+    let c = RefCell::new(c);
+    let mut io = s3_sync::MigrationStagingTarget::new(&source, &plan.operation).unwrap();
+    for _ in 0..2 {
+        p::publish(
+            &plan,
+            &mut io,
+            |f| cloud::read_file(&copies, &local, &cloud, f),
+            || p::require_current(&c.borrow(), &local, &cloud, &plan),
+            || cloud::require_remote(&cloud, &tauri::async_runtime::block_on(source.metadata())?),
+            |done, published| {
+                p::record(
+                    &mut c.borrow_mut(),
+                    &local,
+                    &cloud,
+                    &plan,
+                    &hash,
+                    done,
+                    published,
+                )
+            },
+        )
+        .unwrap();
+    }
+    let saved = p::latest(&c.borrow()).unwrap().unwrap();
+    assert!(saved.published);
+    let wire = serde_json::to_vec(&saved).unwrap();
+    assert_eq!(
+        tauri::async_runtime::block_on(target.put_object("account/publication-proof.json", &wire))
+            .unwrap()
+            .status_code(),
+        200
+    );
+    // Real conditional create must refuse different contents, never overwrite an existing seed.
+    let mut conflict = target.clone();
+    conflict.extra_headers.insert(
+        http::HeaderName::from_static("if-none-match"),
+        http::HeaderValue::from_static("*"),
+    );
+    assert_eq!(
+        tauri::async_runtime::block_on(
+            conflict.put_object(&p::marker_key(&plan).unwrap(), b"other")
+        )
+        .unwrap()
+        .status_code(),
+        412
+    );
+    assert_eq!(
+        tauri::async_runtime::block_on(target.get_object(&p::marker_key(&plan).unwrap()))
+            .unwrap()
+            .as_slice(),
+        p::manifest(&plan).unwrap()
+    );
+    cloud::require_remote(
+        &cloud,
+        &tauri::async_runtime::block_on(source.metadata()).unwrap(),
+    )
+    .unwrap();
+    drop(c);
+    std::fs::remove_dir_all(root).unwrap();
+    println!("PUBLICATION_DESKTOP_OK: native durable seed, If-None-Match, readback, idempotent retry and unchanged old space");
+}
+
 fn fixture() -> Vec<Value> {
     let client = Client::new(TODO, NOTE);
     client.add_file();

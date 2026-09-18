@@ -21,12 +21,12 @@ pub struct Plan {
     pub operation: String,
     local_operation: String,
     local_hash: String,
-    source: String,
-    main_key: String,
+    pub(crate) source: String,
+    pub(crate) main_key: String,
     created_at: i64,
     pub objects: Vec<ObjectEntry>,
     pub assets: Vec<FileEntry>,
-    verified_at: Option<i64>,
+    pub(crate) verified_at: Option<i64>,
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -203,7 +203,7 @@ fn validate_cloud(plan: &Plan) -> Result<(), String> {
     }
     Ok(())
 }
-fn files(plan: &Plan) -> impl Iterator<Item = &FileEntry> {
+pub(crate) fn files(plan: &Plan) -> impl Iterator<Item = &FileEntry> {
     plan.objects
         .iter()
         .filter_map(|o| o.file.as_ref())
@@ -323,7 +323,7 @@ fn cloud_folder(
     directory(&target, create)?;
     Ok(target)
 }
-fn manifest_cloud(plan: &Plan) -> Result<Vec<u8>, String> {
+pub(crate) fn manifest_cloud(plan: &Plan) -> Result<Vec<u8>, String> {
     let mut copy = plan.clone();
     copy.verified_at = None;
     serde_json::to_vec(&copy).map_err(|_| "MIGRATION_CLOUD_INVALID".into())
@@ -381,6 +381,28 @@ pub fn verify_files(root: &Path, local: &BackupPlan, plan: &Plan) -> Result<(), 
         verify(&target.join(&entry.name), entry)?;
     }
     Ok(())
+}
+pub fn read_file(
+    root: &Path,
+    local: &BackupPlan,
+    plan: &Plan,
+    entry: &FileEntry,
+) -> Result<Vec<u8>, String> {
+    if !files(plan).any(|f| f == entry) {
+        return Err("MIGRATION_PUBLICATION_INVALID".into());
+    }
+    let path = cloud_folder(root, local, plan, false)?.join(&entry.name);
+    verify(&path, entry)?;
+    let mut bytes = Vec::new();
+    fs::File::open(&path)
+        .map_err(io)?
+        .take(entry.size + 1)
+        .read_to_end(&mut bytes)
+        .map_err(io)?;
+    if bytes.len() as u64 != entry.size || digest(&bytes) != entry.sha256 {
+        return Err("MIGRATION_BACKUP_FILE".into());
+    }
+    Ok(bytes)
 }
 pub fn require_remote(plan: &Plan, remote: &[RemoteObject]) -> Result<(), String> {
     let (objects, assets) = entries(&plan.main_key, remote)?;

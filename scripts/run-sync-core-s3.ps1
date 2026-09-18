@@ -8,13 +8,14 @@ param(
     [switch]$MigrationJournalSessions,
     [switch]$AssetSafetySessions,
     [switch]$CloudSnapshotSessions,
+    [switch]$PublicationSessions,
     [string]$HarmonyRoot
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 foreach ($command in @('docker', 'cargo')) { $null = Get-Command $command -ErrorAction Stop }
-if (@($CrossClientSessions, $TrashRecoverySessions, $NoteHistorySessions, $ArchiveRecoverySessions, $PurgeCompatibilitySessions, $MigrationJournalSessions, $AssetSafetySessions, $CloudSnapshotSessions).Where({ $_.IsPresent }).Count -gt 1) { throw 'Select only one cross-client suite' }
-if ($CrossClientSessions -or $TrashRecoverySessions -or $NoteHistorySessions -or $ArchiveRecoverySessions -or $PurgeCompatibilitySessions -or $MigrationJournalSessions -or $AssetSafetySessions -or $CloudSnapshotSessions) {
+if (@($CrossClientSessions, $TrashRecoverySessions, $NoteHistorySessions, $ArchiveRecoverySessions, $PurgeCompatibilitySessions, $MigrationJournalSessions, $AssetSafetySessions, $CloudSnapshotSessions, $PublicationSessions).Where({ $_.IsPresent }).Count -gt 1) { throw 'Select only one cross-client suite' }
+if ($CrossClientSessions -or $TrashRecoverySessions -or $NoteHistorySessions -or $ArchiveRecoverySessions -or $PurgeCompatibilitySessions -or $MigrationJournalSessions -or $AssetSafetySessions -or $CloudSnapshotSessions -or $PublicationSessions) {
     $null = Get-Command node -ErrorAction Stop
     if (-not $HarmonyRoot) { throw 'Cross-client suites require the explicit Harmony checkout path' }
     $HarmonyRoot = (Resolve-Path -LiteralPath $HarmonyRoot).Path
@@ -26,6 +27,7 @@ if ($CrossClientSessions -or $TrashRecoverySessions -or $NoteHistorySessions -or
     if ($MigrationJournalSessions) { $harmonyTest = Join-Path $HarmonyRoot 'scripts/test-migration-journal-s3.cjs' }
     if ($AssetSafetySessions) { $harmonyTest = Join-Path $HarmonyRoot 'scripts/test-asset-safety-s3.cjs' }
     if ($CloudSnapshotSessions) { $harmonyTest = Join-Path $HarmonyRoot 'scripts/test-cloud-snapshot-s3.cjs' }
+    if ($PublicationSessions) { $harmonyTest = Join-Path $HarmonyRoot 'scripts/test-publication-s3.cjs' }
     if (-not (Test-Path -LiteralPath $harmonyTest)) { throw 'Harmony checkout is missing the full session test' }
 }
 if (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue) { throw 'Port occupied; select another port' }
@@ -69,6 +71,7 @@ function Invoke-HarmonyPhase([string]$Phase) {
     if ($MigrationJournalSessions) { $marker = 'MIGRATION_HARMONY_' + $Phase.ToUpperInvariant() + '_OK:' }
     if ($AssetSafetySessions) { $marker = 'ASSET_SAFETY_HARMONY_OK:' }
     if ($CloudSnapshotSessions) { $marker = 'CLOUD_SNAPSHOT_HARMONY_OK:' }
+    if ($PublicationSessions) { $marker = 'PUBLICATION_HARMONY_OK:' }
     if ((Get-Content -LiteralPath $log -Raw) -notmatch $marker) { throw "Harmony phase did not complete; see $log" }
 }
 
@@ -99,7 +102,11 @@ try {
     }
     if (-not $ready) { throw 'Authenticated S3 readiness timed out' }
     Write-Host "Running the desktop production sync core against isolated S3. Evidence: $logs"
-    if ($CloudSnapshotSessions) {
+    if ($PublicationSessions) {
+        Invoke-DesktopTest 'migration::migration_prepare' 'MIGRATION_DESKTOP_PREPARE_OK'
+        Invoke-DesktopTest 'migration::publication_verify' 'PUBLICATION_DESKTOP_OK'
+        Invoke-HarmonyPhase 'verify'
+    } elseif ($CloudSnapshotSessions) {
         Invoke-DesktopTest 'migration::migration_prepare' 'MIGRATION_DESKTOP_PREPARE_OK'
         Invoke-DesktopTest 'migration::cloud_snapshot_verify' 'CLOUD_SNAPSHOT_DESKTOP_OK'
         Invoke-HarmonyPhase 'verify'
@@ -157,4 +164,4 @@ try {
     $env:EGGDONE_NS7_S3_PORT = $oldPort
 }
 if ($cleanupFailed) { throw 'Disposable resource cleanup incomplete' }
-Write-Host "Sync core S3 passed (cross-client: $CrossClientSessions; trash recovery: $TrashRecoverySessions; note history: $NoteHistorySessions; archive recovery: $ArchiveRecoverySessions; purge compatibility: $PurgeCompatibilitySessions; migration journal: $MigrationJournalSessions; asset safety: $AssetSafetySessions; cloud snapshot: $CloudSnapshotSessions); disposable service removed. Evidence: $logs"
+Write-Host "Sync core S3 passed (cross-client: $CrossClientSessions; trash recovery: $TrashRecoverySessions; note history: $NoteHistorySessions; archive recovery: $ArchiveRecoverySessions; purge compatibility: $PurgeCompatibilitySessions; migration journal: $MigrationJournalSessions; asset safety: $AssetSafetySessions; cloud snapshot: $CloudSnapshotSessions; publication: $PublicationSessions); disposable service removed. Evidence: $logs"
