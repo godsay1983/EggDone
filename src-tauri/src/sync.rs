@@ -173,9 +173,14 @@ pub(crate) fn merge_remote_document(
     remote: &SyncDocument,
     generated_at: i64,
 ) -> Result<SyncDocument, String> {
-    let local = build_document(connection, generated_at)?;
-    let merged = merge_documents(&local, remote, generated_at)?;
     let transaction = connection.transaction().map_err(database_error)?;
+    let index = crate::lifecycle_sync::Index::read(&transaction)?;
+    let local = build_document(&transaction, generated_at)?;
+    validate_document(remote)?;
+    let mut remote = remote.clone();
+    remote.todos.retain(|todo| !index.todo(&todo.uuid));
+    let mut merged = merge_documents(&local, &remote, generated_at)?;
+    merged.todos.retain(|todo| !index.todo(&todo.uuid));
 
     for group in &merged.groups {
         transaction

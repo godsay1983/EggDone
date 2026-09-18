@@ -71,7 +71,11 @@ fn merge_in_open_transaction(tx: &Connection, incoming: &LinkDocument) -> Result
     }
     let current = snapshot(tx)?;
     let merged = merge_documents(&current.document, incoming)?;
+    let index = crate::lifecycle_sync::Index::read(tx)?;
     for link in merged.links {
+        if index.todo(&link.todo_uuid) || index.note(&link.note_uuid) {
+            continue;
+        }
         let record = serde_json::to_string(&link).map_err(|e| e.to_string())?;
         tx.execute("INSERT INTO task_note_links(uuid,todo_uuid,note_uuid,active,record_json) VALUES (?1,?2,?3,?4,?5)
           ON CONFLICT(uuid) DO UPDATE SET active=excluded.active,record_json=excluded.record_json

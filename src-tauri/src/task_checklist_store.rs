@@ -106,7 +106,11 @@ pub fn merge_in_transaction(
         &current.definitions,
         definitions,
     )?)?)?;
+    let index = crate::lifecycle_sync::Index::read(tx)?;
     for i in items.items {
+        if index.todo(&i.todo_uuid) {
+            continue;
+        }
         let json = serde_json::to_string(&i).map_err(|e| e.to_string())?;
         tx.execute("INSERT INTO task_checklist_items(uuid,todo_uuid,active,record_json) VALUES(?1,?2,?3,?4)
           ON CONFLICT(uuid) DO UPDATE SET active=excluded.active,record_json=excluded.record_json WHERE record_json<>excluded.record_json",

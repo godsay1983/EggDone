@@ -75,7 +75,11 @@ pub(crate) fn merge_in_transaction(
     merged
         .rules
         .sort_by_key(|rule| rule.deleted_at.is_none() && !rule.exhausted);
+    let index = crate::lifecycle_sync::Index::read(transaction)?;
     for rule in merged.rules {
+        if index.todo(&rule.current_todo_uuid) {
+            continue;
+        }
         let record = serde_json::to_string(&rule).map_err(|e| e.to_string())?;
         transaction.execute(
             "INSERT INTO recurrence_rules(uuid,current_todo_uuid,active,record_json) VALUES (?1,?2,?3,?4)

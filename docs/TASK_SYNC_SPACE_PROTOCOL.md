@@ -6,6 +6,8 @@
 
 ## 本轮范围
 
+2026-09-19 增量：新增 lifecycle-terminals.json / terminals 生产同步模块（尚未提交），严格条件写入和读回 ACK 已接入编排。普通入口仍关闭。下述八域传输证据属于原阶段，本轮终态模块验证与剩余工作见[交付审计](TASK_PURGE_DELIVERY_AUDIT.md)。
+
 双端生产传输层支持独立新空间的八类元数据封装，同时保留原空间格式。
 本轮没有新界面，也没有开放空间切换。普通同步入口明确拒绝新空间配置，返回 SYNC_SPACE_ACTIVATION_REQUIRED；
 必须等原子激活证明与终态感知同步一并接齐后再解除。不能仅凭传输已通过就让用户修改 Object Key 绕过迁移。
@@ -26,6 +28,7 @@
 | task-checklist-items.json | items |
 | task-checklist-definitions.json | definitions |
 | task-templates.json | templates |
+| lifecycle-terminals.json | terminals（2026-09-19 新增） |
 
 封装字段仅四个：
 ```json
@@ -37,7 +40,12 @@ payload 是保留内部文档的 JSON 字符串，避免更改已有领域合并
 这不是访问控制或加密，持有 S3 写入凭据的外部工具仍能破坏对象。
 
 暂存区 `eggdone-migration-staging/v1/...` 与此运行空间不同，禁止将暂存 manifest 当作运行空间或激活证明。
-新空间八个对象都必须在正式激活前初始化；没有内容的域也需要合法空文档，不能依赖第一次正常同步创建。
+新空间八个业务对象及终态对象都必须在正式激活前初始化；没有内容的域也需要合法空文档，不能依赖第一次正常同步创建。
+
+终态内部格式为 {"format_version":1,"terminals":[{"kind":"todo","uuid":"...","operation_uuid":"...","purged_at":0}]}。
+字段严格封闭，kind 仅 todo/note，UUID 为小写规范格式，时间为非负安全整数；同一 kind/uuid 不可重复。
+按 kind/uuid 合并并排序，冲突取 (purged_at, operation_uuid) 字典序较大者，永不通过缺失记录撤销终态。
+内文与 v2 封装均执行 4 MiB 上限，另限 100000 项；不做自动账本裁剪。GET 必须存在且具备强 ETag，PUT 只允许 If-Match。
 
 ## 安全行为
 

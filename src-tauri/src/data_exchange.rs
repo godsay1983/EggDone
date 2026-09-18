@@ -1598,6 +1598,16 @@ fn merge_import_in_transaction(
 ) -> Result<ImportResult, String> {
     let terminals = import_terminals(&import)?;
     crate::purge::restore_terminals(connection, &terminals)?;
+    let index = crate::lifecycle_sync::Index::read(connection)?;
+    if import.todos.iter().any(|todo| index.todo(&todo.uuid))
+        || import.notes.iter().any(|note| index.note(&note.uuid))
+        || import
+            .note_attachments
+            .iter()
+            .any(|a| index.attachment(&a.uuid, &a.note_uuid))
+    {
+        return Err("PURGE_IMPORT_CONFLICT".into());
+    }
     let note_changes = count_note_changes(connection, &import.notes)?;
     let attachment_changes = count_attachment_changes(connection, &import.note_attachments)?;
     let mut result = merge_transfer(connection, &import.groups, &import.todos)?;

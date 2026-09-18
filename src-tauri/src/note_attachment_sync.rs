@@ -135,7 +135,11 @@ pub(crate) fn merge_in_transaction(
     generated_at: i64,
 ) -> Result<NoteAttachmentSyncDocument, String> {
     let local = build_document(transaction, generated_at)?;
-    let merged = merge_documents(&local, remote, generated_at)?;
+    let mut merged = merge_documents(&local, remote, generated_at)?;
+    let index = crate::lifecycle_sync::Index::read(transaction)?;
+    merged
+        .attachments
+        .retain(|a| !index.attachment(&a.uuid, &a.note_uuid));
 
     for attachment in &merged.attachments {
         transaction

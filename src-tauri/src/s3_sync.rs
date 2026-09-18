@@ -79,6 +79,9 @@ pub struct PreparedManualSync {
 }
 
 impl PreparedManualSync {
+    pub(crate) fn is_versioned_space(&self) -> Result<bool, String> {
+        Ok(crate::sync_space::scope(&self.object_key)?.is_some())
+    }
     pub(crate) fn template_transport(
         &self,
     ) -> Result<crate::task_checklist_transport::TaskChecklistTransport, String> {
@@ -704,13 +707,18 @@ pub(crate) async fn download_space_json(
         return Err("SYNC_SPACE_ETAG".into());
     }
     // Match the native mobile base-domain response cap before buffering the envelope.
-    const LIMIT: usize = 5 * 1024 * 1024;
-    if response.content_length().is_some_and(|n| n > LIMIT as u64) {
+    let limit = if crate::sync_space::scope(key)?.is_some_and(|(_, domain)| domain == "terminals") {
+        4
+    } else {
+        5
+    } * 1024
+        * 1024;
+    if response.content_length().is_some_and(|n| n > limit as u64) {
         return Err("SYNC_SPACE_LIMIT".into());
     }
     let mut bytes = Vec::new();
     while let Some(chunk) = response.chunk().await.map_err(|_| "SYNC_SPACE_NETWORK")? {
-        if chunk.len() > LIMIT - bytes.len() {
+        if chunk.len() > limit - bytes.len() {
             return Err("SYNC_SPACE_LIMIT".into());
         }
         bytes.extend_from_slice(&chunk);
@@ -941,6 +949,49 @@ pub async fn download_note_remote(
         401 | 403 => Err("下载便签失败：凭据无效或没有对象读取权限".to_string()),
         status => Err(format!("下载便签同步文件失败，S3 服务返回状态码 {status}")),
     }
+}
+
+pub(crate) fn lifecycle_key(prepared: &PreparedManualSync) -> Result<String, String> {
+    let (id, domain) =
+        crate::sync_space::scope(&prepared.object_key)?.ok_or("PURGE_MIGRATION_REQUIRED")?;
+    if domain != "todos" {
+        return Err("SYNC_SPACE_KEY".into());
+    }
+    Ok(format!(
+        "{}{id}/lifecycle-terminals.json",
+        crate::sync_space::PREFIX
+    ))
+}
+pub(crate) async fn download_lifecycle(
+    prepared: &PreparedManualSync,
+) -> Result<(crate::lifecycle_sync::Document, String), String> {
+    let (raw, etag) = download_space_json(&prepared.bucket, &lifecycle_key(prepared)?).await?;
+    Ok((crate::lifecycle_sync::parse(&raw)?, etag))
+}
+pub(crate) async fn upload_lifecycle(
+    prepared: &PreparedManualSync,
+    document: &crate::lifecycle_sync::Document,
+    etag: &str,
+) -> Result<UploadOutcome, String> {
+    if !crate::migration_backup::cloud::valid_etag(etag) {
+        return Err("PURGE_LEDGER_ACK".into());
+    }
+    let key = lifecycle_key(prepared)?;
+    let content = crate::sync_space::encode(&key, &crate::lifecycle_sync::encode(document)?)?;
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        HeaderName::from_static("if-match"),
+        HeaderValue::from_str(etag).map_err(|_| "PURGE_LEDGER_ACK")?,
+    );
+    let response = prepared
+        .bucket
+        .put_object_builder(&key, content.as_bytes())
+        .with_content_type("application/json")
+        .with_headers(headers)
+        .execute()
+        .await
+        .map_err(|_| "PURGE_LEDGER_NETWORK")?;
+    classify_upload_status(response.status_code())
 }
 
 pub async fn upload_document(

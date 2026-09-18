@@ -14,6 +14,8 @@ mod db;
 mod error_codes;
 mod general_preferences;
 mod i18n;
+mod lifecycle_session;
+mod lifecycle_sync;
 mod migration_backup;
 mod migration_backup_commands;
 mod migration_preflight;

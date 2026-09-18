@@ -42,6 +42,9 @@ pub fn scope(key: &str) -> Result<Option<(&str, &str)>, String> {
     if parsed.to_string() != id {
         return Err("SYNC_SPACE_KEY".into());
     }
+    if file == "lifecycle-terminals.json" {
+        return Ok(Some((id, "terminals")));
+    }
     let index = FILES
         .iter()
         .position(|name| *name == file)
@@ -110,7 +113,7 @@ pub fn encode(key: &str, raw: &str) -> Result<String, String> {
     .map_err(|_| "SYNC_SPACE_INVALID")?;
     let limit = match domain {
         "rules" => 3 * 1024 * 1024,
-        "links" | "items" | "definitions" | "templates" => 4 * 1024 * 1024,
+        "links" | "items" | "definitions" | "templates" | "terminals" => 4 * 1024 * 1024,
         _ => 5 * 1024 * 1024,
     };
     if encoded.len() > limit {

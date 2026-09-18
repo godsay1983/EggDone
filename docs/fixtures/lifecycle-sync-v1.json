@@ -1,0 +1,87 @@
+[
+  {
+    "name": "empty",
+    "raw": "{\"format_version\":1,\"terminals\":[]}",
+    "valid": true
+  },
+  {
+    "name": "todo",
+    "raw": "{\"format_version\":1,\"terminals\":[{\"kind\":\"todo\",\"uuid\":\"123e4567-e89b-42d3-a456-426614174000\",\"operation_uuid\":\"123e4567-e89b-42d3-a456-426614174090\",\"purged_at\":100}]}",
+    "valid": true
+  },
+  {
+    "name": "numeric-json",
+    "raw": "{\"format_version\":1.0,\"terminals\":[{\"kind\":\"todo\",\"uuid\":\"123e4567-e89b-42d3-a456-426614174000\",\"operation_uuid\":\"123e4567-e89b-42d3-a456-426614174090\",\"purged_at\":1e2}]}",
+    "valid": true
+  },
+  {
+    "name": "kind",
+    "raw": "{\"format_version\":1,\"terminals\":[{\"kind\":\"group\",\"uuid\":\"123e4567-e89b-42d3-a456-426614174000\",\"operation_uuid\":\"123e4567-e89b-42d3-a456-426614174090\",\"purged_at\":100}]}",
+    "valid": false
+  },
+  {
+    "name": "uuid",
+    "raw": "{\"format_version\":1,\"terminals\":[{\"kind\":\"todo\",\"uuid\":\"bad\",\"operation_uuid\":\"123e4567-e89b-42d3-a456-426614174090\",\"purged_at\":100}]}",
+    "valid": false
+  },
+  {
+    "name": "operation",
+    "raw": "{\"format_version\":1,\"terminals\":[{\"kind\":\"todo\",\"uuid\":\"123e4567-e89b-42d3-a456-426614174000\",\"operation_uuid\":\"\",\"purged_at\":100}]}",
+    "valid": false
+  },
+  {
+    "name": "negative",
+    "raw": "{\"format_version\":1,\"terminals\":[{\"kind\":\"todo\",\"uuid\":\"123e4567-e89b-42d3-a456-426614174000\",\"operation_uuid\":\"123e4567-e89b-42d3-a456-426614174090\",\"purged_at\":-1}]}",
+    "valid": false
+  },
+  {
+    "name": "fraction",
+    "raw": "{\"format_version\":1,\"terminals\":[{\"kind\":\"todo\",\"uuid\":\"123e4567-e89b-42d3-a456-426614174000\",\"operation_uuid\":\"123e4567-e89b-42d3-a456-426614174090\",\"purged_at\":1.1}]}",
+    "valid": false
+  },
+  {
+    "name": "unsafe",
+    "raw": "{\"format_version\":1,\"terminals\":[{\"kind\":\"todo\",\"uuid\":\"123e4567-e89b-42d3-a456-426614174000\",\"operation_uuid\":\"123e4567-e89b-42d3-a456-426614174090\",\"purged_at\":9007199254740992}]}",
+    "valid": false
+  },
+  {
+    "name": "extra",
+    "raw": "{\"format_version\":1,\"terminals\":[{\"kind\":\"todo\",\"uuid\":\"123e4567-e89b-42d3-a456-426614174000\",\"operation_uuid\":\"123e4567-e89b-42d3-a456-426614174090\",\"purged_at\":100,\"extra\":1}]}",
+    "valid": false
+  },
+  {
+    "name": "null-time",
+    "raw": "{\"format_version\":1,\"terminals\":[{\"kind\":\"todo\",\"uuid\":\"123e4567-e89b-42d3-a456-426614174000\",\"operation_uuid\":\"123e4567-e89b-42d3-a456-426614174090\",\"purged_at\":null}]}",
+    "valid": false
+  },
+  {
+    "name": "null",
+    "raw": "null",
+    "valid": false
+  },
+  {
+    "name": "missing",
+    "raw": "{}",
+    "valid": false
+  },
+  {
+    "name": "version",
+    "raw": "{\"format_version\":2,\"terminals\":[{\"kind\":\"todo\",\"uuid\":\"123e4567-e89b-42d3-a456-426614174000\",\"operation_uuid\":\"123e4567-e89b-42d3-a456-426614174090\",\"purged_at\":100}]}",
+    "valid": false
+  },
+  {
+    "name": "extra-root",
+    "raw": "{\"format_version\":1,\"terminals\":[{\"kind\":\"todo\",\"uuid\":\"123e4567-e89b-42d3-a456-426614174000\",\"operation_uuid\":\"123e4567-e89b-42d3-a456-426614174090\",\"purged_at\":100}],\"x\":0}",
+    "valid": false
+  },
+  {
+    "name": "duplicate",
+    "raw": "{\"format_version\":1,\"terminals\":[{\"kind\":\"todo\",\"uuid\":\"123e4567-e89b-42d3-a456-426614174000\",\"operation_uuid\":\"123e4567-e89b-42d3-a456-426614174090\",\"purged_at\":100},{\"kind\":\"todo\",\"uuid\":\"123e4567-e89b-42d3-a456-426614174000\",\"operation_uuid\":\"123e4567-e89b-42d3-a456-426614174090\",\"purged_at\":100}]}",
+    "valid": false
+  },
+  {
+    "name": "no-operation",
+    "raw": "{\"format_version\":1,\"terminals\":[{\"kind\":\"todo\",\"uuid\":\"123e4567-e89b-42d3-a456-426614174000\",\"purged_at\":1}]}",
+    "valid": false
+  }
+]
