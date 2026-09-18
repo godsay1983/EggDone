@@ -14,6 +14,8 @@ mod db;
 mod error_codes;
 mod general_preferences;
 mod i18n;
+mod migration_backup;
+mod migration_backup_commands;
 mod migration_preflight;
 #[cfg(test)]
 mod migration_preflight_tests;
@@ -305,6 +307,7 @@ pub fn run() {
             commands::sync_now,
             data_exchange::export_todos,
             data_exchange::export_full_backup,
+            migration_backup_commands::migration_local_backup,
             data_exchange::preview_todo_import,
             data_exchange::confirm_todo_import,
             data_exchange::preview_full_backup_import,
