@@ -21,7 +21,8 @@ export async function invoke(command,args){
     if(window.backupRemoteFail){const code=window.backupRemoteFail;window.backupRemoteFail=null;throw Error(code);}
     if(window.backupChanged)throw Error('MIGRATION_BACKUP_CHANGED');
     if(window.recoveryFail)throw Error('MIGRATION_RECOVERY_FAILED');
-    return {operation:'backup-operation',files:2,bytes:1024,verifiedAt:1,current:true,blockers:['pending_notes']};
+    return {operation:'backup-operation',files:2,bytes:1024,verifiedAt:1,current:true,blockers:['pending_notes'],
+      cloud:args.action==='prepareCloud'?{operation:'cloud-operation',objects:8,files:3,bytes:4096,verifiedAt:2,current:true}:null};
   }
   if(command==='unfinished_trash_purge')return null;
   if(command==='prepare_trash_purge'){
@@ -160,6 +161,14 @@ try {
     await page.evaluate(()=>window.recoveryFail=false);
     await prepareBackup.click();
     await page.getByRole('status').filter({hasText:lang==='zh-CN'?'隔离恢复验证通过':'Isolated recovery passed'}).waitFor();
+    const prepareCloud=page.getByRole('button',{name:lang==='zh-CN'?'备份并核对云端':'Back up and verify cloud',exact:true});
+    await prepareCloud.click();
+    await page.getByRole('status').filter({hasText:lang==='zh-CN'?'本次云端快照校验通过':'Cloud snapshot verified in this operation'}).waitFor();
+    await page.evaluate(()=>window.backupRemoteFail='MIGRATION_CLOUD_DOWNLOAD');
+    await prepareCloud.click();
+    await page.getByRole('alert').filter({hasText:lang==='zh-CN'?'未能读取或校验云端':'could not be read or validated'}).waitFor();
+    assert.equal(await page.getByRole('status').filter({hasText:lang==='zh-CN'?'本次云端快照校验通过':'Cloud snapshot verified in this operation'}).count(),0);
+    await prepareCloud.click();
     assert.equal(await page.evaluate(()=>window.purgeCalls.length),0,'backup never deletes');
     assert.ok(await page.locator('dialog').evaluate(el=>el.scrollWidth<=el.clientWidth),'migration panel overflow');
     await page.screenshot({path:resolve(output,'migration-'+lang+'-'+theme+'.png')});

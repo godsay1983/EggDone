@@ -432,6 +432,22 @@ pub fn prepare_manual_sync(connection: &Connection) -> Result<PreparedManualSync
 // The backup coordinator checks its complete source snapshot before and after each request.
 pub struct MigrationAssetSource(PreparedManualSync);
 
+pub fn migration_source_binding(connection: &Connection) -> Result<String, String> {
+    let s = read_settings(connection).map_err(|_| "MIGRATION_BACKUP_ASSET_CONFIG")?;
+    s.validate_connection()
+        .map_err(|_| "MIGRATION_BACKUP_ASSET_CONFIG")?;
+    let bytes = serde_json::to_vec(&serde_json::json!([
+        s.endpoint,
+        s.region,
+        s.bucket,
+        s.object_key,
+        s.path_style,
+        s.allow_http
+    ]))
+    .map_err(|_| "MIGRATION_BACKUP_ASSET_CONFIG")?;
+    Ok(sha256_hex(&bytes))
+}
+
 pub fn prepare_migration_asset_source(
     connection: &Connection,
 ) -> Result<MigrationAssetSource, String> {
@@ -454,6 +470,89 @@ pub fn prepare_migration_asset_source(
 }
 
 impl MigrationAssetSource {
+    #[cfg(test)]
+    pub(crate) fn from_test_bucket(bucket: Box<Bucket>, main: &str) -> Self {
+        Self(PreparedManualSync {
+            target_epoch: String::new(),
+            bucket,
+            object_key: main.into(),
+            note_object_key: derive_note_object_key(main),
+            note_attachment_object_key: derive_note_attachment_object_key(main),
+            note_asset_prefix: derive_note_asset_prefix(main),
+        })
+    }
+    pub fn main_key(&self) -> &str {
+        &self.0.object_key
+    }
+
+    pub async fn metadata(
+        &self,
+    ) -> Result<Vec<crate::migration_backup::cloud::RemoteObject>, String> {
+        use crate::migration_backup::cloud::{
+            object_keys, valid_etag, validate_document, RemoteObject, MAX_OBJECT,
+        };
+        let mut result = Vec::new();
+        let mut total = 0;
+        for (index, key) in object_keys(self.main_key())?.iter().enumerate() {
+            let request = ReqwestRequest::new(&self.0.bucket, key, Command::GetObject)
+                .await
+                .map_err(|_| "MIGRATION_CLOUD_DOWNLOAD")?;
+            let mut response = request
+                .response()
+                .await
+                .map_err(|_| "MIGRATION_CLOUD_DOWNLOAD")?;
+            if response.status().as_u16() == 404 {
+                result.push(RemoteObject {
+                    etag: None,
+                    bytes: None,
+                });
+                continue;
+            }
+            if response.status().as_u16() != 200 {
+                return Err("MIGRATION_CLOUD_DOWNLOAD".into());
+            }
+            let values = response
+                .headers()
+                .get_all("etag")
+                .iter()
+                .collect::<Vec<_>>();
+            if values.len() != 1 {
+                return Err("MIGRATION_CLOUD_INVALID".into());
+            }
+            let etag = values[0]
+                .to_str()
+                .map_err(|_| "MIGRATION_CLOUD_INVALID")?
+                .to_string();
+            if !valid_etag(&etag) {
+                return Err("MIGRATION_CLOUD_INVALID".into());
+            }
+            if response
+                .content_length()
+                .is_some_and(|n| n > (MAX_OBJECT - total) as u64)
+            {
+                return Err("MIGRATION_BACKUP_LIMIT".into());
+            }
+            let mut bytes = Vec::new();
+            while let Some(chunk) = response
+                .chunk()
+                .await
+                .map_err(|_| "MIGRATION_CLOUD_DOWNLOAD")?
+            {
+                if chunk.len() > MAX_OBJECT - total {
+                    return Err("MIGRATION_BACKUP_LIMIT".into());
+                }
+                total += chunk.len();
+                bytes.extend_from_slice(&chunk);
+            }
+            validate_document(index, &bytes)?;
+            result.push(RemoteObject {
+                etag: Some(etag),
+                bytes: Some(bytes),
+            });
+        }
+        Ok(result)
+    }
+
     pub async fn download(
         &self,
         runtime: &SyncRuntime,

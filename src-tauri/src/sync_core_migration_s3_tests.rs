@@ -46,6 +46,71 @@ fn validate(index: usize, text: &str) -> Result<(), String> {
     }
 }
 
+#[test]
+#[ignore = "Use run-sync-core-s3.ps1 -CloudSnapshotSessions"]
+fn cloud_snapshot_verify() {
+    use crate::migration_backup::{self as backup, cloud};
+    tauri::async_runtime::block_on(async {
+        let target = bucket(SECRET);
+        let source = s3_sync::MigrationAssetSource::from_test_bucket(target.clone(), MAIN);
+        let remote = source.metadata().await.unwrap();
+        assert_eq!(remote.len(), 8);
+        assert!(remote.iter().all(|r| r.etag.is_some() && r.bytes.is_some()));
+        let root =
+            std::env::temp_dir().join(format!("eggdone-native-cloud-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&root).unwrap();
+        let mut c = Connection::open(root.join("fixture.sqlite")).unwrap();
+        crate::db::migrate(&mut c).unwrap();
+        c.execute("UPDATE sync_settings SET endpoint='https://isolated.invalid',region='us-east-1',bucket='fixture',object_key=?1", [MAIN]).unwrap();
+        let binding = s3_sync::migration_source_binding(&c).unwrap();
+        let work = backup::prepare(&mut c, 1).unwrap();
+        let copies = root.join("backups");
+        backup::copy(&work, &copies, &root.join("assets")).unwrap();
+        backup::finish(&mut c, &work.plan, 2).unwrap();
+        let local = backup::latest(&c).unwrap().unwrap();
+        let plan = cloud::prepare(&mut c, &local, &binding, MAIN, &remote, 3).unwrap();
+        assert_eq!(plan.assets.len(), 1);
+        let runtime = s3_sync::SyncRuntime::default();
+        let mut assets = std::collections::BTreeMap::new();
+        for f in &plan.assets {
+            assets.insert(
+                f.name.clone(),
+                source
+                    .download(
+                        &runtime,
+                        &f.name[..36],
+                        &f.name[37..],
+                        f.size as i64,
+                        &f.sha256,
+                    )
+                    .await
+                    .unwrap(),
+            );
+        }
+        cloud::copy(&copies, &local, &plan, &remote, |f| {
+            Ok(assets[&f.name].clone())
+        })
+        .unwrap();
+        cloud::require_remote(&plan, &source.metadata().await.unwrap()).unwrap();
+        cloud::finish(&mut c, &local, &plan, 4).unwrap();
+        drop(c);
+        let c = Connection::open(root.join("fixture.sqlite")).unwrap();
+        let saved = cloud::latest(&c).unwrap().unwrap();
+        cloud::verify_files(&copies, &local, &saved).unwrap();
+        for (i, key) in keys().iter().enumerate() {
+            let raw = target.get_object(key).await.unwrap();
+            assert_eq!(
+                raw.as_slice(),
+                remote[i].bytes.as_ref().unwrap(),
+                "snapshot must not change source"
+            );
+        }
+        drop(c);
+        std::fs::remove_dir_all(&root).unwrap();
+        println!("CLOUD_SNAPSHOT_DESKTOP_OK: native eight-domain GET, raw bytes, remote-only asset and durable copy verified");
+    });
+}
+
 fn fixture() -> Vec<Value> {
     let client = Client::new(TODO, NOTE);
     client.add_file();

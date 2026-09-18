@@ -41,6 +41,8 @@ const TABLES: &[&str] = &[
 #[path = "migration_recovery.rs"]
 mod recovery;
 pub use recovery::rehearse;
+#[path = "migration_cloud_backup.rs"]
+pub mod cloud;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
@@ -68,6 +70,7 @@ pub struct BackupReport {
     pub verified_at: Option<i64>,
     pub current: bool,
     pub blockers: Vec<String>,
+    pub cloud: Option<cloud::Report>,
 }
 pub struct Work {
     pub plan: BackupPlan,
@@ -455,6 +458,7 @@ pub fn report(c: &mut Connection, plan: &BackupPlan) -> Result<BackupReport, Str
         verified_at: plan.verified_at,
         current,
         blockers,
+        cloud: cloud::report(c, plan)?,
     })
 }
 

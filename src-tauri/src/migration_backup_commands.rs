@@ -54,7 +54,49 @@ pub async fn migration_local_backup(
         let Some(plan) = plan else {
             return Ok(None);
         };
-        if action == "verify" {
+        if action == "prepareCloud" {
+            if plan.verified_at.is_none() {
+                return Err("MIGRATION_CLOUD_LOCAL_REQUIRED".into());
+            }
+            backup::require_current(&*lock_database(&db)?, &plan)?;
+            backup::verify_files(&root, &plan)?;
+            backup::rehearse(&root, &plan)?;
+            let (source, binding) = {
+                let connection = lock_database(&db)?;
+                backup::require_current(&connection, &plan)?;
+                (
+                    crate::s3_sync::prepare_migration_asset_source(&connection)?,
+                    crate::s3_sync::migration_source_binding(&connection)?,
+                )
+            };
+            let remote = tauri::async_runtime::block_on(source.metadata())?;
+            let cloud = backup::cloud::prepare(
+                &mut *lock_database(&db)?,
+                &plan,
+                &binding,
+                source.main_key(),
+                &remote,
+                now_millis(),
+            )?;
+            backup::cloud::copy(&root, &plan, &cloud, &remote, |entry| {
+                backup::cloud::require_current(&*lock_database(&db)?, &plan, &cloud)?;
+                let bytes = tauri::async_runtime::block_on(source.download(
+                    &runtime,
+                    &entry.name[..36],
+                    &entry.name[37..],
+                    entry.size as i64,
+                    &entry.sha256,
+                ))?;
+                backup::cloud::require_current(&*lock_database(&db)?, &plan, &cloud)?;
+                Ok(bytes)
+            })?;
+            let final_remote = tauri::async_runtime::block_on(source.metadata())?;
+            backup::cloud::require_remote(&cloud, &final_remote)?;
+            backup::verify_files(&root, &plan)?;
+            backup::cloud::verify_files(&root, &plan, &cloud)?;
+            backup::cloud::finish(&mut *lock_database(&db)?, &plan, &cloud, now_millis())?;
+            backup::report(&mut *lock_database(&db)?, &plan).map(Some)
+        } else if action == "verify" {
             backup::verify_files(&root, &plan)?;
             backup::rehearse(&root, &plan)?;
             backup::finish(&mut *lock_database(&db)?, &plan, now_millis()).map(Some)
