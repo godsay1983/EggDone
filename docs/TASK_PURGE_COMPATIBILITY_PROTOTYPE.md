@@ -84,6 +84,8 @@ pwsh -NoProfile -File scripts/run-sync-core-s3.ps1 -PurgeCompatibilitySessions -
 
 ## 下一阶段 LC2a-2
 
+后续进度（2026-09-18）：LC2a-2a 的领域清单、内部备份和持久恢复 host 原型已实现，见[新记录](TASK_MIGRATION_JOURNAL_PROTOTYPE.md)。以下仍是 LC2a-2 的完整范围，不因 host 原型而全部完成。
+
 - 全部生产同步领域、附件引用与源对象版本清单，明确多对象一致性和变化重查边界。
 - 迁移预览/备份、旧空间保留与晚到内容告知；不能因本轮用户接受成本而跳过每次实际迁移确认。
 - 完整计划解析、持久操作日志、目标绑定与本机原子切换，隔离文件/数据库的进程终止和重启恢复。
