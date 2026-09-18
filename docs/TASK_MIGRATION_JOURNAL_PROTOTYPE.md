@@ -92,6 +92,8 @@ prepare 将计划和备份放入同一事务。confirm 要求与当前预览摘�
 
 ## 复现与后续
 
+后续增量：LC2a-2b-1 已通过生产解析与真实 S3 多对象验证，见[新记录](TASK_MIGRATION_S3_VALIDATION.md)。原型格式 v2 新增目标 binding，host 检查增至每端 44 项；下文 43 项和合成存储边界是 LC2a-2a 的历史执行记录，不替代最新证据。
+
 两端各运行，peer 指向另一仓库：
 
 ~~~powershell

@@ -14,6 +14,9 @@ mod archive;
 #[path = "sync_core_purge_compat_s3_tests.rs"]
 mod purge_compat;
 
+#[path = "sync_core_migration_s3_tests.rs"]
+mod migration;
+
 #[test]
 #[ignore = "Use run-sync-core-s3.ps1 -TrashRecoverySessions with the Harmony peer"]
 fn trash_session_prepare() {

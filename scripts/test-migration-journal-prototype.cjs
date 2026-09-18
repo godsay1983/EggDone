@@ -12,7 +12,7 @@ const SPACE = '123e4567-e89b-42d3-a456-426614174070';
 const OP = '123e4567-e89b-42d3-a456-426614174080';
 const NOTE = '123e4567-e89b-42d3-a456-426614174010';
 const ASSET = '123e4567-e89b-42d3-a456-426614174020';
-const EXPECTED = { scope: p.SCOPE, epoch: 1, revision: 7, active: 'legacy' };
+const EXPECTED = { scope: p.SCOPE, binding: p.hash('synthetic-host-store'), epoch: 1, revision: 7, active: 'legacy' };
 const assetKey = name => 'account/note-assets/v1/' + ASSET + '/' + name;
 function owned(root) {
   const absolute = fs.realpathSync(root);
@@ -24,6 +24,7 @@ function owned(root) {
 class Remote {
   constructor(root) {
     this.scope = p.SCOPE;
+    this.binding = EXPECTED.binding;
     this.db = new DatabaseSync(path.join(owned(root), 'remote.sqlite'));
     this.db.exec('PRAGMA synchronous=FULL; PRAGMA busy_timeout=2000; CREATE TABLE IF NOT EXISTS objects(key TEXT PRIMARY KEY, bytes BLOB NOT NULL, etag TEXT NOT NULL)');
   }
@@ -192,7 +193,7 @@ async function main() {
     const t=await setup();
     try {
       let calls=0;
-      const moving={scope:p.SCOPE,get:async key=>{
+      const moving={scope:p.SCOPE,binding:EXPECTED.binding,get:async key=>{
         const result=await t.io.get(key);
         if(++calls===8) t.io.put('account/notes.json',Buffer.from('{"format_version":1,"notes":[]}'));
         return result;
@@ -225,7 +226,7 @@ async function main() {
     const t=await setup();
     try {
       let lost=true;
-      const io={scope:p.SCOPE,get:t.io.get.bind(t.io),create:async(key,bytes)=>{
+      const io={scope:p.SCOPE,binding:EXPECTED.binding,get:t.io.get.bind(t.io),create:async(key,bytes)=>{
         const created=await t.io.create(key,bytes);
         if(key===p.COMMIT_KEY && lost){lost=false;throw Error('REPLY_LOST');}
         return created;
@@ -296,7 +297,7 @@ async function main() {
     const t=await setup();
     try {
       await assert.rejects(p.capture({scope:'foreign'},EXPECTED,OP,SPACE),/SCOPE/);
-      await assert.rejects(p.capture({scope:p.SCOPE,get:async()=>{throw Error('FORBIDDEN');}},EXPECTED,OP,SPACE),/FORBIDDEN/);
+      await assert.rejects(p.capture({scope:p.SCOPE,binding:EXPECTED.binding,get:async()=>{throw Error('FORBIDDEN');}},EXPECTED,OP,SPACE),/FORBIDDEN/);
       await assert.rejects(p.capture(t.io,{...EXPECTED,epoch:Number.MAX_SAFE_INTEGER},OP,SPACE),/CONFIG/);
       assert.equal(t.io.countTargets(),0);
     } finally {t.close();}
@@ -327,6 +328,17 @@ async function main() {
         if(mode==='configuration')assert.equal(await t.io.get(p.COMMIT_KEY),null);
       } finally {t.close();}
     }
+  });
+  await test('target binding and semantic validator cannot be bypassed by a valid journal hash',async()=>{
+    const t=await setup();
+    try {
+      await assert.rejects(p.run({scope:p.SCOPE,binding:p.hash('other-bucket')},t.journal),/SCOPE/);
+      const checked=new p.Journal(path.join(t.root,'journal.sqlite'),()=>{throw Error('SEMANTIC_INVALID');});
+      try {await assert.rejects(p.run(t.io,checked),/SEMANTIC_INVALID/);}
+      finally {checked.close();}
+      await assert.rejects(p.capture(t.io,EXPECTED,OP,SPACE,()=>{throw Error('SEMANTIC_INVALID');}),/SEMANTIC_INVALID/);
+      assert.equal(t.io.countTargets(),0);
+    } finally {t.close();}
   });
   const boundaries = [
     ...Array.from({length:10},(_,i)=>['object-'+i+'-before','object-'+i+'-after']).flat(),

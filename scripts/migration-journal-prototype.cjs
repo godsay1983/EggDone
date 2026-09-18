@@ -3,7 +3,7 @@
 const { DatabaseSync } = require('node:sqlite');
 const { createHash } = require('node:crypto');
 const { canonical } = require('./purge-compat-prototype.cjs');
-const FORMAT = 'eggdone.migration.fixture.v1';
+const FORMAT = 'eggdone.migration.fixture.v2';
 const SCOPE = 'isolated-fixture-source';
 const PREFIX = 'account/migration-prototype/v2/';
 const COMMIT_KEY = PREFIX + 'migration.json';
@@ -29,9 +29,9 @@ function exact(value, keys) {
     Object.keys(value).sort().join(',') === keys.slice().sort().join(','), 'MIGRATION_SHAPE');
 }
 function config(value) {
-  exact(value, ['scope', 'epoch', 'revision', 'active']);
+  exact(value, ['scope', 'binding', 'epoch', 'revision', 'active']);
   requireThat(value.scope === SCOPE && Number.isSafeInteger(value.epoch) && value.epoch >= 0 &&
-    value.epoch < Number.MAX_SAFE_INTEGER &&
+    value.epoch < Number.MAX_SAFE_INTEGER && typeof value.binding === 'string' && SHA.test(value.binding) &&
     Number.isSafeInteger(value.revision) && value.revision >= 0 && value.active === 'legacy', 'MIGRATION_CONFIG');
 }
 function entry(key, result) {
@@ -104,12 +104,18 @@ function makePlan(expected, operation, space, entries, read) {
   requireThat(total <= MAX_BYTES, 'MIGRATION_LIMIT');
   return { format: FORMAT, expected, operation, space, entries, counts, total_bytes: total, missing_assets: missing };
 }
-async function capture(io, expected, operation, space) {
-  requireThat(io.scope === SCOPE, 'MIGRATION_SCOPE');
+function binding(io, expected) {
+  requireThat(io.scope === SCOPE && io.binding === expected.binding, 'MIGRATION_SCOPE');
+}
+async function capture(io, expected, operation, space, validateSnapshot = () => {}) {
+  config(expected);
+  binding(io, expected);
   const objects = new Map(), entries = [];
   let total = 0;
   const get = async key => {
+    binding(io, expected);
     const result = await io.get(key);
+    binding(io, expected);
     const row = entry(key, result);
     total += row.size;
     requireThat(total <= MAX_BYTES, 'MIGRATION_LIMIT');
@@ -119,13 +125,16 @@ async function capture(io, expected, operation, space) {
   for (const domain of DOMAINS) await get(domain.key);
   for (const asset of metadata(key => objects.get(key)).assets) await get(asset.key);
   const plan = makePlan(expected, operation, space, entries, key => objects.get(key));
+  validateSnapshot(objects);
   // Includes absent objects: missing -> present is also a version change.
   await recheck(io, plan);
   return { plan, objects };
 }
 async function recheck(io, plan) {
   for (const row of plan.entries) {
+    binding(io, plan.expected);
     requireThat(canonical(entry(row.key, await io.get(row.key))) === canonical(row), 'MIGRATION_SOURCE_CHANGED');
+    binding(io, plan.expected);
   }
 }
 function transaction(db, action) {
@@ -134,7 +143,8 @@ function transaction(db, action) {
   catch (error) { db.exec('ROLLBACK'); throw error; }
 }
 class Journal {
-  constructor(file) {
+  constructor(file, validateSnapshot = () => {}) {
+    this.validateSnapshot = validateSnapshot;
     this.db = new DatabaseSync(file);
     this.db.exec('PRAGMA busy_timeout=2000; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;');
     this.db.exec(`CREATE TABLE IF NOT EXISTS local_target(id INTEGER PRIMARY KEY CHECK(id=1), value TEXT NOT NULL);
@@ -159,6 +169,7 @@ class Journal {
     const { plan, objects } = snapshot;
     const rebuilt = makePlan(plan.expected, plan.operation, plan.space, plan.entries, key => objects.get(key));
     requireThat(canonical(rebuilt) === canonical(plan), 'MIGRATION_PLAN');
+    this.validateSnapshot(objects);
     transaction(this.db, () => {
       this.guard(plan);
       requireThat(!this.db.prepare('SELECT id FROM migration').get(), 'MIGRATION_ALREADY_PREPARED');
@@ -183,6 +194,7 @@ class Journal {
     requireThat(objects.size === raw.entries.length, 'MIGRATION_BACKUP_CORRUPT');
     const rebuilt = makePlan(raw.expected, raw.operation, raw.space, raw.entries, key => objects.get(key));
     requireThat(canonical(rebuilt) === job.plan, 'MIGRATION_PLAN');
+    this.validateSnapshot(objects);
     return { ...job, plan: rebuilt, objects };
   }
   confirm(digest) {
@@ -214,8 +226,8 @@ function targetKey(plan, row) {
   return PREFIX + plan.space + '/objects/' + hash(row.key) + '/' + row.sha256;
 }
 async function run(io, journal, at = async () => {}) {
-  requireThat(io.scope === SCOPE, 'MIGRATION_SCOPE');
   const job = journal.load(), plan = job.plan;
+  binding(io, plan.expected);
   requireThat(job.confirmed === job.digest, 'MIGRATION_CONFIRM_REQUIRED');
   requireThat(plan.missing_assets.length === 0, 'MIGRATION_ASSETS_MISSING');
   const published = Buffer.from(canonical({ format: FORMAT, plan_sha256: job.digest, plan }));
@@ -223,7 +235,7 @@ async function run(io, journal, at = async () => {}) {
     // Completed retry is read-only, and cannot undo later edits/configuration.
     return { phase: 'complete', space: plan.space, already_complete: true };
   }
-  const guard = () => journal.guard(plan);
+  const guard = () => { binding(io, plan.expected); journal.guard(plan); };
   guard();
   const prior = await io.get(COMMIT_KEY);
   guard();
@@ -240,6 +252,7 @@ async function run(io, journal, at = async () => {}) {
       // A published snapshot cannot be silently repaired from a possibly obsolete backup.
       requireThat(prior === null, 'MIGRATION_TARGET_MISSING');
       await at('object-' + i + '-before');
+      guard();
       requireThat(await io.create(key, bytes), 'MIGRATION_STAGE_CONFLICT');
       await at('object-' + i + '-after');
       guard();
