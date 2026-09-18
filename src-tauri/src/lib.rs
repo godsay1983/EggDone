@@ -33,6 +33,7 @@ mod notes;
 mod panel_position;
 mod purge;
 mod purge_commands;
+mod purge_remote;
 #[cfg(test)]
 mod purge_tests;
 pub mod recurrence;

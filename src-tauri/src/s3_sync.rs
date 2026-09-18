@@ -1226,9 +1226,31 @@ pub async fn delete_asset_if_matches(
     expected_size: i64,
     expected_sha256: &str,
 ) -> Result<bool, String> {
+    delete_asset_if_matches_guarded(
+        runtime,
+        prepared,
+        attachment_uuid,
+        file_name,
+        expected_size,
+        expected_sha256,
+        &|| Ok(()),
+    )
+    .await
+}
+pub(crate) async fn delete_asset_if_matches_guarded(
+    runtime: &SyncRuntime,
+    prepared: &PreparedManualSync,
+    attachment_uuid: &str,
+    file_name: &str,
+    expected_size: i64,
+    expected_sha256: &str,
+    guard: &(impl Fn() -> Result<(), String> + Sync),
+) -> Result<bool, String> {
+    guard()?;
     validate_asset_identity(file_name, expected_size, expected_sha256)?;
     let _guard = runtime.acquire_asset(attachment_uuid)?;
     let remote = head_asset_object(prepared, attachment_uuid, file_name).await?;
+    guard()?;
     if !remote.exists {
         return Ok(false);
     }
@@ -1254,10 +1276,12 @@ pub async fn delete_asset_if_matches(
         HeaderValue::from_str(etag).map_err(|_| "拒绝删除远端附件：ETag 无效")?,
     );
     let object_key = asset_object_key(prepared, attachment_uuid, file_name)?;
+    guard()?;
     let response = bucket
         .delete_object(&object_key)
         .await
         .map_err(|error| format!("删除远端附件失败，请检查网络后重试：{error}"))?;
+    guard()?;
     match response.status_code() {
         200 | 204 | 404 => Ok(true),
         409 | 412 => Err("远端附件已变化，未删除；请重新同步后重试".into()),

@@ -1499,7 +1499,7 @@ async fn sync_now_inner(
             return Err("PURGE_LEDGER_CHANGED_RETRY".into());
         }
     }
-    let cleanup_summary = cleanup_remote_note_assets(
+    let mut cleanup_summary = cleanup_remote_note_assets(
         &database,
         &runtime,
         &prepared,
@@ -1508,6 +1508,12 @@ async fn sync_now_inner(
     )
     .await;
     notify_notes();
+    if let Some(token) = &lifecycle_token {
+        match crate::purge_remote::run(database, runtime, prepared, token).await {
+            Ok(count) => cleanup_summary.deleted_object_count += count,
+            Err(error) => return Err(format!("PURGE_REMOTE_PENDING:{error}")),
+        }
+    }
 
     ensure_sync_target(&database, prepared)?;
     let state = s3_sync::get_remote_state(&prepared, &database).await.ok();

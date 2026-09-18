@@ -111,7 +111,7 @@ impl Index {
 fn db(_: rusqlite::Error) -> String {
     "PURGE_DATABASE_FAILED".into()
 }
-fn guard(c: &Connection, epoch: &str) -> Result<String, String> {
+pub(crate) fn guard(c: &Connection, epoch: &str) -> Result<String, String> {
     if epoch.is_empty() || epoch.starts_with("pending:") {
         return Err("PURGE_TARGET_CHANGED".into());
     }
@@ -141,6 +141,7 @@ pub fn prepare(c: &mut Connection, epoch: &str, incoming: &Document) -> Result<S
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(db)?;
     let key = guard(&tx, epoch)?;
+    crate::purge_remote::bind_target(&tx, epoch)?;
     let local = Document {
         format_version: 1,
         terminals: purge::terminals(&tx)?,

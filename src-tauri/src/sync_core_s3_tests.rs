@@ -17,6 +17,8 @@ mod purge_compat;
 
 #[path = "sync_core_migration_s3_tests.rs"]
 mod migration;
+#[path = "sync_core_purge_remote_s3_tests.rs"]
+mod purge_remote;
 
 #[test]
 #[ignore = "Use run-sync-core-s3.ps1 -AssetSafetySessions; disposable bucket only"]

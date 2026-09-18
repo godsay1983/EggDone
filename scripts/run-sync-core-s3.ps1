@@ -10,13 +10,14 @@ param(
     [switch]$CloudSnapshotSessions,
     [switch]$PublicationSessions,
     [switch]$SpaceProtocolSessions,
+    [switch]$PurgeRemoteSessions,
     [string]$HarmonyRoot
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 foreach ($command in @('docker', 'cargo')) { $null = Get-Command $command -ErrorAction Stop }
-if (@($CrossClientSessions, $TrashRecoverySessions, $NoteHistorySessions, $ArchiveRecoverySessions, $PurgeCompatibilitySessions, $MigrationJournalSessions, $AssetSafetySessions, $CloudSnapshotSessions, $PublicationSessions, $SpaceProtocolSessions).Where({ $_.IsPresent }).Count -gt 1) { throw 'Select only one cross-client suite' }
-if ($CrossClientSessions -or $TrashRecoverySessions -or $NoteHistorySessions -or $ArchiveRecoverySessions -or $PurgeCompatibilitySessions -or $MigrationJournalSessions -or $AssetSafetySessions -or $CloudSnapshotSessions -or $PublicationSessions -or $SpaceProtocolSessions) {
+if (@($CrossClientSessions, $TrashRecoverySessions, $NoteHistorySessions, $ArchiveRecoverySessions, $PurgeCompatibilitySessions, $MigrationJournalSessions, $AssetSafetySessions, $CloudSnapshotSessions, $PublicationSessions, $SpaceProtocolSessions, $PurgeRemoteSessions).Where({ $_.IsPresent }).Count -gt 1) { throw 'Select only one cross-client suite' }
+if ($CrossClientSessions -or $TrashRecoverySessions -or $NoteHistorySessions -or $ArchiveRecoverySessions -or $PurgeCompatibilitySessions -or $MigrationJournalSessions -or $AssetSafetySessions -or $CloudSnapshotSessions -or $PublicationSessions -or $SpaceProtocolSessions -or $PurgeRemoteSessions) {
     $null = Get-Command node -ErrorAction Stop
     if (-not $HarmonyRoot) { throw 'Cross-client suites require the explicit Harmony checkout path' }
     $HarmonyRoot = (Resolve-Path -LiteralPath $HarmonyRoot).Path
@@ -30,6 +31,7 @@ if ($CrossClientSessions -or $TrashRecoverySessions -or $NoteHistorySessions -or
     if ($CloudSnapshotSessions) { $harmonyTest = Join-Path $HarmonyRoot 'scripts/test-cloud-snapshot-s3.cjs' }
     if ($PublicationSessions) { $harmonyTest = Join-Path $HarmonyRoot 'scripts/test-publication-s3.cjs' }
     if ($SpaceProtocolSessions) { $harmonyTest = Join-Path $HarmonyRoot 'scripts/test-space-protocol-s3.cjs' }
+    if ($PurgeRemoteSessions) { $harmonyTest = Join-Path $HarmonyRoot 'scripts/test-purge-remote-s3.cjs' }
     if (-not (Test-Path -LiteralPath $harmonyTest)) { throw 'Harmony checkout is missing the full session test' }
 }
 if (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue) { throw 'Port occupied; select another port' }
@@ -75,6 +77,7 @@ function Invoke-HarmonyPhase([string]$Phase) {
     if ($CloudSnapshotSessions) { $marker = 'CLOUD_SNAPSHOT_HARMONY_OK:' }
     if ($PublicationSessions) { $marker = 'PUBLICATION_HARMONY_OK:' }
     if ($SpaceProtocolSessions) { $marker = 'SPACE_PROTOCOL_HARMONY_OK:' }
+    if ($PurgeRemoteSessions) { $marker = 'PURGE_REMOTE_HARMONY_OK:' }
     if ((Get-Content -LiteralPath $log -Raw) -notmatch $marker) { throw "Harmony phase did not complete; see $log" }
 }
 
@@ -105,7 +108,13 @@ try {
     }
     if (-not $ready) { throw 'Authenticated S3 readiness timed out' }
     Write-Host "Running the desktop production sync core against isolated S3. Evidence: $logs"
-    if ($SpaceProtocolSessions) {
+    if ($PurgeRemoteSessions) {
+        Invoke-DesktopTest 'migration::migration_prepare' 'MIGRATION_DESKTOP_PREPARE_OK'
+        Invoke-DesktopTest 'migration::space_protocol_prepare' 'SPACE_PROTOCOL_DESKTOP_PREPARE_OK'
+        Invoke-DesktopTest 'purge_remote::prepare' 'PURGE_REMOTE_DESKTOP_PREPARE_OK'
+        Invoke-HarmonyPhase 'verify'
+        Invoke-DesktopTest 'purge_remote::verify' 'PURGE_REMOTE_DESKTOP_VERIFY_OK'
+    } elseif ($SpaceProtocolSessions) {
         Invoke-DesktopTest 'migration::migration_prepare' 'MIGRATION_DESKTOP_PREPARE_OK'
         Invoke-DesktopTest 'migration::space_protocol_prepare' 'SPACE_PROTOCOL_DESKTOP_PREPARE_OK'
         Invoke-HarmonyPhase 'verify'
@@ -172,4 +181,4 @@ try {
     $env:EGGDONE_NS7_S3_PORT = $oldPort
 }
 if ($cleanupFailed) { throw 'Disposable resource cleanup incomplete' }
-Write-Host "Sync core S3 passed (cross-client: $CrossClientSessions; trash recovery: $TrashRecoverySessions; note history: $NoteHistorySessions; archive recovery: $ArchiveRecoverySessions; purge compatibility: $PurgeCompatibilitySessions; migration journal: $MigrationJournalSessions; asset safety: $AssetSafetySessions; cloud snapshot: $CloudSnapshotSessions; publication: $PublicationSessions; space protocol: $SpaceProtocolSessions); disposable service removed. Evidence: $logs"
+Write-Host "Sync core S3 passed (cross-client: $CrossClientSessions; trash recovery: $TrashRecoverySessions; note history: $NoteHistorySessions; archive recovery: $ArchiveRecoverySessions; purge compatibility: $PurgeCompatibilitySessions; migration journal: $MigrationJournalSessions; asset safety: $AssetSafetySessions; cloud snapshot: $CloudSnapshotSessions; publication: $PublicationSessions; space protocol: $SpaceProtocolSessions; purge remote: $PurgeRemoteSessions); disposable service removed. Evidence: $logs"
