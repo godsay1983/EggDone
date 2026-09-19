@@ -41,11 +41,16 @@ const TABLES: &[&str] = &[
     "daily_plan_completions",
     "daily_plan_operations",
     "daily_plan_sync_state",
+    "task_workflow_states",
+    "task_workflow_operations",
+    "task_workflow_sync_state",
 ];
 
 fn tables_for_schema(schema: i64) -> &'static [&'static str] {
     if schema < 24 {
-        &TABLES[..TABLES.len() - 5]
+        &TABLES[..TABLES.len() - 8]
+    } else if schema < 26 {
+        &TABLES[..TABLES.len() - 3]
     } else {
         TABLES
     }
@@ -134,7 +139,7 @@ fn capture(c: &Connection) -> Result<Vec<u8>, String> {
             r.get(0)
         })
         .map_err(db)?;
-    if ![22, 23, 24, 25].contains(&schema) {
+    if ![22, 23, 24, 25, 26].contains(&schema) {
         return Err("MIGRATION_BACKUP_INVALID".into());
     }
     let mut tables = Vec::new();

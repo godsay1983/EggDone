@@ -93,6 +93,41 @@ fn advance(db: &mut Connection, r: &RecurrenceRule) -> String {
     .unwrap()
     .uuid
 }
+
+#[test]
+fn workflow_recurrence_next_uuid_does_not_inherit_waiting_or_reason() {
+    let (mut db, rule, _) = setup(true);
+    let w = crate::task_workflow_store::WorkflowWrite {
+        operation_uuid: uuid::Uuid::new_v4().to_string(),
+        task_uuid: rule.current_todo_uuid.clone(),
+        state: "waiting".into(),
+        reason: "private current instance".into(),
+        review_date: Some("2026-09-19".into()),
+        date: "2026-09-19".into(),
+        remove_from_plan: false,
+        expected: crate::task_workflow_store::list(&mut db, "2026-09-19")
+            .unwrap()
+            .revision,
+        expected_plan: None,
+    };
+    crate::task_workflow_store::write(&mut db, &w, 110, "device-a").unwrap();
+    let stale = crate::task_workflow_store::snapshot(&mut db)
+        .unwrap()
+        .document;
+    let next = advance(&mut db, &rule);
+    assert_ne!(next, rule.current_todo_uuid);
+    crate::task_workflow_store::restore(&mut db, &stale).unwrap();
+    assert!(crate::task_workflow_store::list(&mut db, "2026-09-19")
+        .unwrap()
+        .entries
+        .is_empty());
+    let states = crate::task_workflow_store::snapshot(&mut db)
+        .unwrap()
+        .document
+        .states;
+    assert_eq!(states.len(), 1);
+    assert_eq!(states[0].task_uuid, rule.current_todo_uuid);
+}
 fn parent(db: &Connection, r: &RecurrenceRule, date: &str) -> String {
     let o = recurrence_on_date(&r.schedule, date).unwrap();
     let id = recurrence_todo_uuid(&r.uuid, &r.schedule, &o).unwrap();

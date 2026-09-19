@@ -22,7 +22,7 @@ use crate::{
     tray::PanelState,
 };
 
-const FORMAT_VERSION: u32 = 7;
+const FORMAT_VERSION: u32 = 8;
 const BACKUP_FORMAT_VERSION: u32 = 1;
 const BACKUP_MAX_ENTRY_COUNT: usize = 10_000;
 const BACKUP_MAX_TOTAL_BYTES: u64 = 512 * 1024 * 1024;
@@ -171,6 +171,8 @@ pub struct ImportPreview {
     planning_metadata_included: bool,
     planning_relations: usize,
     planning_completions: usize,
+    workflow_metadata_included: bool,
+    workflow_states: usize,
     attachment_added: usize,
     attachment_updated: usize,
     attachment_unchanged: usize,
@@ -1070,8 +1072,10 @@ fn capture_export(
     let terminals = crate::purge::terminals(&tx)?;
     let planning = crate::daily_plan_store::read_in_transaction(&tx)?.document;
     let has_planning = !crate::daily_plan_protocol::is_empty(&planning);
+    let workflow = crate::task_workflow_store::read_in_transaction(&tx)?.document;
+    let has_workflow = !crate::task_workflow_protocol::is_empty(&workflow);
     let mut extra = std::collections::BTreeMap::new();
-    if !terminals.is_empty() || has_planning {
+    if !terminals.is_empty() || has_planning || has_workflow {
         extra.insert(
             "lifecycle_terminals".into(),
             serde_json::to_value(&terminals).map_err(|_| "PURGE_LEDGER_INVALID")?,
@@ -1083,8 +1087,16 @@ fn capture_export(
             serde_json::to_value(&planning).map_err(|_| "PLAN_INVALID")?,
         );
     }
+    if has_workflow {
+        extra.insert(
+            "task_workflow".into(),
+            serde_json::to_value(&workflow).map_err(|_| "WORKFLOW_INVALID")?,
+        );
+    }
     let export = TodoExport {
-        format_version: if has_planning {
+        format_version: if has_workflow {
+            8
+        } else if has_planning {
             7
         } else if terminals.is_empty() {
             5
@@ -1280,17 +1292,75 @@ mod daily_plan_backup_tests {
     }
 }
 
+#[cfg(test)]
+mod task_workflow_backup_tests {
+    use super::*;
+    #[test]
+    fn workflow_backup8_preview_wire_names_and_atomic_failure() {
+        let mut c = rusqlite::Connection::open_in_memory().unwrap();
+        crate::db::migrate(&mut c).unwrap();
+        let id = "11111111-1111-4111-8111-111111111111";
+        c.execute("INSERT INTO todos(uuid,title,created_at,updated_at,updated_by,sort_order) VALUES(?1,'task',1,1,'device',0)",[id]).unwrap();
+        let request = crate::task_workflow_store::WorkflowWrite {
+            operation_uuid: uuid::Uuid::new_v4().to_string(),
+            task_uuid: id.into(),
+            state: "waiting".into(),
+            reason: "private".into(),
+            review_date: None,
+            date: "2026-09-19".into(),
+            remove_from_plan: false,
+            expected: crate::task_workflow_store::list(&mut c, "2026-09-19")
+                .unwrap()
+                .revision,
+            expected_plan: None,
+        };
+        crate::task_workflow_store::write(&mut c, &request, 10, "device").unwrap();
+        let export = capture_export(&mut c, false, 20).unwrap();
+        assert_eq!(export.format_version, 8);
+        let preview =
+            serde_json::to_value(build_preview(&c, Path::new("workflow.json"), &export).unwrap())
+                .unwrap();
+        assert_eq!(preview["workflow_metadata_included"], true);
+        assert_eq!(preview["workflow_states"], 1);
+        let wire = serde_json::to_value(&export).unwrap();
+        assert!(wire["task_workflow"].is_object());
+        assert!(wire.get("taskWorkflow").is_none());
+        let mut target = rusqlite::Connection::open_in_memory().unwrap();
+        crate::db::migrate(&mut target).unwrap();
+        target.execute_batch("CREATE TRIGGER reject_workflow_import BEFORE INSERT ON task_workflow_states BEGIN SELECT RAISE(ABORT,'failure'); END").unwrap();
+        assert!(merge_import(&mut target, export).is_err());
+        assert_eq!(
+            target
+                .query_row("SELECT COUNT(*) FROM todos", [], |r| r.get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            crate::task_workflow_store::snapshot(&mut target)
+                .unwrap()
+                .revision,
+            0
+        );
+    }
+}
+
 fn import_terminals(import: &TodoExport) -> Result<Vec<crate::purge::Terminal>, String> {
     if import.format_version < 6 {
         if import.extra.contains_key("lifecycle_terminals")
             || import.extra.contains_key("daily_planning")
+            || import.extra.contains_key("task_workflow")
         {
             return Err("PURGE_BACKUP_VERSION".into());
         }
         return Ok(Vec::new());
     }
-    if !matches!(import.format_version, 6 | 7)
-        || import.extra.len() != if import.format_version == 7 { 2 } else { 1 }
+    if !matches!(import.format_version, 6 | 7 | 8)
+        || (import.format_version < 8
+            && import.extra.len() != if import.format_version == 7 { 2 } else { 1 })
+        || (import.format_version == 8
+            && import.extra.keys().any(|k| {
+                !["lifecycle_terminals", "daily_planning", "task_workflow"].contains(&k.as_str())
+            }))
     {
         return Err("PURGE_BACKUP_VERSION".into());
     }
@@ -1310,9 +1380,21 @@ fn import_planning(
     import: &TodoExport,
 ) -> Result<Option<crate::daily_plan_protocol::Document>, String> {
     match (import.format_version, import.extra.get("daily_planning")) {
-        (7, Some(value)) => Ok(Some(crate::daily_plan_protocol::parse(&value.to_string())?)),
-        (0..=6, None) => Ok(None),
+        (7 | 8, Some(value)) => Ok(Some(crate::daily_plan_protocol::parse(&value.to_string())?)),
+        (0..=6 | 8, None) => Ok(None),
         _ => Err("PLAN_INVALID".into()),
+    }
+}
+
+fn import_workflow(
+    import: &TodoExport,
+) -> Result<Option<crate::task_workflow_protocol::Document>, String> {
+    match (import.format_version, import.extra.get("task_workflow")) {
+        (8, Some(value)) => Ok(Some(crate::task_workflow_protocol::parse(
+            &value.to_string(),
+        )?)),
+        (0..=8, None) => Ok(None),
+        _ => Err("WORKFLOW_INVALID".into()),
     }
 }
 
@@ -1327,6 +1409,7 @@ fn validate_complete_import(import: &TodoExport) -> Result<(), String> {
 fn validate_import_mode(import: &TodoExport, expect_attachment_files: bool) -> Result<(), String> {
     let terminals = import_terminals(import)?;
     import_planning(import)?;
+    import_workflow(import)?;
     if terminals.iter().any(|terminal| {
         if terminal.kind == "todo" {
             import.todos.iter().any(|todo| todo.uuid == terminal.uuid)
@@ -1338,7 +1421,7 @@ fn validate_import_mode(import: &TodoExport, expect_attachment_files: bool) -> R
     }
     match (import.format_version, &import.recurrence) {
         (1, None) => {}
-        (2 | 3 | 4 | 5 | 6 | 7, Some(backup)) => {
+        (2 | 3 | 4 | 5 | 6 | 7 | 8, Some(backup)) => {
             crate::recurrence_backup::validate(backup)?;
             if backup
                 .instances
@@ -1352,7 +1435,7 @@ fn validate_import_mode(import: &TodoExport, expect_attachment_files: bool) -> R
     }
     match (import.format_version, &import.task_note_links) {
         (1 | 2, None) => {}
-        (3 | 4 | 5 | 6 | 7, Some(links)) => {
+        (3 | 4 | 5 | 6 | 7 | 8, Some(links)) => {
             crate::task_note_link_protocol::encode_document(links)?;
         }
         _ => return Err("INVALID_TASK_NOTE_LINK_BACKUP_VERSION".into()),
@@ -1363,8 +1446,8 @@ fn validate_import_mode(import: &TodoExport, expect_attachment_files: bool) -> R
         &import.task_checklist_definitions,
     ) {
         (1..=3, None, None) => {}
-        (4 | 5 | 6 | 7, Some(items), Some(definitions))
-            if import.extra.is_empty() || matches!(import.format_version, 6 | 7) =>
+        (4 | 5 | 6 | 7 | 8, Some(items), Some(definitions))
+            if import.extra.is_empty() || matches!(import.format_version, 6 | 7 | 8) =>
         {
             crate::task_checklist_protocol::encode_items(items)?;
             crate::task_checklist_protocol::encode_definitions(definitions)?;
@@ -1639,6 +1722,10 @@ fn build_preview(
         planning_metadata_included: planning.is_some(),
         planning_relations: planning.as_ref().map_or(0, |d| d.plans.len()),
         planning_completions: planning.as_ref().map_or(0, |d| d.completions.len()),
+        workflow_metadata_included: import_workflow(import)?.is_some(),
+        workflow_states: import_workflow(import)?
+            .as_ref()
+            .map_or(0, |d| d.states.len()),
         recurrence_total: import
             .recurrence
             .as_ref()
@@ -1718,6 +1805,7 @@ fn merge_import_in_transaction(
 ) -> Result<ImportResult, String> {
     let terminals = import_terminals(&import)?;
     let planning = import_planning(&import)?;
+    let workflow = import_workflow(&import)?;
     crate::purge::restore_terminals(connection, &terminals)?;
     let index = crate::lifecycle_sync::Index::read(connection)?;
     if import.todos.iter().any(|todo| index.todo(&todo.uuid))
@@ -1731,7 +1819,7 @@ fn merge_import_in_transaction(
     }
     let note_changes = count_note_changes(connection, &import.notes)?;
     let attachment_changes = count_attachment_changes(connection, &import.note_attachments)?;
-    let mut result = if planning.is_some() {
+    let mut result = if planning.is_some() || workflow.is_some() {
         crate::daily_plan_store::without_lifecycle_events(connection, || {
             merge_transfer(connection, &import.groups, &import.todos)
         })?
@@ -1781,6 +1869,18 @@ fn merge_import_in_transaction(
     if let Some(planning) = planning {
         crate::daily_plan_store::merge_in_transaction(connection, &planning)?;
     }
+    if let Some(workflow) = workflow {
+        crate::task_workflow_store::merge_in_transaction(connection, &workflow)?;
+    }
+    connection
+        .execute(
+            "UPDATE task_workflow_sync_state SET generation=generation+1 WHERE id=1",
+            [],
+        )
+        .map_err(database_error)?;
+    connection
+        .execute("DELETE FROM task_workflow_operations", [])
+        .map_err(database_error)?;
     crate::archive::invalidate_in_transaction(connection)?;
     Ok(result)
 }

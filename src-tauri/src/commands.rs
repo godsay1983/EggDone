@@ -1556,6 +1556,10 @@ async fn sync_now_inner(
             database,
             &entities.plan_receipt,
         )?,
+        workflow_remote_token: crate::task_workflow_session::final_token(
+            database,
+            &entities.workflow_receipt,
+        )?,
         checklist_remote_token: entities.checklist_token,
         template_remote_token: entities.template_token,
         link_remote_token: entities.link_token,

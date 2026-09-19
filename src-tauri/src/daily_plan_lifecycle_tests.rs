@@ -203,7 +203,7 @@ fn v7_restore_of_modified_completed_parent_keeps_authoritative_events_and_receip
 
     let raw = data_exchange::planning_test_export(&mut source).unwrap();
     let wire: serde_json::Value = serde_json::from_str(&raw).unwrap();
-    assert_eq!(wire["format_version"], 7);
+    assert_eq!(wire["format_version"], 8);
     assert_eq!(wire["todos"][0]["updated_at"], 11);
     assert_eq!(
         wire["daily_planning"],

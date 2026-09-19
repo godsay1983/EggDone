@@ -1,6 +1,7 @@
 <script lang="ts">
   import { translator } from '$lib/i18n';
   import { dailyPlans, dailyPlanLocked, dailyPlanRows } from '$lib/stores/dailyPlanStore';
+  import { taskWorkflow, waitingEntry } from '$lib/stores/taskWorkflowStore';
   import type { Todo } from '$lib/types';
   export let items: Todo[];
   export let query = '';
@@ -16,6 +17,7 @@
     completed: rows.completed.filter(todo => matches(todo, query, groupUuid)),
     previous: rows.previous.filter(todo => matches(todo, query, groupUuid)),
   };
+  $: actionable = filtered.planned.filter(todo => !waitingEntry($taskWorkflow, todo)).length;
   function matches(todo: Todo, query: string, groupUuid: string | null | undefined) {
     return (groupUuid === undefined || todo.group_uuid === groupUuid) &&
       `${todo.title}\n${todo.note ?? ''}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
@@ -32,6 +34,9 @@
 <section class="daily-plan-list" aria-label={$translator('dailyPlan.title')} aria-busy={$dailyPlans.loading || $dailyPlans.writing}>
   {#if toggleFailed}<p role="alert">{$translator('dailyPlan.completeFailed')}</p>{/if}
   {#if $dailyPlans.snapshot}
+    {#if filtered.planned.length && $taskWorkflow.snapshot && !$taskWorkflow.error && !$taskWorkflow.loading}
+      <p class="actionable-count">{$translator('waiting.actionable', { count: actionable, total: filtered.planned.length })}</p>
+    {/if}
     {#if filtered.planned.length === 0}
       <p class="empty">{$translator(query.trim() || groupUuid !== undefined ? 'search.noMatch' : 'dailyPlan.empty')}</p>
     {/if}
@@ -76,4 +81,5 @@
   summary { cursor: pointer; overflow-wrap: anywhere; }
   summary:focus-visible, .task-title:focus-visible { outline: 2px solid var(--action-focus); outline-offset: 1px; }
   .empty { font-size: 13px; padding: 16px 6px; text-align: center; overflow-wrap: anywhere; }
+  .actionable-count { margin: 4px 4px 8px; font-size: 12px; opacity: .8; }
 </style>

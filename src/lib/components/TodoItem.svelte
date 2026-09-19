@@ -14,6 +14,11 @@
   import { checklistProgress, refreshChecklistProgress } from '$lib/stores/taskChecklistStore';
   import { todos } from '$lib/stores/todoStore';
   import { dailyPlans, dailyPlanLocked, isPlannedToday } from '$lib/stores/dailyPlanStore';
+  import { taskWorkflow, waitingEntry } from '$lib/stores/taskWorkflowStore';
+  import TaskWaitingDialog from './TaskWaitingDialog.svelte';
+  let waitingOpen = false, resumeWaiting = false;
+  $: waiting = waitingEntry($taskWorkflow, todo);
+  function openWaiting(resume = false) { actionsOpen = false; resumeWaiting = resume; waitingOpen = true; }
   $: inDailyPlan = isPlannedToday($dailyPlans, todo);
   let checklistOpen = false;
   $: checklistCount = $checklistProgress?.[todo.uuid];
@@ -141,7 +146,7 @@
   let repeatChoice: RepeatRule | "none" = "none";
   let groupSaving = false;
   let actionsOpen = false;
-  $: onEditingChange(templateOpen || copyLoading || copyDraft!==null || checklistOpen || editing || saving || scheduleOpen || recurrenceOpen || scheduleSaving || noteOpen || noteSaving || groupSaving);
+  $: onEditingChange(waitingOpen || templateOpen || copyLoading || copyDraft!==null || checklistOpen || editing || saving || scheduleOpen || recurrenceOpen || scheduleSaving || noteOpen || noteSaving || groupSaving);
   let editInput: HTMLInputElement;
   let noteInput: HTMLTextAreaElement;
   let itemElement: HTMLElement;
@@ -589,7 +594,7 @@
           {notePreview}
         </button>
       {/if}
-      {#if inDailyPlan || checklistCount?.total || currentGroup || dueLabel || todo.pinned || todo.priority === 1 || todo.reminder_at !== null || todo.repeat_rule !== null || customSummary}
+      {#if waiting || inDailyPlan || checklistCount?.total || currentGroup || dueLabel || todo.pinned || todo.priority === 1 || todo.reminder_at !== null || todo.repeat_rule !== null || customSummary}
         <div class="todo-meta">
           {#if currentGroup}
             <span
@@ -629,6 +634,9 @@
           {/if}
           {#if inDailyPlan}
             <span class="daily-plan-badge">{$translator('dailyPlan.title')}</span>
+          {/if}
+          {#if waiting}
+            <span class="waiting-badge" class:review-due={waiting.review_due}>{$translator(waiting.review_due ? 'waiting.reviewDue' : 'waiting.title')}</span>
           {/if}
           {#if dueLabel}
             <button
@@ -823,6 +831,10 @@
             {$translator(inDailyPlan ? 'dailyPlan.remove' : 'dailyPlan.add')}
           </button>
           {#if planOrder}<div class="plan-menu-divider" role="separator"></div>{/if}
+          <button type="button" role="menuitem" disabled={toggleDisabled}
+            onclick={() => openWaiting()}>{$translator(waiting ? 'waiting.edit' : 'waiting.set')}</button>
+          {#if waiting}<button type="button" role="menuitem" disabled={toggleDisabled}
+            onclick={() => openWaiting(true)}>{$translator('waiting.resume')}</button>{/if}
         {/if}
           <button type="button" role="menuitem" disabled={copyLoading} onclick={()=>void copyTask()}>{$translator('todo.copy')}</button>
           <button type="button" role="menuitem" onclick={()=>{actionsOpen=false;templateOpen=true;}}>{$translator('templates.saveAs')}</button>
@@ -987,6 +999,9 @@
 {/if}
 {#if checklistOpen}
   <TaskChecklistDetails uuid={todo.uuid} {groups} onClose={() => checklistOpen=false} onChanged={checklistSaved}/>
+{/if}
+{#if waitingOpen}
+  <TaskWaitingDialog {todo} resume={resumeWaiting} onClose={() => { waitingOpen = false; void taskWorkflow.refresh(); }} />
 {/if}
 
 <style>

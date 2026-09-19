@@ -1,0 +1,14 @@
+CREATE TABLE task_workflow_states(task_uuid TEXT PRIMARY KEY,state TEXT NOT NULL CHECK(state IN('ready','waiting')),reason TEXT NOT NULL,review_date TEXT,clock INTEGER NOT NULL,writer TEXT NOT NULL,basis TEXT NOT NULL);
+CREATE TABLE task_workflow_operations(operation_uuid TEXT PRIMARY KEY,request_digest TEXT NOT NULL);
+CREATE TABLE task_workflow_sync_state(id INTEGER PRIMARY KEY CHECK(id=1),revision INTEGER NOT NULL DEFAULT 0 CHECK(revision BETWEEN 0 AND 9007199254740991),synced_revision INTEGER NOT NULL DEFAULT 0 CHECK(synced_revision BETWEEN 0 AND revision),etag TEXT,generation INTEGER NOT NULL DEFAULT 0 CHECK(generation BETWEEN 0 AND 9007199254740991));
+INSERT INTO task_workflow_sync_state(id,revision) VALUES(1,CASE WHEN EXISTS(SELECT 1 FROM daily_plan_events) THEN 1 ELSE 0 END);
+CREATE TRIGGER task_workflow_insert AFTER INSERT ON task_workflow_states BEGIN UPDATE task_workflow_sync_state SET revision=revision+1 WHERE id=1; END;
+CREATE TRIGGER task_workflow_update AFTER UPDATE ON task_workflow_states WHEN NEW.state<>OLD.state OR NEW.reason<>OLD.reason OR NEW.review_date IS NOT OLD.review_date OR NEW.clock<>OLD.clock OR NEW.writer<>OLD.writer OR NEW.basis<>OLD.basis BEGIN UPDATE task_workflow_sync_state SET revision=revision+1 WHERE id=1; END;
+CREATE TRIGGER task_workflow_delete AFTER DELETE ON task_workflow_states BEGIN UPDATE task_workflow_sync_state SET revision=revision+1 WHERE id=1; END;
+CREATE TRIGGER task_workflow_event_insert AFTER INSERT ON daily_plan_events BEGIN UPDATE task_workflow_sync_state SET revision=revision+1 WHERE id=1; END;
+CREATE TRIGGER task_workflow_event_update AFTER UPDATE ON daily_plan_events BEGIN UPDATE task_workflow_sync_state SET revision=revision+1 WHERE id=1; UPDATE daily_plan_sync_state SET revision=revision+1 WHERE id=1; END;
+CREATE TRIGGER task_workflow_event_delete AFTER DELETE ON daily_plan_events BEGIN UPDATE task_workflow_sync_state SET revision=revision+1 WHERE id=1; UPDATE daily_plan_sync_state SET revision=revision+1 WHERE id=1; END;
+CREATE TRIGGER task_workflow_parent_removed AFTER DELETE ON todos BEGIN DELETE FROM task_workflow_states WHERE task_uuid=OLD.uuid; END;
+CREATE TRIGGER task_workflow_parent_insert AFTER INSERT ON todos WHEN EXISTS(SELECT 1 FROM task_workflow_states WHERE task_uuid=NEW.uuid) BEGIN UPDATE task_workflow_sync_state SET revision=revision+1 WHERE id=1; END;
+CREATE TRIGGER task_workflow_parent_update AFTER UPDATE ON todos WHEN (NEW.completed<>OLD.completed OR NEW.archived_at IS NOT OLD.archived_at OR NEW.deleted_at IS NOT OLD.deleted_at) AND EXISTS(SELECT 1 FROM task_workflow_states WHERE task_uuid=NEW.uuid) BEGIN UPDATE task_workflow_sync_state SET revision=revision+1 WHERE id=1; END;
+CREATE TRIGGER task_workflow_terminal AFTER INSERT ON lifecycle_terminals WHEN NEW.kind='todo' BEGIN DELETE FROM task_workflow_states WHERE task_uuid=NEW.uuid; END;

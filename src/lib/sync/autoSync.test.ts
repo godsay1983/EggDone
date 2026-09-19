@@ -108,11 +108,13 @@ describe("auto sync", () => {
     expect(syncApi.syncNow).toHaveBeenCalledTimes(3);
     expect(get(syncStatus).kind).toBe('synced');
   });
-  it("syncs a planning-only remote change and consumes only its successful receipt", async () => {
+  it.each([
+    ['planToken', 'planRemoteToken'], ['workflowToken', 'workflowRemoteToken'],
+  ] as const)("syncs a %s-only remote change and consumes only its successful receipt", async (token, receipt) => {
     vi.useFakeTimers();
     configureAutoSync(enabledSettings);
     const remote = {
-      recurrenceToken: "missing", planToken: 'etag:"plan-1"',
+      recurrenceToken: "missing", [token]: 'etag:"plan-1"',
       todoObjectExists: true, todoEtag: '"todo"',
       noteObjectExists: true, noteEtag: '"note"',
       noteAttachmentObjectExists: true, noteAttachmentEtag: '"attachment"',
@@ -120,7 +122,7 @@ describe("auto sync", () => {
     const result = {
       message: "Synced", todoCount: 0, noteCount: 0, noteAttachmentCount: 0,
       pendingAttachmentCount: 0, conflictRetried: false,
-      recurrenceRemoteToken: "missing", planRemoteToken: 'etag:"plan-1"',
+      recurrenceRemoteToken: "missing", [receipt]: 'etag:"plan-1"',
       todoRemoteEtag: '"todo"', noteRemoteEtag: '"note"', noteAttachmentRemoteEtag: '"attachment"',
     };
     vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue(remote);
@@ -130,11 +132,11 @@ describe("auto sync", () => {
     expect(syncApi.syncNow).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(60_000);
     expect(syncApi.syncNow).toHaveBeenCalledTimes(1);
-    vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue({ ...remote, planToken: 'etag:"plan-2"' });
+    vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue({ ...remote, [token]: 'etag:"plan-2"' });
     vi.mocked(syncApi.syncNow).mockRejectedValueOnce(new Error("PLAN_REMOTE_MISSING"));
     await vi.advanceTimersByTimeAsync(60_000);
     expect(syncApi.syncNow).toHaveBeenCalledTimes(2);
-    vi.mocked(syncApi.syncNow).mockResolvedValue({ ...result, planRemoteToken: 'etag:"plan-2"' });
+    vi.mocked(syncApi.syncNow).mockResolvedValue({ ...result, [receipt]: 'etag:"plan-2"' });
     await vi.advanceTimersByTimeAsync(60_000);
     expect(syncApi.syncNow).toHaveBeenCalledTimes(3);
     await vi.advanceTimersByTimeAsync(60_000);

@@ -200,6 +200,8 @@ struct Bundle {
     terminals: lifecycle_sync::Document,
     plans: crate::daily_plan_protocol::Document,
     plans_present: bool,
+    workflow: crate::task_workflow_protocol::Document,
+    workflow_present: bool,
     terminals_present: bool,
 }
 async fn bundle(
@@ -259,11 +261,26 @@ async fn bundle(
         })
         .transpose()?
         .unwrap_or_default();
+    let mut occupied = keys;
+    occupied.push(key);
+    occupied.push(terminal_key);
+    let key = crate::task_workflow_sync::object_key(main, &occupied).map_err(fail)?;
+    let raw = read(io, db, source, &key, 4 * 1024 * 1024).await?;
+    let workflow_present = raw.is_some();
+    let workflow = raw
+        .map(|b| {
+            crate::task_workflow_protocol::parse(std::str::from_utf8(&b).map_err(fail)?)
+                .map_err(fail)
+        })
+        .transpose()?
+        .unwrap_or_default();
     Ok(Bundle {
         documents,
         terminals,
         plans,
         plans_present,
+        workflow,
+        workflow_present,
         terminals_present,
     })
 }
@@ -318,6 +335,7 @@ fn merge(tx: &Transaction<'_>, b: &Bundle, target_evidence: bool) -> Result<(), 
         )?;
     }
     crate::daily_plan_store::merge_in_transaction(tx, &b.plans)?;
+    crate::task_workflow_store::merge_in_transaction(tx, &b.workflow)?;
     Ok(())
 }
 
@@ -397,6 +415,14 @@ fn stage(
             .etag
             .is_some()
             || crate::daily_plan_sync::remote_seen(tx, p.epoch())?)
+    {
+        return Err("SYNC_AUTO_JOIN_SOURCE_MISSING".into());
+    }
+    if !source.workflow_present
+        && (crate::task_workflow_store::read_in_transaction(tx)?
+            .etag
+            .is_some()
+            || crate::task_workflow_sync::remote_seen(tx, p.epoch())?)
     {
         return Err("SYNC_AUTO_JOIN_SOURCE_MISSING".into());
     }
@@ -486,7 +512,11 @@ async fn follow_with(
         return Err("SYNC_AUTO_JOIN_ASSOCIATION_CHANGED".into());
     }
     // Re-read the target after transfers; a concurrent purge must win before committing.
-    let target = bundle(io, db, p, &main, true).await?;
+    let refreshed_target = bundle(io, db, p, &main, true).await?;
+    if target.workflow_present && !refreshed_target.workflow_present {
+        return Err("SYNC_AUTO_JOIN_SOURCE_MISSING".into());
+    }
+    let target = refreshed_target;
     let mut c = lock_database(db)?;
     let tx = c.transaction().map_err(db_error)?;
     let epoch = stage(&tx, p, &claim, &source, &target)?;

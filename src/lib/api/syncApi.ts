@@ -38,6 +38,7 @@ export interface ManualSyncResult {
   checklistRemoteToken?: string;
   templateRemoteToken?: string;
   planRemoteToken?: string;
+  workflowRemoteToken?: string;
   recurrenceRemoteToken?: string;
   message: string;
   todoCount: number;
@@ -56,6 +57,7 @@ export interface RemoteSyncState {
   checklistToken?: string;
   templateToken?: string;
   planToken?: string;
+  workflowToken?: string;
   recurrenceToken: string;
   todoObjectExists: boolean;
   todoEtag: string | null;
@@ -73,7 +75,7 @@ export type SyncRuntimeResult =
   | "failed"
   | "interrupted";
 
-export type SyncDirtyDomain = "todos" | "notes" | "attachments" | "links" | "checklists" | "templates" | "plans";
+export type SyncDirtyDomain = "todos" | "notes" | "attachments" | "links" | "checklists" | "templates" | "plans" | "workflow";
 
 export interface SyncRuntimeSnapshot {
   schemaVersion: number;

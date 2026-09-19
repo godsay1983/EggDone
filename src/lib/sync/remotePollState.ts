@@ -12,6 +12,7 @@ export class RemotePollState {
   private checklistToken: string | null = null;
   private templateToken: string | null = null;
   private planToken: string | null = null;
+  private workflowToken: string | null = null;
 
   reset(): void {
     this.generation += 1;
@@ -20,6 +21,7 @@ export class RemotePollState {
     this.checklistToken = null;
     this.templateToken = null;
     this.planToken = null;
+    this.workflowToken = null;
   }
 
   beginSync(): number {
@@ -43,6 +45,10 @@ export class RemotePollState {
   checklistsChanged(token: string | undefined): boolean { return token !== undefined && token !== this.checklistToken; }
   templatesChanged(token: string | undefined): boolean { return token !== undefined && token !== this.templateToken; }
   plansChanged(token: string | undefined): boolean { return token !== undefined && token !== this.planToken; }
+  workflowChanged(token: string | undefined): boolean { return token !== undefined && token !== this.workflowToken; }
+  acknowledgeWorkflow(generation: number, token: string): void {
+    if (this.isGenerationCurrent(generation)) this.workflowToken = token;
+  }
   acknowledgePlans(generation: number, token: string): void {
     if (this.isGenerationCurrent(generation)) this.planToken = token;
   }

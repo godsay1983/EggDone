@@ -107,6 +107,9 @@
   import DailyPlanList from './DailyPlanList.svelte';
   import DailyPlanStatus from './DailyPlanStatus.svelte';
   import { dailyPlans } from '$lib/stores/dailyPlanStore';
+  import { taskWorkflow } from '$lib/stores/taskWorkflowStore';
+  import WaitingList from './WaitingList.svelte';
+  let waitingListOpen = false;
   import { syncStatus } from '$lib/sync/autoSync';
   let todayView: 'due' | 'planned' = 'due';
   $: plannedView = listView === 'today' && todayView === 'planned';
@@ -719,6 +722,7 @@
         lastItems = state.items;
         void refreshRecurrenceRules();
         void dailyPlans.refresh();
+        void taskWorkflow.refresh();
       }
       if (!state.loading && !state.error && selectedGroup !== 'all' && selectedGroup !== 'ungrouped' &&
         !state.groups.some(group => group.uuid === selectedGroup)) {
@@ -732,17 +736,18 @@
       if (wasSyncing && status.kind !== 'syncing') {
         void Promise.all([todos.refresh(), notes.refresh()]).then(async () => {
           linkedRevision++;
-          await Promise.all([dailyPlans.refresh(), loadAllNoteAttachments()]);
+          await Promise.all([dailyPlans.refresh(), taskWorkflow.refresh(), loadAllNoteAttachments()]);
         }).catch(() => { /* Individual stores expose their refresh errors. */ });
       }
       wasSyncing = status.kind === 'syncing';
     });
-    const refreshPlanning = () => { void dailyPlans.refresh(); };
+    const refreshPlanning = () => { void dailyPlans.refresh(); void taskWorkflow.refresh(); };
     window.addEventListener('focus', refreshPlanning);
     const refreshFilterTime = () => {
       filterNow = new Date();
       filterTimezoneOffset = filterNow.getTimezoneOffset();
       void dailyPlans.checkDate();
+      void taskWorkflow.checkDate();
     };
     const filterTimer = window.setInterval(() => {
       if (Math.floor(Date.now() / 60000) !== Math.floor(filterNow.getTime() / 60000) ||
@@ -3051,6 +3056,7 @@
             <hr />
           {/if}
           <button type="button" role="menuitem" onclick={()=>{summaryMenuOpen=false;templatesOpen=true;}}>{$translator('templates.title')}</button>
+          <button type="button" role="menuitem" onclick={() => { summaryMenuOpen = false; waitingListOpen = true; }}>{$translator('waiting.title')}</button>
           <button type="button" role="menuitem" onclick={openBatch}>{$translator('batch.title')}</button>
           <button
             class:active={showSearch}
@@ -3697,6 +3703,17 @@
 {/if}
 {#if showArchive}
   <ArchiveDialog initialItem={archiveInitial} onClose={closeArchive} afterCommit={refreshAfterTrash} onViewTask={viewArchiveTask} />
+{/if}
+{#if waitingListOpen}
+  <WaitingList items={$todos.items} onClose={() => waitingListOpen = false} let:todo>
+    <TodoItem {todo} animationEnabled={false} onToggle={todo => todos.toggle(todo)}
+      onEdit={editTodo} onNote={noteTodo} onPin={pinTodo} onPriority={priorityTodo}
+      onFocus={todo => { waitingListOpen = false; openFocusForTodo(todo); }}
+      onManageLinks={todo => { waitingListOpen = false; manageTaskLinks(todo); }} onSchedule={scheduleTodo}
+      onSnooze={snoozeTodo} groups={$todos.groups} onGroupChange={moveTodoToGroup}
+      onDelete={deleteTodo} onMove={moveTodo} onDragStart={startDrag}
+      onBatchSelect={toggleBatchTodo} dragDisabled={true} reorderDisabled={true} />
+  </WaitingList>
 {/if}
 {#if contentSearchSession}
   <ContentSearchDialog active={contentSearchActive} onOpen={openSearchResult}

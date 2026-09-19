@@ -26,6 +26,8 @@ export interface ImportPreview {
   planning_metadata_included: boolean;
   planning_relations: number;
   planning_completions: number;
+  workflow_metadata_included?: boolean;
+  workflow_states?: number;
   link_deleted: number;
   link_metadata_included: boolean;
   attachment_added: number;

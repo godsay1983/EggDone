@@ -129,6 +129,43 @@ fn creation_setup() -> (Connection, EditorRequest, String) {
 }
 
 #[test]
+fn workflow_copied_or_template_creation_uses_new_uuid_without_waiting_inheritance() {
+    let (mut db, r, by) = creation_setup();
+    let source = text(&fixture(), "todo_uuid");
+    let w = crate::task_workflow_store::WorkflowWrite {
+        operation_uuid: uuid::Uuid::new_v4().to_string(),
+        task_uuid: source.clone(),
+        state: "waiting".into(),
+        reason: "private source reason".into(),
+        review_date: None,
+        date: "2026-09-19".into(),
+        remove_from_plan: false,
+        expected: crate::task_workflow_store::list(&mut db, "2026-09-19")
+            .unwrap()
+            .revision,
+        expected_plan: None,
+    };
+    crate::task_workflow_store::write(&mut db, &w, 20, &by).unwrap();
+    let workflow = crate::task_workflow_store::snapshot(&mut db)
+        .unwrap()
+        .document;
+    create(&mut db, &r, 100, &by).unwrap();
+    create(&mut db, &r, 100, &by).unwrap();
+    crate::task_workflow_store::restore(&mut db, &workflow).unwrap();
+    let states = crate::task_workflow_store::snapshot(&mut db)
+        .unwrap()
+        .document
+        .states;
+    assert_ne!(source, r.task.todo_uuid);
+    assert_eq!(states.len(), 1);
+    assert_eq!(states[0].task_uuid, source);
+    assert!(states.iter().all(|s| s.task_uuid != r.task.todo_uuid));
+    let mut invalid = serde_json::to_value(&r).unwrap();
+    invalid["workflow"] = serde_json::to_value(workflow).unwrap();
+    assert!(serde_json::from_value::<EditorRequest>(invalid).is_err());
+}
+
+#[test]
 fn create_task_and_checklist_is_atomic_and_replay_safe() {
     let (mut db, mut r, by) = creation_setup();
     r.fields.priority = 1;

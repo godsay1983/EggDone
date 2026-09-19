@@ -184,6 +184,7 @@
     if (domain === "checklists") return $translator("sync.domainChecklists");
     if (domain === "templates") return $translator("sync.domainTemplates");
     if (domain === "plans") return $translator("sync.domainPlans");
+    if (domain === "workflow") return $translator("waiting.title");
     if (domain === "links") return $translator("sync.domainLinks");
     if (domain === "todos") return $translator("sync.domainTodos");
     if (domain === "notes") return $translator("sync.domainNotes");

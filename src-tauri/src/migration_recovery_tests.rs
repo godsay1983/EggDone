@@ -124,7 +124,7 @@ fn legacy_v22_without_retry_counter_recovers_then_upgrades_without_data_loss() {
         c.query_row("SELECT MAX(version) FROM schema_migrations", [], |r| r
             .get::<_, i64>(0))
             .unwrap(),
-        25
+        26
     );
     assert_eq!(
         c.query_row("SELECT local_attempts FROM purge_cleanup", [], |r| r
@@ -181,6 +181,35 @@ fn planning_recovery_preserves_evidence_membership_and_receipts() {
                 .get::<_, i64>(0))
             .unwrap(),
         1
+    );
+    drop(c);
+    drop(target);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn workflow_recovery_preserves_states_digests_and_independent_ack() {
+    let (root, mut c, _) = fixture();
+    c.execute_batch("INSERT INTO task_workflow_states VALUES('11111111-1111-4111-8111-111111111111','waiting','private',NULL,1,'a','');
+        INSERT INTO task_workflow_operations VALUES('operation','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+        UPDATE task_workflow_sync_state SET synced_revision=revision,etag='\"workflow\"',generation=2;").unwrap();
+    let work = prepare(&mut c, 50).unwrap();
+    let mut target = Connection::open_in_memory().unwrap();
+    restore(&mut target, &work.data, &work.plan).unwrap();
+    verify_restored(&target, &work.data).unwrap();
+    assert_eq!(
+        target
+            .query_row("SELECT reason FROM task_workflow_states", [], |r| r
+                .get::<_, String>(0))
+            .unwrap(),
+        "private"
+    );
+    assert_eq!(
+        target
+            .query_row("SELECT generation FROM task_workflow_sync_state", [], |r| r
+                .get::<_, i64>(0))
+            .unwrap(),
+        2
     );
     drop(c);
     drop(target);

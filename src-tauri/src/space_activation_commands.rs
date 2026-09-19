@@ -35,6 +35,11 @@ pub async fn migration_space(
         }
         if action != "status" {
             let mut c = lock_database(&db)?;
+            if !crate::task_workflow_protocol::is_empty(
+                &crate::task_workflow_store::snapshot(&mut c)?.document,
+            ) {
+                return Err("MIGRATION_WORKFLOW_ACTIVE".into());
+            }
             if !crate::daily_plan_protocol::is_empty(
                 &crate::daily_plan_store::snapshot(&mut c)?.document,
             ) {

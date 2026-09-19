@@ -141,6 +141,20 @@ impl PreparedManualSync {
         }
         Ok(Some(bytes))
     }
+    pub(crate) fn workflow_transport(
+        &self,
+    ) -> Result<crate::task_checklist_transport::TaskChecklistTransport, String> {
+        let mut occupied = crate::migration_backup::cloud::object_keys(&self.object_key)?;
+        occupied.push(self.note_object_key.clone());
+        occupied.push(self.note_attachment_object_key.clone());
+        occupied.push(crate::daily_plan_sync::object_key(&self.object_key, &[])?);
+        occupied.push(lifecycle_key(self)?);
+        crate::task_checklist_transport::TaskChecklistTransport::workflow(
+            &self.bucket,
+            &self.object_key,
+            &occupied,
+        )
+    }
     pub(crate) fn plan_transport(
         &self,
     ) -> Result<crate::task_checklist_transport::TaskChecklistTransport, String> {
@@ -285,6 +299,7 @@ pub struct RemoteSyncState {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub target_changed: Option<bool>,
     pub plan_token: String,
+    pub workflow_token: String,
     pub template_token: String,
     pub checklist_token: String,
     pub link_token: String,
@@ -304,6 +319,8 @@ pub struct ManualSyncResult {
     pub target_changed: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plan_remote_token: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub workflow_remote_token: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub template_remote_token: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1056,6 +1073,7 @@ pub async fn get_remote_state(
         return Ok(RemoteSyncState {
             target_changed: Some(true),
             plan_token: String::new(),
+            workflow_token: String::new(),
             template_token: String::new(),
             checklist_token: String::new(),
             link_token: String::new(),
@@ -1111,9 +1129,12 @@ pub(crate) async fn get_current_remote_state(
         guard()?;
         let plan_token = prepared.plan_transport()?.probe().await?;
         guard()?;
+        let workflow_token = prepared.workflow_transport()?.probe().await?;
+        guard()?;
         Ok(RemoteSyncState {
             target_changed: None,
             plan_token,
+            workflow_token,
             template_token,
             checklist_token: serde_json::to_string(&[definitions, items])
                 .map_err(|_| "CHECKLIST_TOKEN_INVALID")?,

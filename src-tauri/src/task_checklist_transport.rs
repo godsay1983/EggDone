@@ -15,6 +15,7 @@ enum WireDomain {
     Checklist(Domain),
     Templates,
     Planning,
+    Workflow,
 }
 impl WireDomain {
     fn canonical(self, raw: &str) -> Result<String, String> {
@@ -25,6 +26,9 @@ impl WireDomain {
             }
             Self::Planning => {
                 crate::daily_plan_protocol::encode(&crate::daily_plan_protocol::parse(raw)?)
+            }
+            Self::Workflow => {
+                crate::task_workflow_protocol::encode(&crate::task_workflow_protocol::parse(raw)?)
             }
         }
     }
@@ -131,6 +135,18 @@ impl TaskChecklistTransport {
             bucket,
             crate::daily_plan_sync::object_key(todo_key, occupied_keys)?,
             WireDomain::Planning,
+        )
+    }
+
+    pub fn workflow(
+        bucket: &Bucket,
+        todo_key: &str,
+        occupied_keys: &[String],
+    ) -> Result<Self, String> {
+        Self::for_key(
+            bucket,
+            crate::task_workflow_sync::object_key(todo_key, occupied_keys)?,
+            WireDomain::Workflow,
         )
     }
 

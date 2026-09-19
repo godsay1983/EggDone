@@ -47,7 +47,7 @@ fn column_mapping(table: &Table, actual: &[&str], schema: i64) -> Result<Vec<usi
 fn verify_restored(c: &Connection, data: &[u8]) -> Result<(), String> {
     let expected: Snapshot = serde_json::from_slice(data).map_err(|_| invalid())?;
     let mut actual: Snapshot = serde_json::from_slice(&capture(c)?).map_err(|_| invalid())?;
-    if expected.schema < 24 {
+    if expected.schema < 26 {
         actual
             .tables
             .truncate(tables_for_schema(expected.schema).len());
@@ -92,7 +92,7 @@ fn restore(c: &mut Connection, data: &[u8], plan: &BackupPlan) -> Result<(), Str
     let snapshot: Snapshot = serde_json::from_slice(data).map_err(|_| invalid())?;
     if snapshot.format != "eggdone.local-migration-recovery.v1"
         || snapshot.client != "desktop"
-        || ![22, 23, 24, 25].contains(&snapshot.schema)
+        || ![22, 23, 24, 25, 26].contains(&snapshot.schema)
         || snapshot.tables.len() != tables_for_schema(snapshot.schema).len()
     {
         return Err(invalid());

@@ -282,6 +282,115 @@ fn offline_task_and_plan_survive_and_old_epoch_cannot_ack() {
         assert_eq!(cloud.0.lock().unwrap().reads.len(), count);
     });
 }
+
+#[test]
+fn workflow_autojoin_preserves_local_source_target_and_invalidates_receipts() {
+    tauri::async_runtime::block_on(async {
+        let (db, p, claim, cloud) = fixture();
+        let old_snapshot;
+        {
+            let mut c = db.connection.lock().unwrap();
+            todo(&c, ID);
+            let request = crate::task_workflow_store::WorkflowWrite {
+                operation_uuid: uuid::Uuid::new_v4().to_string(),
+                task_uuid: ID.into(),
+                state: "waiting".into(),
+                reason: "local private".into(),
+                review_date: None,
+                date: DATE.into(),
+                remove_from_plan: false,
+                expected: crate::task_workflow_store::list(&mut c, DATE)
+                    .unwrap()
+                    .revision,
+                expected_plan: None,
+            };
+            crate::task_workflow_store::write(&mut c, &request, 10, ID).unwrap();
+            old_snapshot =
+                crate::task_workflow_sync::prepare(&mut c, p.epoch(), None, None).unwrap();
+        }
+        for (main, clock, reason) in [
+            (MAIN.to_string(), 20, "source private"),
+            (claim.main().unwrap(), 30, "target private"),
+        ] {
+            let d = json!({"format_version":1,"events":[],"states":[{"task_uuid":PEER,"state":"waiting","reason":reason,"review_date":null,"clock":clock,"writer":ID,"basis":""}]});
+            cloud.0.lock().unwrap().objects.insert(
+                crate::task_workflow_sync::object_key(&main, &[]).unwrap(),
+                d.to_string().into_bytes(),
+            );
+        }
+        let peer = database();
+        {
+            let c = peer.connection.lock().unwrap();
+            todo(&c, PEER);
+            set_document(
+                &cloud,
+                MAIN,
+                0,
+                &serde_json::to_vec(&crate::sync::build_document(&c, 1).unwrap()).unwrap(),
+            );
+        }
+        let next = follow_with(&cloud, &db, &p).await.unwrap().unwrap();
+        let mut c = db.connection.lock().unwrap();
+        let s = crate::task_workflow_store::snapshot(&mut c).unwrap();
+        assert_eq!(s.document.states.len(), 2);
+        assert!(s
+            .document
+            .states
+            .iter()
+            .any(|s| s.reason == "target private"));
+        assert_eq!(
+            crate::task_workflow_store::list(&mut c, DATE)
+                .unwrap()
+                .entries
+                .len(),
+            2
+        );
+        assert!(s.revision > s.synced_revision);
+        assert!(s.etag.is_none());
+        assert!(s.generation > 0);
+        assert!(
+            !crate::task_workflow_sync::acknowledge(&mut c, &old_snapshot, Some("\"old\""))
+                .unwrap()
+        );
+        assert_eq!(
+            c.query_row("SELECT COUNT(*) FROM task_workflow_operations", [], |r| r
+                .get::<_, i64>(
+                0
+            ))
+            .unwrap(),
+            0
+        );
+        assert!(crate::task_workflow_sync::prepare(&mut c, next.epoch(), None, None).is_ok());
+    });
+}
+
+#[test]
+fn workflow_autojoin_source_disappearance_and_corruption_preserve_target() {
+    tauri::async_runtime::block_on(async {
+        for corrupt in [false, true] {
+            let (db, p, _, cloud) = fixture();
+            db.connection
+                .lock()
+                .unwrap()
+                .execute("UPDATE task_workflow_sync_state SET etag='\"seen\"'", [])
+                .unwrap();
+            if corrupt {
+                cloud.0.lock().unwrap().objects.insert(
+                    crate::task_workflow_sync::object_key(MAIN, &[]).unwrap(),
+                    b"{}".to_vec(),
+                );
+            }
+            assert!(follow_with(&cloud, &db, &p).await.is_err());
+            assert_eq!(configured(&db), MAIN);
+            assert_eq!(
+                crate::task_workflow_store::snapshot(&mut db.connection.lock().unwrap())
+                    .unwrap()
+                    .generation,
+                0
+            );
+        }
+    });
+}
 #[test]
 fn source_peer_metadata_and_completed_plan_are_preserved() {
     tauri::async_runtime::block_on(async {

@@ -111,6 +111,11 @@ pub mod task_template_store;
 pub mod task_template_sync;
 #[cfg(test)]
 mod task_template_tests;
+mod task_workflow_commands;
+pub mod task_workflow_protocol;
+mod task_workflow_session;
+pub mod task_workflow_store;
+pub mod task_workflow_sync;
 mod trash;
 mod trash_commands;
 #[cfg(test)]
@@ -218,6 +223,8 @@ pub fn run() {
             task_template_commands::save_task_template,
             daily_plan_commands::list_daily_plans,
             daily_plan_commands::write_daily_plan,
+            task_workflow_commands::list_task_workflow,
+            task_workflow_commands::write_task_workflow,
             task_checklist_commands::save_task_checklist_editor,
             task_checklist_commands::create_task_checklist_editor,
             task_checklist_commands::resolve_checklist_rule_time,

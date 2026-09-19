@@ -137,7 +137,7 @@ pub fn snapshot(db: &mut Connection) -> Result<Snapshot, String> {
     tx.commit().map_err(error)?;
     Ok(s)
 }
-fn put(tx: &Transaction<'_>, p: &Plan) -> Result<(), String> {
+pub(crate) fn put(tx: &Transaction<'_>, p: &Plan) -> Result<(), String> {
     tx.execute("INSERT INTO daily_plans(task_uuid,plan_date,included,position,clock,writer,basis) VALUES(?1,?2,?3,?4,?5,?6,?7) ON CONFLICT(task_uuid,plan_date) DO UPDATE SET included=excluded.included,position=excluded.position,clock=excluded.clock,writer=excluded.writer,basis=excluded.basis",params![p.task_uuid,p.plan_date,p.included,p.position,p.clock,p.writer,p.basis]).map_err(error)?;
     Ok(())
 }
@@ -162,6 +162,7 @@ pub fn merge_in_transaction(tx: &Transaction<'_>, remote: &Document) -> Result<(
     tx.execute("DELETE FROM daily_plans WHERE task_uuid IN (SELECT uuid FROM lifecycle_terminals WHERE kind='todo')",[]).map_err(error)?;
     tx.execute("DELETE FROM daily_plan_completions WHERE task_uuid IN (SELECT uuid FROM lifecycle_terminals WHERE kind='todo')",[]).map_err(error)?;
     read_in_transaction(tx)?;
+    crate::task_workflow_store::read_in_transaction(tx)?;
     Ok(())
 }
 pub fn restore(db: &mut Connection, remote: &Document) -> Result<(), String> {
@@ -172,7 +173,7 @@ pub fn restore(db: &mut Connection, remote: &Document) -> Result<(), String> {
     tx.commit().map_err(error)
 }
 type Parents = BTreeMap<String, (bool, Option<i64>, Option<i64>)>;
-fn parents(tx: &Transaction<'_>) -> Result<Parents, String> {
+pub(crate) fn parents(tx: &Transaction<'_>) -> Result<Parents, String> {
     let mut q = tx
         .prepare("SELECT uuid,completed,archived_at,deleted_at FROM todos ORDER BY uuid")
         .map_err(error)?;
@@ -192,7 +193,7 @@ fn parents(tx: &Transaction<'_>) -> Result<Parents, String> {
         .map_err(error)?;
     Ok(rows)
 }
-fn project(tx: &Transaction<'_>, date: &str) -> Result<DailyPlanSnapshot, String> {
+pub(crate) fn project(tx: &Transaction<'_>, date: &str) -> Result<DailyPlanSnapshot, String> {
     let day = protocol::date(date)?;
     let previous = day.yesterday().map(|d| d.to_string()).unwrap_or_default();
     let s = read_in_transaction(tx)?;

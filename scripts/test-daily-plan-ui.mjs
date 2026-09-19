@@ -31,6 +31,19 @@ export async function invoke(command,args){
  if(command==='list_groups')return [{id:1,uuid:'work',name:'Work',color:'yellow',sort_order:0,created_at:1,updated_at:1,deleted_at:null}];
  if(command==='list_task_checklist_progress')return [{todo_uuid:'task-2',total:3,completed:1}];
  if(command==='list_notes')return [];
+ if(command==='list_task_workflow')return window.workflowSnapshot(args.date);
+ if(command==='write_task_workflow'){
+   const r=args.request;
+   if(window.workflowReceipts.has(r.operation_uuid))return window.workflowSnapshot(r.date);
+   if(window.workflowConflict){window.workflowConflict=false;throw Error('WORKFLOW_CONFLICT');}
+   if(r.state==='ready')window.waiting=window.waiting.filter(e=>e.task_uuid!==r.task_uuid);
+   else window.waiting=[...window.waiting.filter(e=>e.task_uuid!==r.task_uuid),
+     {task_uuid:r.task_uuid,reason:r.reason,review_date:r.review_date,clock:Date.now()}];
+   if(r.remove_from_plan){window.plans[r.date]=window.plans[r.date].filter(e=>e.task_uuid!==r.task_uuid);window.revision++;}
+   window.workflowReceipts.add(r.operation_uuid);
+   if(window.loseWorkflowReply){window.loseWorkflowReply=false;throw Error('lost response');}
+   return window.workflowSnapshot(r.date);
+ }
  if(['preview_todo_import','preview_full_backup_import'].includes(command))return structuredClone(window.importPreview);
  if(['confirm_todo_import','confirm_full_backup_import'].includes(command))return {
    added:0,updated:0,unchanged:0,note_added:0,note_updated:0,note_unchanged:0,
@@ -74,6 +87,7 @@ import DataManager from '/src/lib/components/DataManager.svelte';
 import SyncSettings from '/src/lib/components/SyncSettings.svelte';
 import {setLanguageMode} from '/src/lib/i18n/index.ts';
 import {dailyPlans} from '/src/lib/stores/dailyPlanStore.ts';
+import {taskWorkflow} from '/src/lib/stores/taskWorkflowStore.ts';
 import {todos} from '/src/lib/stores/todoStore.ts';
 import {syncStatus,savedSyncSettings} from '/src/lib/sync/autoSync.ts';
 import '/src/app.css';
@@ -83,6 +97,10 @@ await setLanguageMode(params.get('lang')||'en-US');
 window.calls=[];window.revision=1;window.receipts=new Set();window.failRead=params.has('failRead');
 window.holdRead=params.has('holdRead');window.holdWrite=false;window.loseReply=false;window.conflict=false;
 window.dailyPlans=dailyPlans;window.todos=todos;window.syncStatus=syncStatus;
+window.taskWorkflow=taskWorkflow;window.waiting=[];window.workflowReceipts=new Set();
+window.workflowSnapshot=date=>structuredClone({date,revision:'a'.repeat(64),entries:window.waiting
+ .filter(e=>window.rows.some(t=>t.uuid===e.task_uuid&&!t.completed&&!t.deleted_at&&!t.archived_at))
+ .map(e=>({...e,review_due:!!e.review_date&&e.review_date<=date}))});
 window.savedSyncSettings=savedSyncSettings;
 window.makeSettings=objectKey=>({enabled:false,endpoint:'https://example.test',region:'us-east-1',bucket:'fixture',objectKey,
  noteObjectKey:objectKey.replace('todos.json','notes.json'),noteAttachmentObjectKey:objectKey.replace('todos.json','note-attachments.json'),
@@ -322,6 +340,83 @@ try {
       [{ command: kind === 'json' ? 'confirm_todo_import' : 'confirm_full_backup_import', args: { path: 'backup.json' } }]);
     previewCases++;
   }
+  let waitingCases = 0;
+  await page.clock.setFixedTime(new Date(2026, 8, 19, 12));
+  for (const lang of ['en-US', 'zh-CN']) for (const theme of ['light', 'dark']) for (const width of [320, 480, 1000]) {
+    await page.setViewportSize({ width, height: 720 });
+    await go(`lang=${lang}&theme=${theme}`);
+    const t = (en, zh) => lang === 'en-US' ? en : zh;
+    const openWaiting = async () => {
+      await page.locator('[data-todo-id="2"] .more-button').click();
+      await menuitem(t('Set as waiting', '设为等待')).click();
+      await page.locator('#waiting-reason:not([disabled])').waitFor();
+    };
+    await openWaiting();
+    const editor = page.locator('.waiting-editor');
+    assert.equal(await page.locator('#waiting-date').getAttribute('placeholder'), 'yyyy/mm/dd');
+    assert.equal(await page.locator('#waiting-date').getAttribute('type'), 'text');
+    await editor.locator('.calendar-input').fill('2026-09-19');
+    assert.equal(await page.locator('#waiting-date').inputValue(), '2026/09/19');
+    await editor.getByRole('button', { name: t('Clear date', '清除日期'), exact: true }).click();
+    assert.equal(await page.locator('#waiting-date').inputValue(), '');
+    await page.screenshot({ path: resolve(output, `waiting-initial-${lang}-${theme}-${width}.png`) });
+    assert.equal(await editor.locator('input[type="checkbox"]').isChecked(), false);
+    await page.locator('#waiting-reason').fill('  Waiting for a reply / 等待回复  ');
+    await page.locator('#waiting-date').fill('2026/09/19');
+    await editor.getByRole('button', { name: t('Cancel', '取消'), exact: true }).click();
+    assert.equal(await page.evaluate(() => window.calls.filter(c => c.command === 'write_task_workflow').length), 0);
+    await openWaiting();
+    await page.locator('#waiting-reason').fill('  Waiting for a reply / 等待回复  ');
+    await page.locator('#waiting-date').fill('2026/09/19');
+    await page.screenshot({ path: resolve(output, `waiting-editor-${lang}-${theme}-${width}.png`) });
+    assert(await editor.evaluate(e => e.scrollWidth <= e.clientWidth), 'editor fits narrow windows');
+    await editor.getByRole('button', { name: t('Save', '保存'), exact: true }).click();
+    await page.locator('[data-todo-id="2"] .waiting-badge').waitFor();
+    assert.equal(await page.locator('[data-todo-id="2"] .waiting-badge').innerText(), t('Review due', '待复查'));
+    assert.equal(await page.evaluate(() => window.waiting[0].reason), '  Waiting for a reply / 等待回复  ');
+    assert.equal(await page.evaluate(() => window.plans['2026-09-19'].length), 3);
+    await page.locator('.view-switch button').nth(1).click();
+    await button(t('Planned', '计划做')).click();
+    await page.getByText(t('Ready now: 1 / Planned: 2', '可立即处理 1 / 已安排 2'), { exact: true }).waitFor();
+    await page.locator('[data-plan-uuid="task-2"] .more-button').click();
+    await menuitem(t('Edit waiting', '编辑等待')).click();
+    await page.locator('#waiting-reason:not([disabled])').waitFor();
+    assert.equal(await page.locator('#waiting-reason').inputValue(), '  Waiting for a reply / 等待回复  ');
+    await editor.locator('input[type="checkbox"]').check();
+    await editor.getByRole('button', { name: t('Save', '保存'), exact: true }).click();
+    await page.waitForFunction(() => !document.querySelector('[data-plan-uuid="task-2"]'));
+    const request = await page.evaluate(() => window.calls.filter(c => c.command === 'write_task_workflow').at(-1).args.request);
+    assert.equal(request.remove_from_plan, true); assert(request.expected_plan);
+    await page.locator('.summary-menu-button').click();
+    await menuitem(t('Waiting', '等待处理')).click();
+    await page.locator('[data-waiting-uuid="task-2"]').waitFor();
+    const list = page.locator('.waiting-list');
+    assert(await list.evaluate(e => e.scrollWidth <= e.clientWidth), 'waiting list fits');
+    await page.screenshot({ path: resolve(output, `waiting-list-${lang}-${theme}-${width}.png`) });
+    await list.getByRole('button', { name: t('No review date', '无查看日期'), exact: true }).click();
+    assert.equal(await page.locator('[data-waiting-uuid]').count(), 0);
+    await list.getByRole('button', { name: t('Review due', '待复查'), exact: true }).click();
+    await page.locator('[data-waiting-uuid="task-2"] .more-button').click();
+    await menuitem(t('Resume task', '恢复处理')).click();
+    await page.locator('.waiting-editor').getByRole('button', { name: t('Resume task', '恢复处理'), exact: true }).click();
+    await page.waitForFunction(() => !document.querySelector('[data-waiting-uuid]'));
+    assert.equal(await page.evaluate(() => window.waiting.length), 0);
+    assert.equal(await page.evaluate(() => window.plans['2026-09-19'].some(e => e.task_uuid === 'task-2')), false);
+    waitingCases++;
+  }
+  await go('lang=en-US&theme=dark');
+  await page.locator('[data-todo-id="2"] .more-button').click();
+  await menuitem('Set as waiting').click();
+  await page.locator('#waiting-reason:not([disabled])').waitFor();
+  await page.locator('#waiting-reason').fill('Retry exactly');
+  await page.evaluate(() => { window.loseWorkflowReply = true; });
+  await page.locator('.waiting-editor').getByRole('button', { name: 'Save', exact: true }).click();
+  await page.locator('.waiting-editor [role="alert"]').waitFor();
+  assert(await page.locator('#waiting-reason').isDisabled(), 'uncertain write freezes draft');
+  await page.locator('.waiting-editor').getByRole('button', { name: 'Retry same action', exact: true }).click();
+  await page.waitForFunction(() => !document.querySelector('.waiting-editor'));
+  const waitingWrites = await page.evaluate(() => window.calls.filter(c => c.command === 'write_task_workflow').map(c => c.args.request));
+  assert.deepEqual(waitingWrites[0], waitingWrites[1], 'lost response retries exact identity and body');
   let settingsCases = 0;
   const generated = 'eggdone-spaces/v2/d1998d01-68fb-4f95-9519-b9a0e84eac73/todos.json';
   for (const lang of ['en-US', 'zh-CN']) for (const theme of ['light', 'dark'])
@@ -371,7 +466,10 @@ try {
     settingsCases++;
   }
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ cases, previewCases, settingsCases, output, acceptance: 'Mocked IPC browser only; not native database or S3 proof' }));
+  console.log(JSON.stringify({ cases, previewCases, waitingCases, settingsCases, output, acceptance: 'Mocked IPC browser only; not native database or S3 proof' }));
+} catch (error) {
+  console.error('Browser evidence: ' + output);
+  throw error;
 } finally {
   await browser?.close();
   await server.close();
