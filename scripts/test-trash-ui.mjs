@@ -17,18 +17,20 @@ export async function invoke(command,args){
   if(command==='migration_space'){
     window.backupCalls=(window.backupCalls||[]).concat(args.action);
     if(args.action==='status')return {state:'idle',mode:'',confirmation:null,objectKey:null};
-    if(window.backupFail){window.backupFail=false;throw Error('MIGRATION_BACKUP_ASSET');}
+    if(window.backupFail){window.backupFail=false;throw Error('MIGRATION_BACKUP_ASSET_NOT_FOUND:00000000-0000-4000-8000-000000000002:original');}
     if(window.backupChanged)throw Error('MIGRATION_BACKUP_CHANGED');
     if(args.action==='activate'){
       if(args.expected!=='preview-digest')throw Error('MIGRATION_SPACE_CONFIRMATION');
+      if(window.missingFiles&&!args.acceptMissing)throw Error('MIGRATION_MISSING_CONFIRMATION');
       if(window.publicationFail){window.publicationFail=false;throw Error('MIGRATION_PUBLICATION_NETWORK');}
       window.legacy=false;
       window.loadsBeforeActivation=window.listCalls||0;
       return {state:'active',mode:'',confirmation:null,objectKey:null};
     }
-    return {state:'prepared',mode:window.joinSpace?'join':'create',confirmation:'preview-digest',objectKey:'destination'};
+    return {state:'prepared',mode:window.joinSpace?'join':'create',confirmation:'preview-digest',objectKey:'destination',missing:window.missingFiles?['00000000-0000-4000-8000-000000000002-original']:[]};
   }
   if(command==='sync_now'){
+    if(window.holdSync)await new Promise(resolve=>window.releaseSync=resolve);
     if(window.syncFail)throw Error('offline');
     window.purgePlan={...window.purgePlan,sync_pending:false,remote_pending:0};
     return {};
@@ -36,7 +38,6 @@ export async function invoke(command,args){
   if(command==='trash_purge_status')return structuredClone(window.purgePlan);
   if(command==='unfinished_trash_purge')return null;
   if(command==='prepare_trash_purge'){
-    if(window.legacy)throw Error('PURGE_MIGRATION_REQUIRED');
     window.purgeTargets=structuredClone(args.selected||window.rows.map(({kind,uuid})=>({kind,uuid})));
     return window.purgePlan={operation_uuid:'test-operation',total:window.purgeTargets.length,attachments:1,bytes:100,
       state:'prepared',pending:window.purgeTargets.length,purged:0,skipped:0,cleanup_pending:0,sync_pending:false,remote_pending:0};
@@ -73,6 +74,7 @@ const instance=mount(Dialog,{target:document.body,props:{afterCommit:async()=>{i
 onClose:()=>{window.trashClosed=true;void unmount(instance);}}});
 </script></body></html>`;
 const server = await createServer({ root, configFile: false,
+  cacheDir: resolve(output, 'vite-cache'),
   resolve: { alias: [{ find: '@tauri-apps/api/core', replacement: 'virtual:trash-ipc' }, { find: '$lib', replacement: resolve(root, 'src/lib') }], conditions: ['browser'] },
   plugins: [svelte(), { name: 'trash-ui', resolveId: id => id === 'virtual:trash-ipc' ? '\0trash-ipc' : null,
     load: id => id === '\0trash-ipc' ? native : null,
@@ -151,13 +153,20 @@ try {
     const all=lang==='zh-CN'?'清空回收站':'Empty trash';
     await page.evaluate(()=>window.legacy=true);
     await page.getByRole('button',{name:all,exact:true}).click();
-    await page.getByRole('status').filter({hasText:lang==='zh-CN'?'同步空间':'sync space'}).waitFor();
+    await page.locator('footer button[data-tone=danger]').waitFor();
+    assert.equal(await page.locator('footer button[data-tone=danger]').isDisabled(),false);
+    assert.equal(await page.locator('input[type=checkbox]').count(),0,'one confirmation, no extra checkbox');
+    assert.equal(await page.evaluate(()=>(window.backupCalls||[]).length),0,'clearing original space never prepares migration');
     assert.equal(await page.evaluate(()=>window.purgeCalls.length),0);
+    await page.keyboard.press('Escape');
+    await page.getByRole('button',{name:lang==='zh-CN'?'同步管理':'Sync tools',exact:true}).click();
     await page.getByRole('button',{name:lang==='zh-CN'?'迁移准备':'Migration preparation',exact:true}).click();
     const prepareBackup=page.getByRole('button',{name:lang==='zh-CN'?'检查并准备':'Check and prepare',exact:true});
     await prepareBackup.waitFor();
     await page.evaluate(()=>window.backupFail=true);await prepareBackup.click();
     await page.getByRole('alert').waitFor();
+    assert.ok((await page.getByRole('alert').innerText()).includes('404'));
+    await page.locator('.diagnostic').filter({hasText:'MIGRATION_BACKUP_ASSET_NOT_FOUND'}).waitFor();
     await prepareBackup.click();
     const publish=page.getByRole('button',{name:lang==='zh-CN'?'迁移并启用':'Migrate and activate',exact:true});
     assert.equal(await publish.isDisabled(),true);
@@ -174,7 +183,20 @@ try {
     await page.setViewportSize({width:480,height:720});
     await page.evaluate(()=>window.backupChanged=true);await prepareBackup.click();
     await page.getByRole('alert').filter({hasText:lang==='zh-CN'?'本机内容已变化':'Local data has changed'}).waitFor();
-    await page.evaluate(()=>{window.backupChanged=false;window.joinSpace=true;});await prepareBackup.click();
+    await page.evaluate(()=>{window.backupChanged=false;window.missingFiles=true;});await prepareBackup.click();
+    const missingButton=page.getByRole('button',{name:lang==='zh-CN'?'确认缺失后继续迁移':'Continue with missing files',exact:true});
+    await missingButton.waitFor(); assert.equal(await missingButton.isDisabled(),true);
+    const confirmations=page.locator('section input[type=checkbox]');
+    assert.equal(await confirmations.count(),2);
+    await confirmations.last().check(); assert.equal(await missingButton.isDisabled(),true);
+    await confirmations.first().check(); assert.equal(await missingButton.isDisabled(),false);
+    await page.setViewportSize({width:320,height:430});
+    await missingButton.scrollIntoViewIfNeeded();
+    assert.ok(await page.locator('dialog').evaluate(el=>el.scrollWidth<=el.clientWidth),'missing list overflow');
+    await page.screenshot({path:resolve(output,'migration-missing-'+lang+'-'+theme+'.png')});
+    await prepareBackup.click(); assert.equal(await confirmations.first().isChecked(),false);assert.equal(await confirmations.last().isChecked(),false);
+    await page.setViewportSize({width:480,height:720});
+    await page.evaluate(()=>{window.missingFiles=false;window.joinSpace=true;});await prepareBackup.click();
     const join=page.getByRole('button',{name:lang==='zh-CN'?'加入新空间':'Join new space',exact:true});
     assert.equal(await join.isDisabled(),true);
     await page.locator('section input[type=checkbox]').check();await join.click();
@@ -185,8 +207,7 @@ try {
     await page.evaluate(()=>window.legacy=false);
     await page.getByRole('button',{name:all,exact:true}).click();
     const execute=page.locator('footer button').last();
-    assert.equal(await execute.isDisabled(),true);
-    await page.locator('.purge-agreement input').check();
+    assert.equal(await execute.isDisabled(),false);
     await page.evaluate(()=>{window.purgeFail=true;window.rows.push({...window.rows[0],uuid:'late'});});
     await execute.click();
     await page.getByRole('status').filter({hasText:lang==='zh-CN'?'未全部完成':'did not finish'}).waitFor();
@@ -211,6 +232,16 @@ try {
     assert.equal(await page.locator('footer button').isDisabled(),false);
     await page.keyboard.press('Escape');
     assert.equal(await page.locator('.selection-check').count(),0);
+    await page.evaluate(()=>window.holdSync=true);
+    await page.getByRole('button',{name:all,exact:true}).click();
+    await page.locator('footer button[data-tone=danger]').click();
+    await page.waitForFunction(()=>!!window.releaseSync);
+    assert.equal(await page.evaluate(()=>window.rows.length),0);
+    assert.equal(await page.getByRole('button',{name:lang==='zh-CN'?'关闭':'Close',exact:true}).isDisabled(),false,'slow network does not block close');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    assert.equal(await page.evaluate(()=>window.trashClosed),true);
+    await page.evaluate(()=>window.releaseSync());
   }
   assert.deepEqual(errors, []);
   console.log('Trash UI: ' + count + ' locale/theme/window/zoom combinations plus 4 purge and migration preparation/missing-file/stale-preview scenarios passed. Screenshots: ' + output);

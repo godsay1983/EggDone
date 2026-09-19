@@ -7,6 +7,9 @@ const devHost = host || "127.0.0.1";
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   plugins: [sveltekit()],
+  // Component test servers use different Svelte/IPC graphs and must not overwrite this cache.
+  cacheDir: "node_modules/.vite-app",
+  resolve: { dedupe: ["svelte"] },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //

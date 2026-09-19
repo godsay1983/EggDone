@@ -2,6 +2,7 @@
 use super::*;
 const KEY: &str = "migration.backup.publication.v1";
 pub const FORMAT: &str = "eggdone.migration-seed.v1";
+pub const MISSING_FORMAT: &str = "eggdone.migration-seed.v2";
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
@@ -72,13 +73,20 @@ pub fn manifest(plan: &Plan) -> Result<Vec<u8>, String> {
             ])
         })
         .collect();
+    let has_missing = plan.files.iter().any(|f| f.missing);
     let files: Vec<serde_json::Value> = plan
         .files
         .iter()
-        .map(|f| serde_json::json!([f.name, f.size, f.sha256]))
+        .map(|f| {
+            if has_missing {
+                serde_json::json!([f.name, f.size, f.sha256, f.missing])
+            } else {
+                serde_json::json!([f.name, f.size, f.sha256])
+            }
+        })
         .collect();
     serde_json::to_vec(&serde_json::json!([
-        FORMAT,
+        if has_missing { MISSING_FORMAT } else { FORMAT },
         plan.operation,
         plan.source,
         plan.cloud_hash,
@@ -114,6 +122,7 @@ pub(crate) fn validate(plan: &Plan) -> Result<(), String> {
             && id(&f.name[..36])
             && ["-original", "-preview.jpg"].contains(&&f.name[36..]);
         if (!meta && !asset)
+            || (meta && f.missing)
             || !sha(&f.sha256)
             || f.size == 0
             || f.size > 20 * 1024 * 1024
@@ -282,6 +291,11 @@ pub fn publish(
     }
     recheck()?;
     for entry in &plan.files {
+        if entry.missing {
+            guard()?;
+            progress(Some(&entry.name), false)?;
+            continue;
+        }
         guard()?;
         let key = object_key(plan, entry)?;
         let mut bytes = storage.read(&key, entry.size as usize)?;
@@ -315,6 +329,9 @@ pub fn publish(
     }
     // The journal is progress, not proof. Verify all targets again after observing the marker.
     for f in &plan.files {
+        if f.missing {
+            continue;
+        }
         guard()?;
         let bytes = storage
             .read(&object_key(plan, f)?, f.size as usize)?

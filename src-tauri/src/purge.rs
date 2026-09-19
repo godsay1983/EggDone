@@ -123,23 +123,17 @@ fn validate(target: &Target) -> Result<(), String> {
     Ok(())
 }
 
-// A configured legacy target remains unsafe even while its sync toggle is off.
+// Both upgraded transports publish terminal evidence before syncing entity bodies.
 pub fn require_safe(connection: &Connection) -> Result<(), String> {
-    if crate::space_activation::is_active(connection)? {
-        return Ok(());
-    }
-    let legacy: bool = connection.query_row(
-        "SELECT EXISTS(SELECT 1 FROM sync_settings WHERE enabled=1 OR length(trim(endpoint))>0 OR length(trim(bucket))>0)",
-        [], |r| r.get(0)).map_err(db_error)?;
-    let previous_sync: bool = connection
-        .query_row(
-            "SELECT EXISTS(SELECT 1 FROM sync_runtime_state WHERE last_success_at IS NOT NULL)",
-            [],
-            |r| r.get(0),
-        )
+    let key: String = connection
+        .query_row("SELECT object_key FROM sync_settings WHERE id=1", [], |r| {
+            r.get(0)
+        })
         .map_err(db_error)?;
-    if legacy || previous_sync || !epoch(connection)?.is_empty() {
-        return Err("PURGE_MIGRATION_REQUIRED".into());
+    crate::space_activation::admit(connection, &key)?;
+    let configured: bool = connection.query_row("SELECT length(trim(endpoint))>0 AND length(trim(bucket))>0 FROM sync_settings WHERE id=1", [], |r| r.get(0)).map_err(db_error)?;
+    if configured {
+        crate::sync_target::capture(connection)?;
     }
     Ok(())
 }
@@ -355,7 +349,7 @@ pub fn status(connection: &Connection, operation: &str) -> Result<Plan, String> 
         )
         .map_err(db_error)?;
     if result.purged > 0 && (active || was_synced) {
-        result.sync_pending = !active || connection.query_row("SELECT revision<>synced_revision OR etag IS NULL OR EXISTS(SELECT 1 FROM sync_runtime_state WHERE last_result<>'success' OR dirty_domains<>'[]') FROM lifecycle_sync_state WHERE id=1", [], |r| r.get::<_, bool>(0)).map_err(db_error)?;
+        result.sync_pending = connection.query_row("SELECT revision<>synced_revision OR etag IS NULL OR EXISTS(SELECT 1 FROM sync_runtime_state WHERE last_result<>'success' OR dirty_domains<>'[]') FROM lifecycle_sync_state WHERE id=1", [], |r| r.get::<_, bool>(0)).map_err(db_error)?;
     }
     Ok(result)
 }

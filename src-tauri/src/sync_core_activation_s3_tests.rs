@@ -6,6 +6,88 @@ use crate::{
 };
 use std::cell::RefCell;
 const MAIN: &str = "account/todos.json";
+const MISSING: &str = "123e4567-e89b-42d3-a456-426614174099";
+
+#[test]
+#[ignore = "Use run-sync-core-s3.ps1 -DirectPurgeSessions"]
+fn direct_verify_and_purge() {
+    let client = Client::new(TODO, NOTE);
+    configure(&client.db.connection.lock().unwrap());
+    // A stale body with a newer timestamp must lose to the peer's terminal.
+    client
+        .db
+        .connection
+        .lock()
+        .unwrap()
+        .execute("UPDATE notes SET updated_at=9007199254740991", [])
+        .unwrap();
+    sync(&client);
+    let mut c = client.db.connection.lock().unwrap();
+    assert_eq!(
+        c.query_row("SELECT COUNT(*) FROM notes WHERE uuid=?1", [NOTE], |r| r
+            .get::<_, i64>(0))
+            .unwrap(),
+        0
+    );
+    let now = crate::db::now_millis();
+    c.execute("UPDATE todos SET deleted_at=?1,updated_at=?1,repeat_rule=NULL,repeat_series_uuid=NULL WHERE uuid=?2", params![now, TODO]).unwrap();
+    c.execute(
+        "DELETE FROM recurrence_rules WHERE current_todo_uuid=?1",
+        [TODO],
+    )
+    .unwrap();
+    let plan = crate::purge::prepare(&mut c, None, now + 1).unwrap();
+    assert_eq!(
+        crate::purge::execute_batch(&mut c, &plan.operation_uuid, now + 2)
+            .unwrap()
+            .purged,
+        1
+    );
+    assert!(
+        crate::purge::status(&c, &plan.operation_uuid)
+            .unwrap()
+            .sync_pending
+    );
+    drop(c);
+    sync(&client);
+    let c = client.db.connection.lock().unwrap();
+    assert!(
+        !crate::purge::status(&c, &plan.operation_uuid)
+            .unwrap()
+            .sync_pending
+    );
+    assert_eq!(
+        c.query_row("SELECT object_key FROM sync_settings", [], |r| r
+            .get::<_, String>(0))
+            .unwrap(),
+        MAIN
+    );
+    assert!(!space::is_active(&c).unwrap());
+    println!("DIRECT_PURGE_DESKTOP_OK: stale peer filtered, direct empty trash and terminal sync without activation");
+}
+
+#[test]
+#[ignore = "Use run-sync-core-s3.ps1 -ActivationSessions; isolated bucket only"]
+fn missing_seed() {
+    tauri::async_runtime::block_on(async {
+        let b = bucket(SECRET);
+        let key = s3_sync::derive_note_attachment_object_key(MAIN);
+        let response = b.get_object(&key).await.unwrap();
+        let mut doc: serde_json::Value = serde_json::from_slice(response.as_slice()).unwrap();
+        let mut missing = doc["attachments"][0].clone();
+        missing["uuid"] = MISSING.into();
+        missing["deleted_at"] = 2.into();
+        doc["attachments"].as_array_mut().unwrap().push(missing);
+        assert_eq!(
+            b.put_object(&key, &serde_json::to_vec(&doc).unwrap())
+                .await
+                .unwrap()
+                .status_code(),
+            200
+        );
+    });
+    println!("ACTIVATION_MISSING_SEED_OK: deleted descriptor with no binary in isolated bucket");
+}
 fn sync(client: &Client) {
     let _guard = client.runtime.acquire().unwrap();
     let p = {
@@ -53,23 +135,34 @@ fn prepare() {
         preflight.blockers().is_empty(),
         "migration preflight: {preflight:?}"
     );
-    let work = backup::prepare(&mut c, crate::db::now_millis()).unwrap();
+    let mut work = backup::prepare(&mut c, crate::db::now_millis()).unwrap();
+    let before = work.plan.clone();
     let copies = client.root.join("copies");
-    backup::copy_with_missing(&work, &copies, &client.root, |f| {
-        tauri::async_runtime::block_on(source.download(
-            &client.runtime,
-            &f.name[..36],
-            &f.name[37..],
-            f.size as i64,
-            &f.sha256,
-        ))
-    })
+    backup::copy_with_policy(
+        &mut work,
+        &copies,
+        &client.root,
+        |f| {
+            tauri::async_runtime::block_on(source.download(
+                &client.runtime,
+                &f.name[..36],
+                &f.name[37..],
+                f.size as i64,
+                &f.sha256,
+            ))
+        },
+        |f| backup::can_omit(&c, f),
+    )
     .unwrap();
+    backup::record_missing(&mut c, &before, &work.plan).unwrap();
+    assert!(backup::asset_files(&work.plan)
+        .iter()
+        .any(|f| f.missing && f.name.starts_with(MISSING)));
     backup::rehearse(&copies, &work.plan).unwrap();
     backup::finish(&mut c, &work.plan, crate::db::now_millis()).unwrap();
     let local = backup::latest(&c).unwrap().unwrap();
     let binding = s3_sync::migration_source_binding(&c).unwrap();
-    let snapshot = cloud::prepare(
+    let mut snapshot = cloud::prepare(
         &mut c,
         &local,
         &binding,
@@ -78,16 +171,25 @@ fn prepare() {
         crate::db::now_millis(),
     )
     .unwrap();
-    cloud::copy(&copies, &local, &snapshot, &remote, |f| {
-        tauri::async_runtime::block_on(source.download(
-            &client.runtime,
-            &f.name[..36],
-            &f.name[37..],
-            f.size as i64,
-            &f.sha256,
-        ))
-    })
+    let before = snapshot.clone();
+    cloud::copy_with_policy(
+        &copies,
+        &local,
+        &mut snapshot,
+        &remote,
+        |f| {
+            tauri::async_runtime::block_on(source.download(
+                &client.runtime,
+                &f.name[..36],
+                &f.name[37..],
+                f.size as i64,
+                &f.sha256,
+            ))
+        },
+        true,
+    )
     .unwrap();
+    cloud::record_missing(&mut c, &local, &before, &snapshot, &remote).unwrap();
     cloud::finish(&mut c, &local, &snapshot, crate::db::now_millis()).unwrap();
     let snapshot = cloud::latest(&c).unwrap().unwrap();
     let plan = publication::prepare(&mut c, &local, &snapshot).unwrap();
@@ -130,6 +232,20 @@ fn prepare() {
         local,
         mode: "create".into(),
     };
+    let token = pending.token().unwrap();
+    assert_eq!(
+        pending
+            .require_confirmation(Some(&token), false)
+            .unwrap_err(),
+        "MIGRATION_MISSING_CONFIRMATION"
+    );
+    pending.require_confirmation(Some(&token), true).unwrap();
+    assert_eq!(
+        pending
+            .require_confirmation(Some("stale"), true)
+            .unwrap_err(),
+        "MIGRATION_SPACE_CONFIRMATION"
+    );
     space::save_pending(&c.borrow(), &pending).unwrap();
     space::activate(&mut c.borrow_mut(), &pending, &ledger).unwrap();
     drop(c);
@@ -206,8 +322,8 @@ fn reverse() {
     crate::purge::execute_batch(&mut c, &local_purge.operation_uuid, 202).unwrap();
     configure(&c);
     assert!(
-        s3_sync::prepare_with_fixture_credentials(&c, bucket(SECRET)).is_err(),
-        "local terminals must never leak to legacy space"
+        s3_sync::prepare_with_fixture_credentials(&c, bucket(SECRET)).is_ok(),
+        "original spaces now have a terminal-aware sidecar"
     );
     let source = s3_sync::MigrationAssetSource::from_test_bucket(bucket(SECRET), MAIN);
     let claim = space::association(
@@ -250,7 +366,7 @@ fn reverse() {
     crate::purge::cleanup(&c, &client.assets, &plan.operation_uuid).unwrap();
     let pending = crate::purge::status(&c, &plan.operation_uuid).unwrap();
     assert!(pending.sync_pending);
-    assert_eq!(pending.remote_pending, 1);
+    assert_eq!(pending.remote_pending, 2);
     drop(c);
     sync(&client);
     let c = client.db.connection.lock().unwrap();

@@ -26,7 +26,8 @@
   let selected: string[] = [];
   let purge: PurgePlan | null = null;
   let unfinished: PurgePlan | null = null;
-  let agreed = false;
+  let syncing = false;
+  let spaceTools = false;
   let stopRequested = false;
   let migrationPreparation = false;
   const key = (item: PurgeTarget) => item.kind + ':' + item.uuid;
@@ -35,21 +36,20 @@
   }
   async function preparePurge(targets: PurgeTarget[] | null) {
     if (busy) return;
-    busy = true; message = null; agreed = false;
+    busy = true; message = null;
     try { purge = await purgeApi.prepare(targets); }
     catch (error) { message = purgeFailure(error); }
     finally { busy = false; }
   }
   function purgeFailure(error: unknown): TranslationKey {
     const code = error instanceof Error ? error.message : String(error);
-    if (code.includes('PURGE_MIGRATION_REQUIRED')) return 'purge.migration';
     if (code.includes('PURGE_PENDING_CREATION')) return 'purge.pendingCreation';
     if (code.includes('PURGE_EMPTY')) return 'purge.empty';
     if (code.includes('PURGE_CONFLICT') || code.includes('PURGE_TARGET_CHANGED')) return 'purge.conflict';
     return 'purge.failed';
   }
   async function runPurge() {
-    if (busy || !purge || (purge.state === 'prepared' && !agreed)) return;
+    if (busy || !purge) return;
     busy = true; stopRequested = false; message = null;
     const operation = purge.operation_uuid;
     try {
@@ -59,7 +59,6 @@
         purge = await purgeApi.run(operation);
         moreWork = purge.pending > 0 || (purge.cleanup_pending > 0 && (previous.pending > 0 || purge.cleanup_pending < previous.cleanup_pending));
       } while (moreWork && !stopRequested);
-      if (!stopRequested && !purge.pending && (purge.sync_pending || purge.remote_pending)) await syncPurgeProgress(operation);
       unfinished = purge.pending || purge.cleanup_pending || purge.sync_pending || purge.remote_pending ? purge : null;
       selected = []; selecting = false; pending = null;
     } catch (error) { message = purgeFailure(error); }
@@ -67,19 +66,27 @@
       try { await afterCommit(); } catch { refreshNeeded = true; message = 'purge.refreshFailed'; }
       await page(true); busy = false;
     }
+    if (!stopRequested && purge?.operation_uuid === operation && !purge.pending && (purge.sync_pending || purge.remote_pending)) void retryPurgeSync();
   }
 
   async function syncPurgeProgress(operation: string) {
-    try { await syncNow(); } catch { message = 'space.syncFailed'; }
-    purge = await purgeApi.status(operation);
-    unfinished = purge.pending || purge.cleanup_pending || purge.sync_pending || purge.remote_pending ? purge : null;
+    let failed = false;
+    try { await syncNow(); } catch { failed = true; }
+    let result = await purgeApi.status(operation);
+    if (!result.pending && result.cleanup_pending) result = await purgeApi.run(operation);
+    if (disposed) return;
+    unfinished = await purgeApi.unfinished();
+    if (purge?.operation_uuid === operation) {
+      purge = result;
+      if (failed) message = 'space.syncFailed';
+    }
   }
   async function retryPurgeSync() {
-    if (busy || !purge) return;
-    busy = true; message = null;
+    if (syncing || !purge) return;
+    syncing = true; message = null;
     try { await syncPurgeProgress(purge.operation_uuid); await afterCommit(); await page(true); }
-    catch { message = 'space.syncFailed'; }
-    finally { busy = false; }
+    catch { if (!disposed) message = 'space.syncFailed'; }
+    finally { syncing = false; }
   }
 
   async function migrationActivated() {
@@ -161,7 +168,7 @@
   function back() {
     if (busy) return;
     if (migrationPreparation) migrationPreparation = false;
-    else if (purge) { purge = null; agreed = false; }
+    else if (purge) { purge = null; }
     else if (pending) pending = null;
     else if (selecting) { selecting = false; selected = []; }
     else onClose();
@@ -177,6 +184,7 @@
     {#if !pending && !purge}
       <div class="header-tools">
         {#if !migrationPreparation}<PanelToolButton icon="refresh" label={$translator("trash.refresh")} disabled={busy} onclick={() => load(true)} />{/if}
+        {#if !migrationPreparation}<button class="text-tool" disabled={busy} onclick={() => spaceTools = !spaceTools}>{$translator('purge.spaceTools')}</button>{/if}
         <PanelToolButton icon="close" label={$translator("common.close")} disabled={busy} onclick={back} />
       </div>
     {/if}
@@ -188,10 +196,10 @@
       <button class="text-tool" disabled={busy || loadFailed} onclick={() => preparePurge(null)}>{$translator('purge.all')}</button>
     </div>
   {/if}
-  {#if !migrationPreparation && unfinished && !purge}<button class="text-tool" disabled={busy} onclick={() => { purge = unfinished; agreed = true; }}>{$translator('purge.resume')}</button>{/if}
+  {#if !migrationPreparation && unfinished && !purge}<button class="text-tool" disabled={busy} onclick={() => { purge = unfinished; }}>{$translator('purge.resume')}</button>{/if}
   <div class="content" bind:this={content} aria-busy={busy}>
     {#if message && !migrationPreparation}<p role="status">{$translator(message)}</p>{/if}
-    {#if !migrationPreparation && !purge && !pending}
+    {#if spaceTools && !migrationPreparation && !purge && !pending}
       <button class="text-tool" disabled={busy} onclick={async () => { pending = null; selecting = false; migrationPreparation = true; await tick(); content.scrollTop = 0; }}>{$translator('migrationBackup.title')}</button>
     {/if}
     {#if busy && !migrationPreparation}<p role="status">{$translator("common.loading")}</p>{/if}
@@ -202,7 +210,6 @@
       <h3>{$translator('purge.count', {count:purge.total,attachments:purge.attachments})}</h3>
       {#if purge.state === 'prepared'}
         <p>{$translator('purge.warning')}</p>
-        <label class="purge-agreement"><input type="checkbox" bind:checked={agreed} disabled={busy} /> <span>{$translator('purge.confirm')}</span></label>
       {:else}
         <p role="status">{$translator('purge.progress',{done:purge.total-purge.pending,total:purge.total})}</p>
         <progress max={purge.total} value={purge.total-purge.pending} aria-label={$translator('purge.title')}></progress>
@@ -245,8 +252,8 @@
   {#if purge}
     <footer class="batch-actions">
       <button class="action-button" onclick={() => busy ? stopRequested = true : back()} disabled={busy && stopRequested}>{$translator(busy ? 'purge.pause' : 'common.close')}</button>
-      {#if purge.pending || purge.cleanup_pending}<button class="action-button" data-tone="danger" disabled={busy || (purge.state === 'prepared' && !agreed)} onclick={runPurge}>{$translator(purge.state === 'prepared' ? 'purge.title' : 'common.retry')}</button>{/if}
-      {#if purge.sync_pending || purge.remote_pending}<button class="action-button" disabled={busy} onclick={retryPurgeSync}>{$translator('space.syncRetry')}</button>{/if}
+      {#if purge.pending || purge.cleanup_pending}<button class="action-button" data-tone="danger" disabled={busy} onclick={runPurge}>{$translator(purge.state === 'prepared' ? 'purge.title' : 'common.retry')}</button>{/if}
+      {#if purge.state !== 'prepared' && (purge.sync_pending || purge.remote_pending)}<button class="action-button" disabled={busy || syncing} onclick={retryPurgeSync}>{$translator(syncing ? 'purge.syncing' : 'space.syncRetry')}</button>{/if}
     </footer>
   {:else if selecting}
     <footer><button class="action-button" data-tone="danger" disabled={busy || !selected.length} onclick={() => preparePurge(items.filter(item => selected.includes(key(item))).map(({kind,uuid}) => ({kind,uuid})))}>{$translator('purge.title')}</button></footer>
@@ -269,8 +276,6 @@
   .body { white-space: pre-wrap; }
   .purge-toolbar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:13px; }
   .purge-toolbar button:last-child { margin-left:auto; }
-  .purge-agreement { display:flex; align-items:flex-start; gap:8px; font-size:14px; margin:16px 0; }
-  .purge-agreement input { margin-top:3px; }
   progress { width:100%; height:6px; accent-color:#b88c16; }
   .attachments { padding-left: 20px; overflow-wrap: anywhere; font-size: 14px; }
   footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }

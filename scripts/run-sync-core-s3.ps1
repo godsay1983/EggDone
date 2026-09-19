@@ -12,13 +12,14 @@ param(
     [switch]$SpaceProtocolSessions,
     [switch]$PurgeRemoteSessions,
     [switch]$ActivationSessions,
+    [switch]$DirectPurgeSessions,
     [string]$HarmonyRoot
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 foreach ($command in @('docker', 'cargo')) { $null = Get-Command $command -ErrorAction Stop }
-if (@($CrossClientSessions, $TrashRecoverySessions, $NoteHistorySessions, $ArchiveRecoverySessions, $PurgeCompatibilitySessions, $MigrationJournalSessions, $AssetSafetySessions, $CloudSnapshotSessions, $PublicationSessions, $SpaceProtocolSessions, $PurgeRemoteSessions, $ActivationSessions).Where({ $_.IsPresent }).Count -gt 1) { throw 'Select only one cross-client suite' }
-if ($CrossClientSessions -or $TrashRecoverySessions -or $NoteHistorySessions -or $ArchiveRecoverySessions -or $PurgeCompatibilitySessions -or $MigrationJournalSessions -or $AssetSafetySessions -or $CloudSnapshotSessions -or $PublicationSessions -or $SpaceProtocolSessions -or $PurgeRemoteSessions -or $ActivationSessions) {
+if (@($CrossClientSessions, $TrashRecoverySessions, $NoteHistorySessions, $ArchiveRecoverySessions, $PurgeCompatibilitySessions, $MigrationJournalSessions, $AssetSafetySessions, $CloudSnapshotSessions, $PublicationSessions, $SpaceProtocolSessions, $PurgeRemoteSessions, $ActivationSessions, $DirectPurgeSessions).Where({ $_.IsPresent }).Count -gt 1) { throw 'Select only one cross-client suite' }
+if ($CrossClientSessions -or $TrashRecoverySessions -or $NoteHistorySessions -or $ArchiveRecoverySessions -or $PurgeCompatibilitySessions -or $MigrationJournalSessions -or $AssetSafetySessions -or $CloudSnapshotSessions -or $PublicationSessions -or $SpaceProtocolSessions -or $PurgeRemoteSessions -or $ActivationSessions -or $DirectPurgeSessions) {
     $null = Get-Command node -ErrorAction Stop
     if (-not $HarmonyRoot) { throw 'Cross-client suites require the explicit Harmony checkout path' }
     $HarmonyRoot = (Resolve-Path -LiteralPath $HarmonyRoot).Path
@@ -33,6 +34,7 @@ if ($CrossClientSessions -or $TrashRecoverySessions -or $NoteHistorySessions -or
     if ($PublicationSessions) { $harmonyTest = Join-Path $HarmonyRoot 'scripts/test-publication-s3.cjs' }
     if ($SpaceProtocolSessions) { $harmonyTest = Join-Path $HarmonyRoot 'scripts/test-space-protocol-s3.cjs' }
     if ($ActivationSessions) { $harmonyTest = Join-Path $HarmonyRoot 'scripts/test-space-activation-s3.cjs' }
+    if ($DirectPurgeSessions) { $harmonyTest = Join-Path $HarmonyRoot 'scripts/test-direct-purge-s3.cjs' }
     if ($PurgeRemoteSessions) { $harmonyTest = Join-Path $HarmonyRoot 'scripts/test-purge-remote-s3.cjs' }
     if (-not (Test-Path -LiteralPath $harmonyTest)) { throw 'Harmony checkout is missing the full session test' }
 }
@@ -80,6 +82,7 @@ function Invoke-HarmonyPhase([string]$Phase) {
     if ($PublicationSessions) { $marker = 'PUBLICATION_HARMONY_OK:' }
     if ($SpaceProtocolSessions) { $marker = 'SPACE_PROTOCOL_HARMONY_OK:' }
     if ($ActivationSessions) { $marker = 'ACTIVATION_HARMONY_OK:' }
+    if ($DirectPurgeSessions) { $marker = 'DIRECT_PURGE_HARMONY_OK:' }
     if ($PurgeRemoteSessions) { $marker = 'PURGE_REMOTE_HARMONY_OK:' }
     if ((Get-Content -LiteralPath $log -Raw) -notmatch $marker) { throw "Harmony phase did not complete; see $log" }
 }
@@ -113,14 +116,21 @@ try {
     }
     if (-not $ready) { throw 'Authenticated S3 readiness timed out' }
     Write-Host "Running the desktop production sync core against isolated S3. Evidence: $logs"
-    if ($ActivationSessions) {
+    if ($DirectPurgeSessions) {
         Invoke-DesktopTest 'migration::migration_prepare' 'MIGRATION_DESKTOP_PREPARE_OK'
+        Invoke-HarmonyPhase 'purge'
+        Invoke-DesktopTest 'activation::direct_verify_and_purge' 'DIRECT_PURGE_DESKTOP_OK'
+        Invoke-HarmonyPhase 'verify'
+    } elseif ($ActivationSessions) {
+        Invoke-DesktopTest 'migration::migration_prepare' 'MIGRATION_DESKTOP_PREPARE_OK'
+        Invoke-DesktopTest 'activation::missing_seed' 'ACTIVATION_MISSING_SEED_OK'
         Invoke-DesktopTest 'activation::prepare' 'ACTIVATION_DESKTOP_PREPARE_OK'
         Invoke-HarmonyPhase 'verify'
         Invoke-DesktopTest 'activation::verify' 'ACTIVATION_DESKTOP_VERIFY_OK'
         # A second disposable bucket exercises the opposite creator/purger direction.
         $env:EGGDONE_NS7_S3_RUN = [guid]::NewGuid().ToString('N')
         Invoke-DesktopTest 'migration::migration_prepare' 'MIGRATION_DESKTOP_PREPARE_OK'
+        Invoke-DesktopTest 'activation::missing_seed' 'ACTIVATION_MISSING_SEED_OK'
         Invoke-HarmonyPhase 'create'
         Invoke-DesktopTest 'activation::reverse' 'ACTIVATION_DESKTOP_REVERSE_OK'
         Invoke-HarmonyPhase 'reverse'
@@ -197,4 +207,4 @@ try {
     $env:EGGDONE_NS7_S3_PORT = $oldPort
 }
 if ($cleanupFailed) { throw 'Disposable resource cleanup incomplete' }
-Write-Host "Sync core S3 passed (cross-client: $CrossClientSessions; trash recovery: $TrashRecoverySessions; note history: $NoteHistorySessions; archive recovery: $ArchiveRecoverySessions; purge compatibility: $PurgeCompatibilitySessions; migration journal: $MigrationJournalSessions; asset safety: $AssetSafetySessions; cloud snapshot: $CloudSnapshotSessions; publication: $PublicationSessions; space protocol: $SpaceProtocolSessions; purge remote: $PurgeRemoteSessions; activation: $ActivationSessions); disposable service removed. Evidence: $logs"
+Write-Host "Sync core S3 passed (cross-client: $CrossClientSessions; trash recovery: $TrashRecoverySessions; note history: $NoteHistorySessions; archive recovery: $ArchiveRecoverySessions; purge compatibility: $PurgeCompatibilitySessions; migration journal: $MigrationJournalSessions; asset safety: $AssetSafetySessions; cloud snapshot: $CloudSnapshotSessions; publication: $PublicationSessions; space protocol: $SpaceProtocolSessions; purge remote: $PurgeRemoteSessions; activation: $ActivationSessions; direct purge: $DirectPurgeSessions); disposable service removed. Evidence: $logs"

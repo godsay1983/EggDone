@@ -9,7 +9,7 @@ use rusqlite::{params, Connection, Transaction};
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
-const CURRENT_SCHEMA_VERSION: i64 = 22;
+const CURRENT_SCHEMA_VERSION: i64 = 23;
 const DEVICE_ID_KEY: &str = "device_id";
 
 pub struct Database {
@@ -97,6 +97,19 @@ pub(crate) fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {
     })?;
     apply_migration(connection, 22, |transaction| {
         transaction.execute_batch(include_str!("migrations/022_purge.sql"))
+    })?;
+    apply_migration(connection, 23, |transaction| {
+        // Early v22 installations predate the retry counter added to the create-table SQL.
+        let exists: bool = transaction.query_row(
+            "SELECT EXISTS(SELECT 1 FROM pragma_table_info('purge_cleanup') WHERE name='local_attempts')",
+            [], |row| row.get(0),
+        )?;
+        if !exists {
+            transaction.execute_batch(
+                "ALTER TABLE purge_cleanup ADD COLUMN local_attempts INTEGER NOT NULL DEFAULT 0",
+            )?;
+        }
+        Ok(())
     })?;
     debug_assert_eq!(schema_version(connection)?, CURRENT_SCHEMA_VERSION);
     Ok(())

@@ -24,6 +24,93 @@ fn source(c: &Connection, root: &Path) -> PathBuf {
     assets
 }
 #[test]
+fn deleted_missing_assets_are_explicit_and_rechecked() {
+    let root = directory_fixture();
+    let mut c = database(&root.join("db.sqlite"));
+    let assets = source(&c, &root);
+    let original = assets.join("00000000-0000-4000-8000-000000000002/original");
+    fs::remove_file(&original).unwrap();
+    let backup = root.join("migration-backups");
+    let mut work = prepare(&mut c, 10).unwrap();
+    let before = work.plan.clone();
+    copy_with_policy(
+        &mut work,
+        &backup,
+        &assets,
+        |_| Err("MIGRATION_BACKUP_ASSET_NOT_FOUND".into()),
+        |f| can_omit(&c, f),
+    )
+    .unwrap();
+    assert!(work.plan.files[1].missing);
+    assert!(!backup
+        .join(&work.plan.operation)
+        .join(&work.plan.files[1].name)
+        .exists());
+    record_missing(&mut c, &before, &work.plan).unwrap();
+    rehearse(&backup, &work.plan).unwrap();
+    finish(&mut c, &work.plan, 20).unwrap();
+    assert!(latest(&c).unwrap().unwrap().files[1].missing);
+    let mut retry = prepare(&mut c, 30).unwrap();
+    assert!(!retry.plan.files[1].missing);
+    let before = retry.plan.clone();
+    fs::write(&original, b"data").unwrap();
+    copy_with_policy(
+        &mut retry,
+        &backup,
+        &assets,
+        |_| panic!("valid local copy"),
+        |f| can_omit(&c, f),
+    )
+    .unwrap();
+    record_missing(&mut c, &before, &retry.plan).unwrap();
+    assert!(!retry.plan.files[1].missing);
+    rehearse(&backup, &retry.plan).unwrap();
+    drop(c);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn missing_policy_rejects_active_corrupt_denied_and_network_errors() {
+    for case in ["active", "corrupt", "denied", "network", "invalid"] {
+        let root = directory_fixture();
+        let mut c = database(&root.join("db.sqlite"));
+        let assets = source(&c, &root);
+        let original = assets.join("00000000-0000-4000-8000-000000000002/original");
+        if case == "corrupt" {
+            fs::write(&original, b"xxxx").unwrap();
+        } else {
+            fs::remove_file(&original).unwrap();
+        }
+        if case == "active" {
+            c.execute("UPDATE note_attachments SET deleted_at=NULL", [])
+                .unwrap();
+        }
+        let mut work = prepare(&mut c, 10).unwrap();
+        let error = match case {
+            "denied" => "MIGRATION_BACKUP_ASSET_DENIED",
+            "network" => "MIGRATION_BACKUP_ASSET_DOWNLOAD",
+            "invalid" => "MIGRATION_BACKUP_ASSET_INVALID",
+            _ => "MIGRATION_BACKUP_ASSET_NOT_FOUND",
+        };
+        assert!(
+            copy_with_policy(
+                &mut work,
+                &root.join("migration-backups"),
+                &assets,
+                |_| Err(error.into()),
+                |f| can_omit(&c, f)
+            )
+            .is_err(),
+            "{case}"
+        );
+        assert!(!work.plan.files[1].missing);
+        assert!(latest(&c).unwrap().unwrap().verified_at.is_none());
+        drop(c);
+        fs::remove_dir_all(root).unwrap();
+    }
+}
+
+#[test]
 fn verified_snapshot_keeps_deleted_assets_and_local_domains_across_reopen() {
     let root = directory_fixture();
     let path = root.join("db.sqlite");
@@ -127,6 +214,7 @@ fn incomplete_output_and_plan_corruption_are_not_accepted() {
     assert!(latest(&c).unwrap().unwrap().verified_at.is_none());
     let mut corrupt = work.plan.clone();
     corrupt.files.push(FileEntry {
+        missing: false,
         name: "../outside".into(),
         size: 1,
         sha256: digest(b"a"),

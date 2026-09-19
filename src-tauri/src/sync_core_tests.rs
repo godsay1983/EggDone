@@ -137,6 +137,7 @@ fn tail() -> Vec<Reply> {
     vec![
         Reply::new(404, None, b""),
         Reply::new(200, None, b""),
+        ledger_reply(),
         Reply::new(200, Some("\"todos\""), b""),
         Reply::new(200, Some("\"notes\""), b""),
         Reply::new(200, Some("\"attachments\""), b""),
@@ -148,7 +149,27 @@ fn tail() -> Vec<Reply> {
     ]
 }
 
+fn ledger_reply() -> Reply {
+    Reply::new(
+        200,
+        Some("\"ledger\""),
+        br#"{"format_version":1,"terminals":[]}"#,
+    )
+}
+fn core_server(replies: Vec<Reply>) -> Server {
+    let mut prefix = vec![ledger_reply(), Reply::new(200, None, b""), ledger_reply()];
+    prefix.extend(replies);
+    Server::new(prefix)
+}
+
 fn assert_entity_order(server: &Server) {
+    let mut first = Some(server.request());
+    if first.as_ref().unwrap().head.contains("/eggdone-lifecycle/") {
+        assert!(first.as_ref().unwrap().head.starts_with("GET "));
+        assert!(server.request().head.starts_with("PUT "));
+        assert!(server.request().head.starts_with("GET "));
+        first = Some(server.request());
+    }
     for (method, key) in [
         ("GET", "todos.json"),
         ("GET", "recurrence-rules.json"),
@@ -161,7 +182,7 @@ fn assert_entity_order(server: &Server) {
         ("GET", "task-note-links.json"),
         ("PUT", "task-note-links.json"),
     ] {
-        let r = server.request();
+        let r = first.take().unwrap_or_else(|| server.request());
         assert!(
             r.head
                 .starts_with(&format!("{method} /rules-test/account/{key} ")),
@@ -181,7 +202,7 @@ fn core_orders_entities_links_attachments_and_final_probes() {
         let client = Client::new(TODO, NOTE);
         let mut replies = entities(200);
         replies.extend(tail());
-        let server = Server::new(replies);
+        let server = core_server(replies);
         let result = client.sync(server.bucket()).await.unwrap();
         assert_eq!(
             (
@@ -201,9 +222,10 @@ fn core_orders_entities_links_attachments_and_final_probes() {
         assert!(client.state().dirty_domains.is_empty());
         assert_eq!(client.notifications.load(Ordering::SeqCst), 1);
         assert_entity_order(&server);
+        for method in ["GET", "PUT", "GET"] {
+            assert!(server.request().head.starts_with(method));
+        }
         for (method, key) in [
-            ("GET", "note-attachments.json"),
-            ("PUT", "note-attachments.json"),
             ("HEAD", "todos.json"),
             ("HEAD", "notes.json"),
             ("HEAD", "note-attachments.json"),
@@ -231,7 +253,7 @@ fn core_link_conflicts_are_bounded_and_reupload_entities_before_retry() {
             if conflicts == 1 {
                 replies.extend(tail());
             }
-            let server = Server::new(replies);
+            let server = core_server(replies);
             let result = client.sync(server.bucket()).await;
             if conflicts == 1 {
                 assert!(result.unwrap().conflict_retried);
@@ -256,7 +278,7 @@ fn core_partial_failure_preserves_link_ack_and_recovers_attachment_metadata() {
         let mut replies = entities(200);
         replies.push(Reply::new(200, None, b"")); // Immutable binary succeeds before metadata fails.
         replies.push(Reply::new(403, None, b""));
-        let server = Server::new(replies);
+        let server = core_server(replies);
         assert!(client
             .sync(server.bucket())
             .await
@@ -284,7 +306,7 @@ fn core_partial_failure_preserves_link_ack_and_recovers_attachment_metadata() {
         let mut replies = entities(200);
         replies.push(Reply::new(200, None, b""));
         replies.extend(tail());
-        let recovery = Server::new(replies);
+        let recovery = core_server(replies);
         let result = client.sync(recovery.bucket()).await.unwrap();
         assert_eq!(result.pending_attachment_count, 0);
         assert_eq!(result.note_attachment_count, 1);
@@ -301,7 +323,7 @@ fn core_metadata_conflict_budget_and_late_edit_do_not_lose_pending_changes() {
         for _ in 0..2 {
             replies.extend([Reply::new(404, None, b""), Reply::new(412, None, b"")]);
         }
-        let server = Server::new(replies);
+        let server = core_server(replies);
         assert!(client
             .sync(server.bucket())
             .await
@@ -327,7 +349,7 @@ fn core_metadata_conflict_budget_and_late_edit_do_not_lose_pending_changes() {
                 .unwrap();
         });
         replies.extend(final_replies);
-        let late = Server::new(replies);
+        let late = core_server(replies);
         client.sync(late.bucket()).await.unwrap();
         assert!(client.state().dirty_domains.contains(&"notes".into()));
         assert!(client.runtime.acquire().is_ok());
@@ -346,7 +368,7 @@ fn core_target_change_during_attachment_reply_does_not_ack_the_new_target() {
             crate::sync_target::invalidate(&db).unwrap();
             crate::sync_target::activate(&db).unwrap();
         }));
-        let server = Server::new(replies);
+        let server = core_server(replies);
         assert_eq!(
             client.sync(server.bucket()).await.err().unwrap(),
             "RECURRENCE_CONFIG_CHANGED"
@@ -364,3 +386,59 @@ fn core_target_change_during_attachment_reply_does_not_ack_the_new_target() {
 
 #[path = "sync_core_s3_tests.rs"]
 mod s3_tests;
+
+#[test]
+fn local_purge_during_sync_publishes_evidence_before_retrying_bodies() {
+    tauri::async_runtime::block_on(async {
+        let client = Arc::new(Client::new(TODO, NOTE));
+        let plan = {
+            let mut c = client.db.connection.lock().unwrap();
+            crate::sync_target::capture(&c).unwrap();
+            // Keep the trash target independent of the live link fixture.
+            c.execute("INSERT INTO todos(uuid,title,sort_order,created_at,updated_at,updated_by,deleted_at) VALUES(?1,'trash task',1,100,150,?2,150)", params![TODO2, crate::db::device_id(&c).unwrap()]).unwrap();
+            crate::purge::prepare(&mut c, None, 151).unwrap()
+        };
+        let op = plan.operation_uuid.clone();
+        let expected = crate::lifecycle_sync::Document {
+            format_version: 1,
+            terminals: vec![crate::purge::Terminal {
+                kind: "todo".into(),
+                uuid: TODO2.into(),
+                operation_uuid: op.clone(),
+                purged_at: 200,
+            }],
+        };
+        let captured = client.clone();
+        let mut replies = entities(200);
+        replies.extend([
+            Reply::new(404, None, b""),
+            Reply::new(200, None, b"").with_hook(move || {
+                assert!(captured.runtime.acquire().is_err());
+                let mut c = captured.db.connection.lock().unwrap();
+                assert_eq!(
+                    crate::purge::execute_batch(&mut c, &op, 200)
+                        .unwrap()
+                        .purged,
+                    1
+                );
+            }),
+            ledger_reply(),
+            ledger_reply(),
+            Reply::new(200, None, b""),
+            Reply::new(
+                200,
+                Some("\"new-ledger\""),
+                crate::lifecycle_sync::encode(&expected).unwrap().as_bytes(),
+            ),
+        ]);
+        let server = core_server(replies);
+        assert_eq!(
+            client.sync(server.bucket()).await.unwrap_err(),
+            "PURGE_LEDGER_CHANGED_RETRY"
+        );
+        assert_eq!(
+            crate::purge::terminals(&client.db.connection.lock().unwrap()).unwrap(),
+            expected.terminals
+        );
+    });
+}

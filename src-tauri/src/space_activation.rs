@@ -61,24 +61,42 @@ impl Claim {
                 Option<u64>,
                 Option<String>,
             )>,
-            Vec<(String, u64, String)>,
+            Vec<Value>,
         ) = serde_json::from_str(&self.2).map_err(|_| invalid())?;
-        if m.0 != seed::FORMAT {
+        if m.0 != seed::FORMAT && m.0 != seed::MISSING_FORMAT {
             return Err(invalid());
         }
         let mut objects = Vec::new();
         for (key, etag, name, size, sha) in m.4 {
             let file = match (name, size, sha) {
-                (Some(name), Some(size), Some(sha256)) => Some(FileEntry { name, size, sha256 }),
+                (Some(name), Some(size), Some(sha256)) => Some(FileEntry {
+                    name,
+                    size,
+                    sha256,
+                    missing: false,
+                }),
                 (None, None, None) => None,
                 _ => return Err(invalid()),
             };
             objects.push(backup::cloud::ObjectEntry { key, etag, file });
         }
-        let files: Vec<_> =
-            m.5.into_iter()
-                .map(|(name, size, sha256)| FileEntry { name, size, sha256 })
-                .collect();
+        let mut files = Vec::new();
+        for row in m.5 {
+            let row = row.as_array().ok_or_else(invalid)?;
+            if row.len() != if m.0 == seed::MISSING_FORMAT { 4 } else { 3 } {
+                return Err(invalid());
+            }
+            files.push(FileEntry {
+                name: row[0].as_str().ok_or_else(invalid)?.into(),
+                size: row[1].as_u64().ok_or_else(invalid)?,
+                sha256: row[2].as_str().ok_or_else(invalid)?.into(),
+                missing: if row.len() == 4 {
+                    row[3].as_bool().ok_or_else(invalid)?
+                } else {
+                    false
+                },
+            });
+        }
         let p = seed::Plan {
             version: 1,
             operation: m.1.clone(),
@@ -267,14 +285,25 @@ pub fn initialize(
                 continue;
             }
             let f = FileEntry {
+                missing: false,
                 name: format!("{}-{suffix}", a.uuid),
                 size: size as u64,
                 sha256: sha.ok_or_else(invalid)?.into(),
             };
-            if !p.files.contains(&f) {
+            let saved = p
+                .files
+                .iter()
+                .find(|entry| entry.name == f.name)
+                .ok_or_else(invalid)?;
+            if backup::identities(std::slice::from_ref(saved)) != [f.clone()]
+                || (saved.missing && a.deleted_at.is_none())
+            {
                 return Err(invalid());
             }
             expected.insert(f.name.clone());
+            if saved.missing {
+                continue;
+            }
             binaries.push((
                 format!("{prefix}note-assets/v1/{}/{suffix}", a.uuid),
                 f,
@@ -395,13 +424,34 @@ pub struct Report {
     pub mode: String,
     pub confirmation: Option<String>,
     pub object_key: Option<String>,
+    pub missing: Vec<String>,
 }
 impl Pending {
+    pub fn require_confirmation(
+        &self,
+        expected: Option<&str>,
+        accept_missing: bool,
+    ) -> Result<(), String> {
+        if expected != Some(self.token()?.as_str()) {
+            return Err("MIGRATION_SPACE_CONFIRMATION".into());
+        }
+        if !self.report()?.missing.is_empty() && !accept_missing {
+            return Err("MIGRATION_MISSING_CONFIRMATION".into());
+        }
+        Ok(())
+    }
     pub fn token(&self) -> Result<String, String> {
         Ok(hash(&serde_json::to_vec(self).map_err(|_| invalid())?))
     }
     pub fn report(&self) -> Result<Report, String> {
+        let missing = backup::asset_files(&self.local)
+            .iter()
+            .chain(self.claim.plan()?.files.iter())
+            .filter(|f| f.missing)
+            .map(|f| f.name.clone())
+            .collect::<std::collections::BTreeSet<_>>();
         Ok(Report {
+            missing: missing.into_iter().collect(),
             state: "prepared".into(),
             mode: self.mode.clone(),
             confirmation: Some(self.token()?),
@@ -514,6 +564,7 @@ mod tests {
         let bytes = empty(0, ID).unwrap().into_bytes();
         let f = FileEntry {
             name: "meta-0.json".into(),
+            missing: false,
             size: bytes.len() as u64,
             sha256: hash(&bytes),
         };
@@ -548,6 +599,52 @@ mod tests {
             .insert(seed::marker_key(&p).unwrap(), seed::manifest(&p).unwrap());
         c.objects.insert(seed::object_key(&p, &f).unwrap(), bytes);
         (Claim::from_plan(&p).unwrap(), c)
+    }
+    #[test]
+    fn missing_seed_preserves_deleted_descriptor_and_rejects_active_missing_file() {
+        for deleted in [true, false] {
+            let (claim, mut cloud) = seed_fixture();
+            let mut p = claim.plan().unwrap();
+            let mut doc: Value = serde_json::from_str(&empty(2, ID).unwrap()).unwrap();
+            doc["attachments"] = json!([{"uuid":ID,"note_uuid":ID,"kind":"file","display_name":"missing.txt",
+                "mime_type":"text/plain","byte_size":4,"sha256":hash(b"data"),"sort_order":0,
+                "created_at":1,"updated_at":2,"updated_by":ID,"deleted_at":if deleted {Some(2)} else {None}}]);
+            let bytes = serde_json::to_vec(&doc).unwrap();
+            let meta = FileEntry {
+                name: "meta-2.json".into(),
+                size: bytes.len() as u64,
+                sha256: hash(&bytes),
+                missing: false,
+            };
+            let missing = FileEntry {
+                name: format!("{ID}-original"),
+                size: 4,
+                sha256: hash(b"data"),
+                missing: true,
+            };
+            p.objects[2].file = Some(meta.clone());
+            p.objects[2].etag = Some("\"assets\"".into());
+            p.files.extend([meta.clone(), missing.clone()]);
+            p.completed = p.files.iter().map(|f| f.name.clone()).collect();
+            let claim = Claim::from_plan(&p).unwrap();
+            assert!(claim.2.contains(seed::MISSING_FORMAT));
+            assert_eq!(claim.plan().unwrap().files, p.files);
+            cloud
+                .objects
+                .insert(seed::marker_key(&p).unwrap(), seed::manifest(&p).unwrap());
+            cloud
+                .objects
+                .insert(seed::object_key(&p, &meta).unwrap(), bytes);
+            if deleted {
+                initialize(&mut cloud, &claim, || Ok(())).unwrap();
+                assert!(!cloud.objects.contains_key(&format!(
+                    "eggdone-spaces/v2/{ID}/note-assets/v1/{ID}/original"
+                )));
+            } else {
+                assert!(initialize(&mut cloud, &claim, || Ok(())).is_err());
+                assert!(!cloud.objects.contains_key(&claim_key(&claim.1)));
+            }
+        }
     }
     #[test]
     fn initialization_resumes_at_every_request_and_lost_response() {
@@ -609,6 +706,7 @@ mod tests {
         let bytes = b"{}";
         let f = FileEntry {
             name: "meta-0.json".into(),
+            missing: false,
             size: 2,
             sha256: hash(bytes),
         };

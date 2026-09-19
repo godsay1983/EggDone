@@ -89,6 +89,7 @@ pub fn validate_document(index: usize, bytes: &[u8]) -> Result<(), String> {
 }
 fn file(name: String, bytes: &[u8]) -> FileEntry {
     FileEntry {
+        missing: false,
         name,
         size: bytes.len() as u64,
         sha256: digest(bytes),
@@ -118,12 +119,14 @@ fn entries(
                         serde_json::from_slice(bytes).map_err(|_| "MIGRATION_CLOUD_INVALID")?;
                     for a in document.attachments {
                         assets.push(FileEntry {
+                            missing: false,
                             name: format!("{}-original", a.uuid),
                             size: a.byte_size as u64,
                             sha256: a.sha256,
                         });
                         if a.kind == "image" {
                             assets.push(FileEntry {
+                                missing: false,
                                 name: format!("{}-preview.jpg", a.uuid),
                                 size: a.preview_byte_size.ok_or("MIGRATION_CLOUD_INVALID")? as u64,
                                 sha256: a.preview_sha256.ok_or("MIGRATION_CLOUD_INVALID")?,
@@ -169,6 +172,7 @@ fn validate_cloud(plan: &Plan) -> Result<(), String> {
             (None, None) => (),
             (Some(etag), Some(f))
                 if valid_etag(etag)
+                    && !f.missing
                     && f.name == format!("meta-{i}.json")
                     && f.size > 0
                     && f.size <= MAX_OBJECT as u64
@@ -263,7 +267,7 @@ pub fn prepare(
                 && p.source == source
                 && p.main_key == main
                 && p.objects == objects
-                && p.assets == assets =>
+                && identities(&p.assets) == assets =>
         {
             p
         }
@@ -281,6 +285,9 @@ pub fn prepare(
         },
     };
     plan.verified_at = None;
+    for asset in &mut plan.assets {
+        asset.missing = false;
+    }
     bounded(&plan, local)?;
     save(&tx, &plan)?;
     tx.commit().map_err(db)?;
@@ -339,10 +346,21 @@ pub fn copy(
     local: &BackupPlan,
     plan: &Plan,
     remote: &[RemoteObject],
+    download: impl FnMut(&FileEntry) -> Result<Vec<u8>, String>,
+) -> Result<(), String> {
+    let mut copy = plan.clone();
+    copy_with_policy(root, local, &mut copy, remote, download, false)
+}
+pub fn copy_with_policy(
+    root: &Path,
+    local: &BackupPlan,
+    plan: &mut Plan,
+    remote: &[RemoteObject],
     mut download: impl FnMut(&FileEntry) -> Result<Vec<u8>, String>,
+    allow_missing: bool,
 ) -> Result<(), String> {
     let (objects, assets) = entries(&plan.main_key, remote)?;
-    if objects != plan.objects || assets != plan.assets {
+    if objects != plan.objects || assets != identities(&plan.assets) {
         return Err("MIGRATION_CLOUD_CHANGED".into());
     }
     let target = cloud_folder(root, local, plan, true)?;
@@ -356,20 +374,73 @@ pub fn copy(
             verify(&path, entry)?;
         }
     }
-    for entry in &plan.assets {
+    let deleted = deleted_assets(remote)?;
+    for entry in &mut plan.assets {
         let output = target.join(&entry.name);
         if verify(&output, entry).is_ok() {
             continue;
         }
         writable(&output)?;
-        let bytes = download(entry)?;
+        let bytes = match download(entry) {
+            Ok(bytes) => bytes,
+            Err(error)
+                if allow_missing
+                    && error.starts_with("MIGRATION_BACKUP_ASSET_NOT_FOUND")
+                    && crate::migration_backup::absent(&output)?
+                    && deleted.contains(&entry.name[..36]) =>
+            {
+                entry.missing = true;
+                continue;
+            }
+            Err(error) => return Err(error),
+        };
         if file(entry.name.clone(), &bytes) != *entry {
             return Err("MIGRATION_BACKUP_ASSET_INVALID".into());
         }
         write(&output, &bytes)?;
         verify(&output, entry)?;
     }
+    write(&target.join("manifest.json"), &manifest_cloud(plan)?)?;
     verify_files(root, local, plan)
+}
+fn deleted_assets(remote: &[RemoteObject]) -> Result<std::collections::BTreeSet<String>, String> {
+    let mut ids = std::collections::BTreeSet::new();
+    if let Some(bytes) = remote.get(2).and_then(|r| r.bytes.as_ref()) {
+        let doc: crate::note_attachment_sync::NoteAttachmentSyncDocument =
+            serde_json::from_slice(bytes).map_err(|_| "MIGRATION_CLOUD_INVALID")?;
+        for a in doc.attachments {
+            if a.deleted_at.is_some() {
+                ids.insert(a.uuid);
+            }
+        }
+    }
+    Ok(ids)
+}
+pub fn record_missing(
+    c: &mut Connection,
+    local: &BackupPlan,
+    before: &Plan,
+    after: &Plan,
+    remote: &[RemoteObject],
+) -> Result<(), String> {
+    let tx = c.transaction().map_err(db)?;
+    require_current(&tx, local, before)?;
+    let mut clean = after.clone();
+    clean.assets = identities(&clean.assets);
+    if manifest_cloud(&clean)? != manifest_cloud(before)? {
+        return Err("MIGRATION_CLOUD_CHANGED".into());
+    }
+    require_remote(after, remote)?;
+    let deleted = deleted_assets(remote)?;
+    if after
+        .assets
+        .iter()
+        .any(|f| f.missing && !deleted.contains(&f.name[..36]))
+    {
+        return Err("MIGRATION_CLOUD_INVALID".into());
+    }
+    save(&tx, after)?;
+    tx.commit().map_err(db)
 }
 pub fn verify_files(root: &Path, local: &BackupPlan, plan: &Plan) -> Result<(), String> {
     let target = cloud_folder(root, local, plan, false)?;
@@ -377,7 +448,7 @@ pub fn verify_files(root: &Path, local: &BackupPlan, plan: &Plan) -> Result<(), 
         &target.join("manifest.json"),
         &file("manifest.json".into(), &manifest_cloud(plan)?),
     )?;
-    for entry in files(plan) {
+    for entry in files(plan).filter(|f| !f.missing) {
         verify(&target.join(&entry.name), entry)?;
     }
     Ok(())
@@ -388,7 +459,7 @@ pub fn read_file(
     plan: &Plan,
     entry: &FileEntry,
 ) -> Result<Vec<u8>, String> {
-    if !files(plan).any(|f| f == entry) {
+    if entry.missing || !files(plan).any(|f| f == entry) {
         return Err("MIGRATION_PUBLICATION_INVALID".into());
     }
     let path = cloud_folder(root, local, plan, false)?.join(&entry.name);
@@ -406,7 +477,7 @@ pub fn read_file(
 }
 pub fn require_remote(plan: &Plan, remote: &[RemoteObject]) -> Result<(), String> {
     let (objects, assets) = entries(&plan.main_key, remote)?;
-    if plan.objects != objects || plan.assets != assets {
+    if plan.objects != objects || identities(&plan.assets) != assets {
         return Err("MIGRATION_CLOUD_CHANGED".into());
     }
     Ok(())

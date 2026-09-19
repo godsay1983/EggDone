@@ -109,11 +109,59 @@ fn migration_source_only_reads_exact_asset_and_redacts_errors() {
             if success {
                 assert_eq!(result.unwrap(), b"data");
             } else {
-                assert_eq!(result.unwrap_err(), "MIGRATION_BACKUP_ASSET_DOWNLOAD");
+                let code = match status {
+                    404 => "NOT_FOUND",
+                    403 => "DENIED",
+                    _ => "INVALID",
+                };
+                assert_eq!(
+                    result.unwrap_err(),
+                    format!("MIGRATION_BACKUP_ASSET_{code}:{ID}:original")
+                );
             }
             assert!(server.request().head.starts_with(&format!(
                 "GET /rules-test/account/note-assets/v1/{ID}/original "
             )));
+        }
+    });
+}
+
+#[test]
+fn historical_asset_without_hash_metadata_requires_bound_content_verification() {
+    tauri::async_runtime::block_on(async {
+        for (bytes, tag, ok) in [
+            (b"data", "\"same\"", true),
+            (b"xxxx", "\"same\"", false),
+            (b"data", "\"new\"", false),
+        ] {
+            let mut replies = vec![
+                Reply::new(200, Some("\"same\""), b"data"),
+                Reply::new(200, Some(tag), bytes),
+            ];
+            if ok {
+                replies.push(Reply::new(204, None, b""));
+            }
+            let server = Server::new(replies);
+            let result = delete_asset_if_matches(
+                &SyncRuntime::default(),
+                &prepared(&server),
+                ID,
+                "original",
+                4,
+                &sha256_hex(b"data"),
+            )
+            .await;
+            assert_eq!(result.is_ok(), ok);
+            assert!(server.request().head.starts_with("HEAD "));
+            let read = server.request().head.to_lowercase();
+            assert!(read.starts_with("get ") && read.contains("if-match: \"same\""));
+            if ok {
+                assert!(server
+                    .request()
+                    .head
+                    .to_lowercase()
+                    .contains("if-match: \"same\""));
+            }
         }
     });
 }

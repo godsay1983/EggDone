@@ -22,32 +22,41 @@ pub async fn migration_local_backup(
             .map_err(|_| "MIGRATION_BACKUP_IO")?;
         let root = app_data.join("migration-backups");
         if action == "prepare" {
-            let work = backup::prepare(&mut *lock_database(&db)?, now_millis())?;
+            let mut work = backup::prepare(&mut *lock_database(&db)?, now_millis())?;
+            let before = work.plan.clone();
             // Do not keep the database locked while copying files; finish rejects concurrent edits.
             let mut source = None;
-            backup::copy_with_missing(&work, &root, &app_data.join("note-assets"), |entry| {
-                {
-                    let connection = lock_database(&db)?;
-                    backup::require_current(&connection, &work.plan)?;
-                    if source.is_none() {
-                        source = Some(crate::s3_sync::prepare_migration_asset_source(&connection)?);
+            backup::copy_with_policy(
+                &mut work,
+                &root,
+                &app_data.join("note-assets"),
+                |entry| {
+                    {
+                        let connection = lock_database(&db)?;
+                        backup::require_current(&connection, &before)?;
+                        if source.is_none() {
+                            source =
+                                Some(crate::s3_sync::prepare_migration_asset_source(&connection)?);
+                        }
                     }
-                }
-                let bytes = tauri::async_runtime::block_on(
-                    source
-                        .as_ref()
-                        .ok_or("MIGRATION_BACKUP_ASSET_CONFIG")?
-                        .download(
-                            &runtime,
-                            &entry.name[..36],
-                            &entry.name[37..],
-                            entry.size as i64,
-                            &entry.sha256,
-                        ),
-                )?;
-                backup::require_current(&*lock_database(&db)?, &work.plan)?;
-                Ok(bytes)
-            })?;
+                    let bytes = tauri::async_runtime::block_on(
+                        source
+                            .as_ref()
+                            .ok_or("MIGRATION_BACKUP_ASSET_CONFIG")?
+                            .download(
+                                &runtime,
+                                &entry.name[..36],
+                                &entry.name[37..],
+                                entry.size as i64,
+                                &entry.sha256,
+                            ),
+                    )?;
+                    backup::require_current(&*lock_database(&db)?, &before)?;
+                    Ok(bytes)
+                },
+                |entry| backup::can_omit(&*lock_database(&db)?, entry),
+            )?;
+            backup::record_missing(&mut *lock_database(&db)?, &before, &work.plan)?;
             backup::rehearse(&root, &work.plan)?;
             return backup::finish(&mut *lock_database(&db)?, &work.plan, now_millis()).map(Some);
         }
@@ -144,7 +153,7 @@ pub async fn migration_local_backup(
                 )
             };
             let remote = tauri::async_runtime::block_on(source.metadata())?;
-            let cloud = backup::cloud::prepare(
+            let mut cloud = backup::cloud::prepare(
                 &mut *lock_database(&db)?,
                 &plan,
                 &binding,
@@ -152,18 +161,36 @@ pub async fn migration_local_backup(
                 &remote,
                 now_millis(),
             )?;
-            backup::cloud::copy(&root, &plan, &cloud, &remote, |entry| {
-                backup::cloud::require_current(&*lock_database(&db)?, &plan, &cloud)?;
-                let bytes = tauri::async_runtime::block_on(source.download(
-                    &runtime,
-                    &entry.name[..36],
-                    &entry.name[37..],
-                    entry.size as i64,
-                    &entry.sha256,
-                ))?;
-                backup::cloud::require_current(&*lock_database(&db)?, &plan, &cloud)?;
-                Ok(bytes)
-            })?;
+            let before = cloud.clone();
+            backup::cloud::copy_with_policy(
+                &root,
+                &plan,
+                &mut cloud,
+                &remote,
+                |entry| {
+                    backup::cloud::require_current(&*lock_database(&db)?, &plan, &before)?;
+                    if backup::asset_files(&plan).contains(entry) {
+                        return backup::read_asset(&root, &plan, entry);
+                    }
+                    let bytes = tauri::async_runtime::block_on(source.download(
+                        &runtime,
+                        &entry.name[..36],
+                        &entry.name[37..],
+                        entry.size as i64,
+                        &entry.sha256,
+                    ))?;
+                    backup::cloud::require_current(&*lock_database(&db)?, &plan, &before)?;
+                    Ok(bytes)
+                },
+                true,
+            )?;
+            backup::cloud::record_missing(
+                &mut *lock_database(&db)?,
+                &plan,
+                &before,
+                &cloud,
+                &remote,
+            )?;
             let final_remote = tauri::async_runtime::block_on(source.metadata())?;
             backup::cloud::require_remote(&cloud, &final_remote)?;
             backup::verify_files(&root, &plan)?;

@@ -220,7 +220,8 @@ fn rollback_and_legacy_scope_refusal() {
         [],
     )
     .unwrap();
-    assert!(matches!(prepare(&mut c,&epoch,&document()),Err(e) if e=="PURGE_MIGRATION_REQUIRED"));
+    prepare(&mut c, &epoch, &document()).unwrap();
+    assert_eq!(crate::purge::terminals(&c).unwrap().len(), 2);
 }
 #[test]
 fn production_session_requires_readback_and_retries_cas() {
@@ -281,6 +282,61 @@ fn production_session_requires_readback_and_retries_cas() {
     assert!(purge::terminals(&db.connection.lock().unwrap())
         .unwrap()
         .is_empty());
+}
+
+#[test]
+fn original_space_sidecar_first_use_conflict_and_missing_guard() {
+    use crate::{
+        recurrence_transport::tests::{Reply, Server},
+        s3_sync::PreparedManualSync,
+    };
+    for conflict in [false, true] {
+        let (mut c, _) = seed();
+        c.execute(
+            "UPDATE sync_settings SET object_key='account/todos.json'",
+            [],
+        )
+        .unwrap();
+        let plan = purge::prepare(&mut c, None, 100).unwrap();
+        purge::execute_batch(&mut c, &plan.operation_uuid, 200).unwrap();
+        let local = Document {
+            format_version: 1,
+            terminals: purge::terminals(&c).unwrap(),
+        };
+        let body = encode(&local).unwrap();
+        let mut replies = vec![Reply::new(404, None, b"")];
+        if conflict {
+            replies.push(Reply::new(412, None, b""));
+            replies.push(Reply::new(200, Some("\"peer\""), body.as_bytes()));
+        }
+        replies.push(Reply::new(200, None, b""));
+        replies.push(Reply::new(200, Some("\"done\""), body.as_bytes()));
+        let server = Server::new(replies);
+        let p = PreparedManualSync::from_test_bucket(&c, server.bucket());
+        let db = crate::db::Database {
+            connection: std::sync::Mutex::new(c),
+        };
+        assert_eq!(
+            tauri::async_runtime::block_on(crate::lifecycle_session::run(&db, &p)).unwrap(),
+            "\"done\""
+        );
+        assert!(server.request().head.contains("/eggdone-lifecycle/v1/"));
+        let write = server.request();
+        assert!(write.head.to_lowercase().contains("if-none-match: *"));
+        let c = db.connection.lock().unwrap();
+        assert_eq!(
+            require_remote(&c, p.epoch(), "").unwrap_err(),
+            "PURGE_LEDGER_MISSING"
+        );
+        assert!(acknowledged(&c, p.epoch(), "\"done\"").unwrap());
+        assert_eq!(purge::terminals(&c).unwrap(), local.terminals);
+        c.execute(
+            "UPDATE lifecycle_sync_state SET revision=revision+1 WHERE id=1",
+            [],
+        )
+        .unwrap();
+        assert!(!acknowledged(&c, p.epoch(), "\"done\"").unwrap());
+    }
 }
 
 #[test]

@@ -4,6 +4,7 @@ export interface SpaceReport {
   mode: string;
   confirmation: string | null;
   objectKey: string | null;
+  missing: string[];
 }
-export const spaceActivationApi = (action: 'status' | 'prepare' | 'activate', expected: string | null = null) =>
-  invoke<SpaceReport>('migration_space', { action, expected });
+export const spaceActivationApi = (action: 'status' | 'prepare' | 'activate', expected: string | null = null, acceptMissing = false) =>
+  invoke<SpaceReport>('migration_space', { action, expected, acceptMissing });

@@ -12,6 +12,7 @@ pub(crate) async fn run(db: &Database, prepared: &PreparedManualSync) -> Result<
         let snapshot = {
             let mut c = db.connection.lock().map_err(|_| "PURGE_DATABASE_FAILED")?;
             prepared.require_current(&c)?;
+            ledger::require_remote(&c, prepared.epoch(), &etag)?;
             ledger::prepare(&mut c, prepared.epoch(), &remote)?
         };
         guard(db, prepared)?;

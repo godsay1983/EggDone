@@ -80,18 +80,21 @@ fn purge_is_atomic_and_retries_the_same_operation() {
 }
 
 #[test]
-fn purge_blocks_legacy_sync_even_when_disabled() {
+fn purge_original_space_works_offline_without_migration() {
     let mut db = seed();
     db.execute(
         "UPDATE sync_settings SET enabled=0,endpoint='https://example.invalid'",
         [],
     )
     .unwrap();
+    let plan = purge::prepare(&mut db, None, 100).unwrap();
     assert_eq!(
-        purge::prepare(&mut db, None, 100).unwrap_err(),
-        "PURGE_MIGRATION_REQUIRED"
+        purge::execute_batch(&mut db, &plan.operation_uuid, 200)
+            .unwrap()
+            .purged,
+        2
     );
-    assert_eq!(count(&db, "purge_plans"), 0);
+    assert_eq!(count(&db, "lifecycle_terminals"), 2);
 }
 
 #[test]

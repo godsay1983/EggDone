@@ -1,5 +1,64 @@
 use super::*;
 
+#[test]
+#[ignore = "Read-only snapshot diagnosis; requires EGGDONE_RECOVERY_SNAPSHOT directory"]
+fn diagnose_existing_snapshot_read_only() {
+    let root = PathBuf::from(
+        std::env::var("EGGDONE_RECOVERY_SNAPSHOT").expect("explicit snapshot directory"),
+    );
+    let plan: BackupPlan =
+        serde_json::from_slice(&fs::read(root.join("manifest.json")).unwrap()).unwrap();
+    let data = fs::read(root.join("data.json")).unwrap();
+    let snapshot: Snapshot = serde_json::from_slice(&data).unwrap();
+    let mut fresh = Connection::open_in_memory().unwrap();
+    crate::db::migrate(&mut fresh).unwrap();
+    for table in &snapshot.tables {
+        assert!(TABLES.contains(&table.name.as_str()));
+        let stmt = fresh
+            .prepare(&format!("SELECT * FROM {} LIMIT 0", table.name))
+            .unwrap();
+        if table.columns != stmt.column_names() {
+            println!("RECOVERY_SCHEMA_ORDER_MISMATCH: {}", table.name);
+        }
+    }
+    let mut target = Connection::open_in_memory().unwrap();
+    let result = restore(&mut target, &data, &plan);
+    println!("RECOVERY_READ_ONLY_RESULT: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "restore failed; only safe diagnostic codes printed"
+    );
+    validate(&plan).unwrap();
+    let scratch = std::env::temp_dir().join(format!(
+        "eggdone-recovery-diagnostic-{}",
+        uuid::Uuid::new_v4()
+    ));
+    fs::create_dir(&scratch).unwrap();
+    let drill = (|| {
+        let backup = scratch.join(&plan.operation);
+        fs::create_dir(&backup).map_err(io)?;
+        fs::copy(root.join("manifest.json"), backup.join("manifest.json")).map_err(io)?;
+        for file in plan.files.iter().filter(|f| !f.missing) {
+            fs::copy(root.join(&file.name), backup.join(&file.name)).map_err(io)?;
+        }
+        rehearse(&scratch, &plan)
+    })();
+    let owned = fs::canonicalize(&scratch).unwrap();
+    assert_eq!(
+        owned.parent(),
+        Some(fs::canonicalize(std::env::temp_dir()).unwrap().as_path())
+    );
+    assert!(owned
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .starts_with("eggdone-recovery-diagnostic-"));
+    fs::remove_dir_all(owned).unwrap();
+    assert_eq!(drill, Ok(()));
+    assert_eq!(fs::read(root.join("data.json")).unwrap(), data);
+    println!("RECOVERY_ISOLATED_COPY_OK: reopen, available assets and cleanup; source snapshot read-only");
+}
+
 fn fixture() -> (PathBuf, Connection, Work) {
     let root = std::env::temp_dir().join(format!("eggdone-recovery-test-{}", uuid::Uuid::new_v4()));
     fs::create_dir(&root).unwrap();
@@ -36,6 +95,98 @@ fn changed(work: &Work, change: impl FnOnce(&mut serde_json::Value)) -> (Vec<u8>
     plan.files[0].sha256 = plan.data_hash.clone();
     plan.files[0].size = bytes.len() as u64;
     (bytes, plan)
+}
+
+#[test]
+fn legacy_v22_without_retry_counter_recovers_then_upgrades_without_data_loss() {
+    let (root, mut c, _) = fixture();
+    c.execute_batch(
+        "ALTER TABLE purge_cleanup DROP COLUMN local_attempts;
+        DELETE FROM schema_migrations WHERE version=23;",
+    )
+    .unwrap();
+    let legacy = prepare(&mut c, 30).unwrap();
+    copy(&legacy, &root.join("backups"), &root.join("note-assets")).unwrap();
+    rehearse(&root.join("backups"), &legacy.plan).unwrap();
+    let mut target = Connection::open_in_memory().unwrap();
+    restore(&mut target, &legacy.data, &legacy.plan).unwrap();
+    assert_eq!(
+        target
+            .query_row("SELECT local_attempts FROM purge_cleanup", [], |r| r
+                .get::<_, i64>(0))
+            .unwrap(),
+        0
+    );
+    verify_restored(&target, &legacy.data).unwrap();
+    crate::db::migrate(&mut c).unwrap();
+    assert_eq!(
+        c.query_row("SELECT MAX(version) FROM schema_migrations", [], |r| r
+            .get::<_, i64>(0))
+            .unwrap(),
+        23
+    );
+    assert_eq!(
+        c.query_row("SELECT local_attempts FROM purge_cleanup", [], |r| r
+            .get::<_, i64>(0))
+            .unwrap(),
+        0
+    );
+    verify_restored(&c, &legacy.data).unwrap();
+    // ALTER appends the column; a fresh v22 definition puts it before remote_done.
+    let upgraded = prepare(&mut c, 40).unwrap();
+    copy(&upgraded, &root.join("backups"), &root.join("note-assets")).unwrap();
+    rehearse(&root.join("backups"), &upgraded.plan).unwrap();
+    drop(c);
+    drop(target);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn v22_with_existing_retry_counter_keeps_values_and_upgrade_is_idempotent() {
+    let (root, mut c, _) = fixture();
+    c.execute_batch("UPDATE purge_cleanup SET local_attempts=7; DELETE FROM schema_migrations WHERE version=23;").unwrap();
+    let before = capture(&c).unwrap();
+    crate::db::migrate(&mut c).unwrap();
+    crate::db::migrate(&mut c).unwrap();
+    assert_eq!(
+        c.query_row("SELECT local_attempts FROM purge_cleanup", [], |r| r
+            .get::<_, i64>(0))
+            .unwrap(),
+        7
+    );
+    verify_restored(&c, &before).unwrap();
+    drop(c);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn recovery_does_not_accept_arbitrary_missing_or_duplicate_columns() {
+    let (root, c, work) = fixture();
+    for duplicate in [false, true] {
+        let (bytes, plan) = changed(&work, |v| {
+            let table = v["tables"]
+                .as_array_mut()
+                .unwrap()
+                .iter_mut()
+                .find(|t| t["name"] == "purge_cleanup")
+                .unwrap();
+            if duplicate {
+                table["columns"][1] = table["columns"][0].clone();
+            } else {
+                table["columns"].as_array_mut().unwrap().pop();
+                for row in table["rows"].as_array_mut().unwrap() {
+                    row.as_array_mut().unwrap().pop();
+                }
+            }
+        });
+        let mut target = Connection::open_in_memory().unwrap();
+        assert_eq!(
+            restore(&mut target, &bytes, &plan).unwrap_err(),
+            "MIGRATION_RECOVERY_COLUMNS"
+        );
+    }
+    drop(c);
+    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]

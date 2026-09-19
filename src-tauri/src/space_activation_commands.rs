@@ -10,6 +10,7 @@ use tauri::{AppHandle, Manager};
 
 fn active_report() -> space::Report {
     space::Report {
+        missing: vec![],
         state: "active".into(),
         mode: String::new(),
         confirmation: None,
@@ -22,6 +23,7 @@ pub async fn migration_space(
     app: AppHandle,
     action: String,
     expected: Option<String>,
+    accept_missing: Option<bool>,
 ) -> Result<space::Report, String> {
     if !["status", "prepare", "activate"].contains(&action.as_str()) {
         return Err("MIGRATION_SPACE_INVALID".into());
@@ -79,6 +81,7 @@ pub async fn migration_space(
             return match pending {
                 Some(p) if backup::require_current(&c, &p.local).is_ok() => p.report(),
                 _ => Ok(space::Report {
+                    missing: vec![],
                     state: "idle".into(),
                     mode: String::new(),
                     confirmation: None,
@@ -87,9 +90,7 @@ pub async fn migration_space(
             };
         }
         let p = pending.ok_or("MIGRATION_SPACE_CONFIRMATION")?;
-        if expected.as_deref() != Some(p.token()?.as_str()) {
-            return Err("MIGRATION_SPACE_CONFIRMATION".into());
-        }
+        p.require_confirmation(expected.as_deref(), accept_missing == Some(true))?;
         backup::require_current(&c, &p.local)?;
         p
     };
@@ -165,6 +166,7 @@ pub async fn migration_space(
             for entry in backup::asset_files(&pending.local)
                 .iter()
                 .filter(|f| f.name.starts_with(&format!("{}-", asset.uuid)))
+                .filter(|f| !f.missing)
             {
                 guard()?;
                 let bytes = backup::read_asset(&root, &pending.local, entry)?;

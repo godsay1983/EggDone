@@ -52,6 +52,21 @@ pub struct FileEntry {
     pub name: String,
     pub size: u64,
     pub sha256: String,
+    #[serde(default, skip_serializing_if = "not_missing")]
+    pub missing: bool,
+}
+fn not_missing(value: &bool) -> bool {
+    !value
+}
+pub(crate) fn identities(files: &[FileEntry]) -> Vec<FileEntry> {
+    files
+        .iter()
+        .cloned()
+        .map(|mut f| {
+            f.missing = false;
+            f
+        })
+        .collect()
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
@@ -106,7 +121,7 @@ fn capture(c: &Connection) -> Result<Vec<u8>, String> {
             r.get(0)
         })
         .map_err(db)?;
-    if schema != 22 {
+    if ![22, 23].contains(&schema) {
         return Err("MIGRATION_BACKUP_INVALID".into());
     }
     let mut tables = Vec::new();
@@ -155,7 +170,7 @@ fn capture(c: &Connection) -> Result<Vec<u8>, String> {
         }
         tables.push(serde_json::json!({"name":table,"columns":columns,"rows":values}));
     }
-    let bytes = serde_json::to_vec(&serde_json::json!({"format":"eggdone.local-migration-recovery.v1","client":"desktop","schema":22,"tables":tables}))
+    let bytes = serde_json::to_vec(&serde_json::json!({"format":"eggdone.local-migration-recovery.v1","client":"desktop","schema":schema,"tables":tables}))
         .map_err(|_| "MIGRATION_BACKUP_INVALID")?;
     if bytes.len() > MAX_DATA {
         return Err("MIGRATION_BACKUP_LIMIT".into());
@@ -173,12 +188,14 @@ fn assets(c: &Connection) -> Result<Vec<FileEntry>, String> {
             return Err("MIGRATION_BACKUP_INVALID".into());
         }
         files.push(FileEntry {
+            missing: false,
             name: format!("{uuid}-original"),
             size: row.get(2).map_err(db)?,
             sha256: row.get(3).map_err(db)?,
         });
         if row.get::<_, String>(1).map_err(db)? == "image" {
             files.push(FileEntry {
+                missing: false,
                 name: format!("{uuid}-preview.jpg"),
                 size: row.get(4).map_err(db)?,
                 sha256: row.get(5).map_err(db)?,
@@ -217,6 +234,7 @@ fn validate(plan: &BackupPlan) -> Result<(), String> {
                 && ["-original", "-preview.jpg"].contains(&&file.name[36..])
         };
         if !file.name.is_ascii()
+            || (index == 0 && file.missing)
             || !valid_name
             || !sha(&file.sha256)
             || file.size == 0
@@ -262,6 +280,7 @@ pub fn prepare(c: &mut Connection, now: i64) -> Result<Work, String> {
         Some(p) if p.data_hash == data_hash => p,
         _ => {
             let mut files = vec![FileEntry {
+                missing: false,
                 name: "data.json".into(),
                 size: data.len() as u64,
                 sha256: data_hash.clone(),
@@ -278,6 +297,9 @@ pub fn prepare(c: &mut Connection, now: i64) -> Result<Work, String> {
         }
     };
     validate(&plan)?;
+    for file in &mut plan.files {
+        file.missing = false;
+    }
     plan.verified_at = None;
     save(&tx, &plan)?;
     tx.commit().map_err(db)?;
@@ -345,6 +367,22 @@ fn writable(path: &Path) -> Result<(), String> {
         Err(e) => Err(io(e)),
     }
 }
+pub(crate) fn absent(path: &Path) -> Result<bool, String> {
+    match fs::symlink_metadata(path) {
+        Ok(_) => Ok(false),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(true),
+        Err(e) => Err(io(e)),
+    }
+}
+fn absent_asset(root: &Path, parent: &Path, file: &Path) -> Result<bool, String> {
+    if !absent(root)? {
+        directory(root, false)?;
+    }
+    if !absent(parent)? {
+        directory(parent, false)?;
+    }
+    absent(file)
+}
 #[cfg(test)]
 pub fn copy(work: &Work, root: &Path, assets: &Path) -> Result<(), String> {
     copy_with_missing(work, root, assets, |_| Err("MIGRATION_BACKUP_ASSET".into()))
@@ -355,17 +393,30 @@ pub fn copy_with_missing(
     work: &Work,
     root: &Path,
     assets: &Path,
+    download: impl FnMut(&FileEntry) -> Result<Vec<u8>, String>,
+) -> Result<(), String> {
+    let mut copy = Work {
+        plan: work.plan.clone(),
+        data: work.data.clone(),
+    };
+    copy_with_policy(&mut copy, root, assets, download, |_| Ok(false))
+}
+pub fn copy_with_policy(
+    work: &mut Work,
+    root: &Path,
+    assets: &Path,
     mut download: impl FnMut(&FileEntry) -> Result<Vec<u8>, String>,
+    mut can_omit: impl FnMut(&FileEntry) -> Result<bool, String>,
 ) -> Result<(), String> {
     let target = folder(root, &work.plan, true)?;
-    let manifest = manifest(&work.plan)?;
+    let manifest_bytes = manifest(&work.plan)?;
     let manifest_path = target.join("manifest.json");
     writable(&manifest_path)?;
     let mut file = fs::File::create(&manifest_path).map_err(io)?;
-    file.write_all(&manifest).map_err(io)?;
+    file.write_all(&manifest_bytes).map_err(io)?;
     file.sync_all().map_err(io)?;
     drop(file);
-    for (index, entry) in work.plan.files.iter().enumerate() {
+    for (index, entry) in work.plan.files.iter_mut().enumerate() {
         let output = target.join(&entry.name);
         if verify(&output, entry).is_ok() {
             continue;
@@ -384,7 +435,19 @@ pub fn copy_with_missing(
             if available.is_ok() {
                 fs::copy(&source, &output).map_err(io)?;
             } else {
-                let bytes = download(entry)?;
+                let bytes = match download(entry) {
+                    Ok(bytes) => bytes,
+                    Err(error)
+                        if error.starts_with("MIGRATION_BACKUP_ASSET_NOT_FOUND")
+                            && absent_asset(assets, &parent, &source)?
+                            && absent(&output)?
+                            && can_omit(entry)? =>
+                    {
+                        entry.missing = true;
+                        continue;
+                    }
+                    Err(error) => return Err(error),
+                };
                 if bytes.len() as u64 != entry.size || digest(&bytes) != entry.sha256 {
                     return Err("MIGRATION_BACKUP_ASSET_INVALID".into());
                 }
@@ -402,7 +465,41 @@ pub fn copy_with_missing(
         }
         verify(&output, entry)?;
     }
+    let bytes = manifest(&work.plan)?;
+    let mut file = fs::File::create(&manifest_path).map_err(io)?;
+    file.write_all(&bytes).map_err(io)?;
+    file.sync_all().map_err(io)?;
     verify_files(root, &work.plan)
+}
+pub fn can_omit(c: &Connection, entry: &FileEntry) -> Result<bool, String> {
+    c.query_row(
+        "SELECT EXISTS(SELECT 1 FROM note_attachments WHERE uuid=?1 AND deleted_at IS NOT NULL)",
+        [&entry.name[..36]],
+        |r| r.get(0),
+    )
+    .map_err(db)
+}
+pub fn record_missing(
+    c: &mut Connection,
+    before: &BackupPlan,
+    after: &BackupPlan,
+) -> Result<(), String> {
+    let tx = c.transaction().map_err(db)?;
+    require_current(&tx, before)?;
+    if before.operation != after.operation
+        || before.data_hash != after.data_hash
+        || identities(&before.files) != identities(&after.files)
+    {
+        return Err("MIGRATION_BACKUP_CHANGED".into());
+    }
+    for file in after.files.iter().filter(|f| f.missing) {
+        if !can_omit(&tx, file)? {
+            return Err("MIGRATION_BACKUP_CHANGED".into());
+        }
+    }
+    validate(after)?;
+    save(&tx, after)?;
+    tx.commit().map_err(db)
 }
 fn manifest(plan: &BackupPlan) -> Result<Vec<u8>, String> {
     let mut copy = plan.clone();
@@ -419,12 +516,13 @@ pub fn verify_files(root: &Path, plan: &BackupPlan) -> Result<(), String> {
     verify(
         &target.join("manifest.json"),
         &FileEntry {
+            missing: false,
             name: "manifest.json".into(),
             size: bytes.len() as u64,
             sha256: digest(&bytes),
         },
     )?;
-    for entry in &plan.files {
+    for entry in plan.files.iter().filter(|f| !f.missing) {
         verify(&target.join(&entry.name), entry)?;
     }
     Ok(())
@@ -437,7 +535,7 @@ pub(crate) fn read_asset(
     plan: &BackupPlan,
     entry: &FileEntry,
 ) -> Result<Vec<u8>, String> {
-    if !asset_files(plan).contains(entry) {
+    if entry.missing || !asset_files(plan).contains(entry) {
         return Err("MIGRATION_BACKUP_FILE".into());
     }
     let path = folder(root, plan, false)?.join(&entry.name);
@@ -461,10 +559,15 @@ pub fn require_current(c: &Connection, plan: &BackupPlan) -> Result<(), String> 
     let current = latest(c)?.ok_or("MIGRATION_BACKUP_CHANGED")?;
     if current.operation != plan.operation
         || current.files != plan.files
-        || assets(c)? != plan.files[1..]
+        || assets(c)? != identities(&plan.files[1..])
         || digest(&capture(c)?) != plan.data_hash
     {
         return Err("MIGRATION_BACKUP_CHANGED".into());
+    }
+    for file in plan.files.iter().filter(|f| f.missing) {
+        if !can_omit(c, file)? {
+            return Err("MIGRATION_BACKUP_CHANGED".into());
+        }
     }
     Ok(())
 }

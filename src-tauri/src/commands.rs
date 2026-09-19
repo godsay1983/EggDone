@@ -1337,11 +1337,7 @@ async fn sync_now_inner(
     prepared: &s3_sync::PreparedManualSync,
     notify_notes: impl Fn() + Send,
 ) -> Result<ManualSyncResult, String> {
-    let lifecycle_token = if prepared.is_versioned_space()? {
-        Some(crate::lifecycle_session::run(database, prepared).await?)
-    } else {
-        None
-    };
+    let lifecycle_token = Some(crate::lifecycle_session::run(database, prepared).await?);
     let entities = crate::task_note_link_session::run(&database, prepared).await?;
     let todo = entities.todo;
     let todo_count = todo.count;
@@ -1494,7 +1490,11 @@ async fn sync_now_inner(
     if let Some(token) = &lifecycle_token {
         let (_, current) = s3_sync::download_lifecycle(prepared).await?;
         ensure_sync_target(database, prepared)?;
-        if &current != token {
+        let acknowledged = {
+            let c = lock_database(database)?;
+            crate::lifecycle_sync::acknowledged(&c, prepared.epoch(), token)?
+        };
+        if &current != token || !acknowledged {
             crate::lifecycle_session::run(database, prepared).await?;
             return Err("PURGE_LEDGER_CHANGED_RETRY".into());
         }

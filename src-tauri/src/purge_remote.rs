@@ -18,7 +18,8 @@ pub(crate) fn capture_local(c: &Connection, note: &str) -> Result<(), String> {
             r.get(0)
         })
         .map_err(|_| "PURGE_DATABASE_FAILED")?;
-    if crate::sync_space::scope(&main)?.is_none() {
+    let configured: bool = c.query_row("SELECT length(trim(endpoint))>0 AND length(trim(bucket))>0 FROM sync_settings WHERE id=1", [], |r| r.get(0)).map_err(db)?;
+    if !configured {
         return Ok(());
     }
     let epoch = crate::sync_target::capture(c)?;
@@ -81,7 +82,8 @@ impl Evidence {
             || self.1.starts_with("pending:")
             || !valid_id(&self.3)
             || !valid_id(&self.4)
-            || !matches!(crate::sync_space::scope(&self.2)?, Some((_, "todos")))
+            || self.2.is_empty()
+            || crate::sync_space::scope(&self.2)?.is_some_and(|(_, domain)| domain != "todos")
             || !["image", "file"].contains(&self.5.as_str())
             || !(1..=8 * 1024 * 1024 * 1024).contains(&self.6)
             || !sha(&self.7)
@@ -172,14 +174,15 @@ pub(crate) fn save(c: &Connection, evidence: &Evidence) -> Result<(), String> {
 }
 // The caller owns the body merge transaction. Capture remote-only files before filtering metadata.
 pub(crate) fn capture(c: &Connection, attachments: &[SyncNoteAttachment]) -> Result<(), String> {
+    let index = lifecycle_sync::Index::read(c)?;
+    if !attachments.iter().any(|a| index.note(&a.note_uuid)) {
+        return Ok(());
+    }
     let key: String = c
         .query_row("SELECT object_key FROM sync_settings WHERE id=1", [], |r| {
             r.get(0)
         })
         .map_err(db)?;
-    if crate::sync_space::scope(&key)?.is_none() {
-        return Ok(());
-    }
     let epoch: String = c
         .query_row(
             "SELECT value FROM app_metadata WHERE key='sync.target.epoch.v1'",
@@ -189,7 +192,6 @@ pub(crate) fn capture(c: &Connection, attachments: &[SyncNoteAttachment]) -> Res
         .map_err(db)?;
     lifecycle_sync::guard(c, &epoch)?;
     bind_target(c, &epoch)?;
-    let index = lifecycle_sync::Index::read(c)?;
     for a in attachments {
         if !index.note(&a.note_uuid) {
             continue;

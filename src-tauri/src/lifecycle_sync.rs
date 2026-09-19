@@ -123,15 +123,48 @@ pub(crate) fn guard(c: &Connection, epoch: &str) -> Result<String, String> {
             r.get(0)
         })
         .map_err(db)?;
-    let (_, domain) = crate::sync_space::scope(&key)?.ok_or("PURGE_MIGRATION_REQUIRED")?;
-    if domain != "todos" {
+    if crate::sync_space::scope(&key)?.is_some_and(|(_, domain)| domain != "todos") {
         return Err("SYNC_SPACE_KEY".into());
     }
     Ok(key)
 }
+
+// A missing sidecar is first-use only, never a successful read after this target was seen.
+pub fn require_remote(c: &Connection, epoch: &str, etag: &str) -> Result<(), String> {
+    guard(c, epoch)?;
+    let target = crate::purge_remote::bind_target(c, epoch)?;
+    if etag.is_empty()
+        && c.query_row(
+            "SELECT EXISTS(SELECT 1 FROM app_metadata WHERE key=?1)",
+            [format!("lifecycle.remote.seen.v1:{target}")],
+            |r| r.get::<_, bool>(0),
+        )
+        .map_err(db)?
+    {
+        return Err("PURGE_LEDGER_MISSING".into());
+    }
+    if !etag.is_empty() {
+        c.execute(
+            "INSERT OR IGNORE INTO app_metadata(key,value) VALUES(?1,'1')",
+            [format!("lifecycle.remote.seen.v1:{target}")],
+        )
+        .map_err(db)?;
+    }
+    Ok(())
+}
 pub struct Snapshot {
     pub document: Document,
     pub revision: i64,
+}
+
+pub fn acknowledged(c: &Connection, epoch: &str, token: &str) -> Result<bool, String> {
+    guard(c, epoch)?;
+    c.query_row(
+        "SELECT revision=synced_revision AND etag=?1 FROM lifecycle_sync_state WHERE id=1",
+        [token],
+        |r| r.get(0),
+    )
+    .map_err(db)
 }
 
 /// Only the synchronization session may apply authoritative remote terminals. Import is intentionally separate.
@@ -248,6 +281,7 @@ pub fn acknowledge(
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(db)?;
     guard(&tx, epoch)?;
+    require_remote(&tx, epoch, etag)?;
     let changed = tx
         .execute(
             "UPDATE lifecycle_sync_state SET synced_revision=?1,etag=?2 WHERE id=1 AND revision=?1",

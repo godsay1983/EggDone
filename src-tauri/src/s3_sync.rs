@@ -444,11 +444,6 @@ fn prepare_manual_sync_using(
     credentials: impl FnOnce(&StoredSyncSettings) -> Result<Box<Bucket>, String>,
 ) -> Result<PreparedManualSync, String> {
     let settings = read_settings(connection)?;
-    if crate::sync_space::scope(&settings.object_key)?.is_none()
-        && !crate::purge::terminals(connection)?.is_empty()
-    {
-        return Err("PURGE_MIGRATION_REQUIRED".into());
-    }
     crate::space_activation::admit(connection, &settings.object_key)?;
     if !settings.enabled {
         return Err("请先启用并保存同步配置".to_string());
@@ -784,7 +779,30 @@ impl MigrationAssetSource {
     ) -> Result<Vec<u8>, String> {
         download_asset_bytes(runtime, &self.0, uuid, name, size, sha256)
             .await
-            .map_err(|_| "MIGRATION_BACKUP_ASSET_DOWNLOAD".into())
+            .map_err(|error| {
+                let code = migration_asset_error(&error);
+                if uuid::Uuid::parse_str(uuid).is_ok()
+                    && ["original", "preview.jpg"].contains(&name)
+                {
+                    format!("{code}:{uuid}:{name}")
+                } else {
+                    code.into()
+                }
+            })
+    }
+}
+
+// Convert the existing download API's errors to diagnostics without paths, URLs or credentials.
+fn migration_asset_error(error: &str) -> &'static str {
+    if error.contains("远端文件不存在") {
+        "MIGRATION_BACKUP_ASSET_NOT_FOUND"
+    } else if error.contains("凭据无效或没有对象读取权限") {
+        "MIGRATION_BACKUP_ASSET_DENIED"
+    } else if error.contains("SHA-256") || error.contains("文件大小") || error.contains("预期大小")
+    {
+        "MIGRATION_BACKUP_ASSET_INVALID"
+    } else {
+        "MIGRATION_BACKUP_ASSET_DOWNLOAD"
     }
 }
 
@@ -792,11 +810,21 @@ pub(crate) async fn download_space_json(
     bucket: &Bucket,
     key: &str,
 ) -> Result<(String, String), String> {
+    download_json(bucket, key, false).await
+}
+async fn download_json(
+    bucket: &Bucket,
+    key: &str,
+    allow_missing: bool,
+) -> Result<(String, String), String> {
     let request = ReqwestRequest::new(bucket, key, Command::GetObject)
         .await
         .map_err(|_| "SYNC_SPACE_NETWORK")?;
     let mut response = request.response().await.map_err(|_| "SYNC_SPACE_NETWORK")?;
     if response.status().as_u16() == 404 {
+        if allow_missing {
+            return Ok((String::new(), String::new()));
+        }
         return Err("SYNC_SPACE_INCOMPLETE".into());
     }
     if response.status().as_u16() != 200 {
@@ -1058,8 +1086,13 @@ pub async fn download_note_remote(
 }
 
 pub(crate) fn lifecycle_key(prepared: &PreparedManualSync) -> Result<String, String> {
-    let (id, domain) =
-        crate::sync_space::scope(&prepared.object_key)?.ok_or("PURGE_MIGRATION_REQUIRED")?;
+    let Some((id, domain)) = crate::sync_space::scope(&prepared.object_key)? else {
+        use sha2::{Digest, Sha256};
+        return Ok(format!(
+            "eggdone-lifecycle/v1/{:x}/terminals.json",
+            Sha256::digest(prepared.object_key.as_bytes())
+        ));
+    };
     if domain != "todos" {
         return Err("SYNC_SPACE_KEY".into());
     }
@@ -1071,7 +1104,21 @@ pub(crate) fn lifecycle_key(prepared: &PreparedManualSync) -> Result<String, Str
 pub(crate) async fn download_lifecycle(
     prepared: &PreparedManualSync,
 ) -> Result<(crate::lifecycle_sync::Document, String), String> {
-    let (raw, etag) = download_space_json(&prepared.bucket, &lifecycle_key(prepared)?).await?;
+    let (raw, etag) = download_json(
+        &prepared.bucket,
+        &lifecycle_key(prepared)?,
+        !prepared.is_versioned_space()?,
+    )
+    .await?;
+    if etag.is_empty() {
+        return Ok((
+            crate::lifecycle_sync::Document {
+                format_version: 1,
+                terminals: vec![],
+            },
+            etag,
+        ));
+    }
     Ok((crate::lifecycle_sync::parse(&raw)?, etag))
 }
 pub(crate) async fn upload_lifecycle(
@@ -1079,15 +1126,22 @@ pub(crate) async fn upload_lifecycle(
     document: &crate::lifecycle_sync::Document,
     etag: &str,
 ) -> Result<UploadOutcome, String> {
-    if !crate::migration_backup::cloud::valid_etag(etag) {
+    if !(etag.is_empty() && !prepared.is_versioned_space()?)
+        && !crate::migration_backup::cloud::valid_etag(etag)
+    {
         return Err("PURGE_LEDGER_ACK".into());
     }
     let key = lifecycle_key(prepared)?;
     let content = crate::sync_space::encode(&key, &crate::lifecycle_sync::encode(document)?)?;
     let mut headers = HeaderMap::new();
     headers.insert(
-        HeaderName::from_static("if-match"),
-        HeaderValue::from_str(etag).map_err(|_| "PURGE_LEDGER_ACK")?,
+        HeaderName::from_static(if etag.is_empty() {
+            "if-none-match"
+        } else {
+            "if-match"
+        }),
+        HeaderValue::from_str(if etag.is_empty() { "*" } else { etag })
+            .map_err(|_| "PURGE_LEDGER_ACK")?,
     );
     let response = prepared
         .bucket
@@ -1284,7 +1338,31 @@ pub async fn download_asset_bytes(
     validate_asset_identity(file_name, expected_size, expected_sha256)?;
     let _guard = runtime.acquire_asset(attachment_uuid)?;
     let object_key = asset_object_key(prepared, attachment_uuid, file_name)?;
-    let request = ReqwestRequest::new(&prepared.bucket, &object_key, Command::GetObject)
+    read_asset_bytes(
+        &prepared.bucket,
+        &object_key,
+        expected_size,
+        expected_sha256,
+        None,
+    )
+    .await
+}
+
+async fn read_asset_bytes(
+    bucket: &Bucket,
+    object_key: &str,
+    expected_size: i64,
+    expected_sha256: &str,
+    etag: Option<&str>,
+) -> Result<Vec<u8>, String> {
+    let mut bucket = bucket.clone();
+    if let Some(tag) = etag {
+        bucket.extra_headers.insert(
+            HeaderName::from_static("if-match"),
+            HeaderValue::from_str(tag).map_err(|_| "PURGE_ASSET_ETAG")?,
+        );
+    }
+    let request = ReqwestRequest::new(&bucket, object_key, Command::GetObject)
         .await
         .map_err(|_| "下载附件失败：无法创建读取请求")?;
     let mut response = request
@@ -1293,6 +1371,11 @@ pub async fn download_asset_bytes(
         .map_err(|error| format!("下载附件失败，请检查网络后重试：{error}"))?;
     match response.status().as_u16() {
         200 => {
+            if etag.is_some()
+                && response.headers().get("etag").and_then(|v| v.to_str().ok()) != etag
+            {
+                return Err("PURGE_ASSET_CHANGED".into());
+            }
             if response
                 .content_length()
                 .is_some_and(|n| n != expected_size as u64)
@@ -1360,7 +1443,12 @@ pub(crate) async fn delete_asset_if_matches_guarded(
     if !remote.exists {
         return Ok(false);
     }
-    if !asset_matches_without_type(&remote, expected_size, expected_sha256) {
+    if remote.content_length != Some(expected_size)
+        || remote
+            .sha256
+            .as_deref()
+            .is_some_and(|sha| sha != expected_sha256)
+    {
         return Err("拒绝删除远端附件：对象大小或 SHA-256 与元数据不一致".to_string());
     }
     let etag = remote
@@ -1382,6 +1470,17 @@ pub(crate) async fn delete_asset_if_matches_guarded(
         HeaderValue::from_str(etag).map_err(|_| "拒绝删除远端附件：ETag 无效")?,
     );
     let object_key = asset_object_key(prepared, attachment_uuid, file_name)?;
+    if remote.sha256.is_none() {
+        // Historical objects may lack custom hash metadata. Verify only this selected file, bound to HEAD's ETag.
+        read_asset_bytes(
+            &prepared.bucket,
+            &object_key,
+            expected_size,
+            expected_sha256,
+            Some(etag),
+        )
+        .await?;
+    }
     guard()?;
     let response = bucket
         .delete_object(&object_key)
@@ -1873,6 +1972,70 @@ mod tests {
         assert!(runtime.acquire().is_err());
         drop(guard);
         assert!(runtime.acquire().is_ok());
+    }
+
+    #[test]
+    #[ignore = "explicit read-only diagnosis of a local migration backup"]
+    fn diagnose_migration_assets_read_only() {
+        let path = std::env::var("EGGDONE_MIGRATION_DIAGNOSTIC_DB")
+            .expect("explicit database path required");
+        let c =
+            Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+        let plan = crate::migration_backup::latest(&c)
+            .unwrap()
+            .expect("backup plan required");
+        let source = prepare_migration_asset_source(&c).expect("source unavailable");
+        let runtime = SyncRuntime::default();
+        for (index, entry) in crate::migration_backup::asset_files(&plan)
+            .iter()
+            .enumerate()
+        {
+            let result = tauri::async_runtime::block_on(download_asset_bytes(
+                &runtime,
+                &source.0,
+                &entry.name[..36],
+                &entry.name[37..],
+                entry.size as i64,
+                &entry.sha256,
+            ));
+            let status = match &result {
+                Ok(_) => "verified",
+                Err(e) if e.contains("远端文件不存在") => "missing",
+                Err(e) if e.contains("凭据") => "denied",
+                Err(e) if e.contains("SHA-256") || e.contains("大小") => "integrity",
+                Err(_) => "transport_or_response",
+            };
+            println!(
+                "migration asset {} {}: {}",
+                index + 1,
+                &entry.name[37..],
+                status
+            );
+        }
+    }
+
+    #[test]
+    fn migration_asset_diagnostics_keep_cause_without_private_details() {
+        assert_eq!(
+            migration_asset_error("下载附件失败：远端文件不存在，可稍后重试同步"),
+            "MIGRATION_BACKUP_ASSET_NOT_FOUND"
+        );
+        assert_eq!(
+            migration_asset_error("下载附件失败：凭据无效或没有对象读取权限"),
+            "MIGRATION_BACKUP_ASSET_DENIED"
+        );
+        assert_eq!(
+            migration_asset_error("下载附件失败：SHA-256 校验不通过，请重试"),
+            "MIGRATION_BACKUP_ASSET_INVALID"
+        );
+        assert_eq!(
+            migration_asset_error("下载附件失败：文件大小与同步元数据不一致"),
+            "MIGRATION_BACKUP_ASSET_INVALID"
+        );
+        assert_eq!(
+            migration_asset_error("request error https://private.invalid/signed"),
+            "MIGRATION_BACKUP_ASSET_DOWNLOAD"
+        );
     }
 
     #[test]
