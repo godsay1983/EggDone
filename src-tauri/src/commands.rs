@@ -3168,6 +3168,10 @@ mod recurrence_completion_tests;
 mod recurrence_ui_action_tests;
 
 #[cfg(test)]
+#[path = "task_lifecycle_journey_tests.rs"]
+mod task_lifecycle_journey_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::db::{configure_connection, migrate};
