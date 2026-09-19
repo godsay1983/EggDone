@@ -255,22 +255,26 @@
   function fitActionsMenu(menu: HTMLElement) {
     const anchor = menu.previousElementSibling as HTMLElement;
     const parent = menu.offsetParent as HTMLElement;
+    const floating = itemElement.closest('dialog.waiting-list') !== null;
+    // Compact waiting dialogs must not constrain the menu to a single task's height.
+    if (floating) menu.style.position = 'fixed';
     let viewport: HTMLElement | null = itemElement.parentElement;
     while (viewport && !/(auto|scroll|hidden)/.test(getComputedStyle(viewport).overflowY)) {
       viewport = viewport.parentElement;
     }
     function position() {
       if (!menu.isConnected) return;
-      const bounds = viewport?.getBoundingClientRect();
+      const bounds = floating ? undefined : viewport?.getBoundingClientRect();
       const top = Math.max(0, bounds?.top ?? 0) + 6;
       const bottom = Math.min(window.innerHeight, bounds?.bottom ?? window.innerHeight) - 6;
       const left = Math.max(0, bounds?.left ?? 0) + 6;
       const right = Math.min(window.innerWidth, bounds?.right ?? window.innerWidth) - 6;
       menu.style.maxHeight = `${Math.max(0, Math.min(360, bottom - top))}px`;
       menu.style.maxWidth = `${Math.max(0, right - left)}px`;
-      const trigger = anchor.getBoundingClientRect(), origin = parent.getBoundingClientRect();
+      const trigger = anchor.getBoundingClientRect();
+      const origin = floating ? { top: 0, left: 0 } : parent.getBoundingClientRect();
       const size = menu.getBoundingClientRect();
-      // Keep the full menu inside the list; long menus scroll independently.
+      // Keep menus inside their available viewport; long menus scroll independently.
       menu.style.top = `${Math.max(top, Math.min(trigger.bottom + 6, bottom - size.height)) - origin.top}px`;
       menu.style.left = `${Math.max(left, Math.min(trigger.right - size.width, right - size.width)) - origin.left}px`;
       menu.style.right = 'auto';

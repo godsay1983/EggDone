@@ -395,13 +395,49 @@ try {
     await page.screenshot({ path: resolve(output, `waiting-list-${lang}-${theme}-${width}.png`) });
     await list.getByRole('button', { name: t('No review date', '无查看日期'), exact: true }).click();
     assert.equal(await page.locator('[data-waiting-uuid]').count(), 0);
+    assert(await list.evaluate(e => e.getBoundingClientRect().height < 340), 'empty waiting dialog stays compact');
+    assert.equal(await list.locator('.count').innerText(), '0');
+    await page.screenshot({ path: resolve(output, `waiting-empty-${lang}-${theme}-${width}.png`) });
     await list.getByRole('button', { name: t('Review due', '待复查'), exact: true }).click();
     await page.locator('[data-waiting-uuid="task-2"] .more-button').click();
+    const waitingMenu = list.locator('.actions-menu');
+    await waitingMenu.waitFor();
+    await page.waitForFunction(() => document.querySelector('.waiting-list .actions-menu')?.style.top);
+    assert(await waitingMenu.evaluate(e => {
+      const box = e.getBoundingClientRect();
+      return box.height >= 300 && box.top >= 0 && box.bottom <= innerHeight && box.left >= 0 && box.right <= innerWidth;
+    }), 'waiting menu uses window space instead of the short task list');
+    assert(await waitingMenu.evaluate(e => {
+      const box = e.getBoundingClientRect();
+      return e.contains(document.elementFromPoint(box.left + 16, box.bottom - 16));
+    }), 'floating menu is not clipped by dialog or list overflow');
+    await page.screenshot({ path: resolve(output, `waiting-menu-${lang}-${theme}-${width}.png`) });
     await menuitem(t('Resume task', '恢复处理')).click();
     await page.locator('.waiting-editor').getByRole('button', { name: t('Resume task', '恢复处理'), exact: true }).click();
     await page.waitForFunction(() => !document.querySelector('[data-waiting-uuid]'));
     assert.equal(await page.evaluate(() => window.waiting.length), 0);
     assert.equal(await page.evaluate(() => window.plans['2026-09-19'].some(e => e.task_uuid === 'task-2')), false);
+    await list.getByRole('button', { name: t('All', '全部'), exact: true }).click();
+    await page.evaluate(async () => {
+      const base = window.rows[1];
+      const extra = Array.from({ length: 16 }, (_, i) => ({ ...base, id: 100 + i, uuid: 'overflow-' + i,
+        title: 'Long waiting task / 较长的等待任务标题 '.repeat(3), group_uuid: null, note: null }));
+      window.rows.push(...extra);
+      window.waiting = extra.map((todo, i) => ({ task_uuid: todo.uuid, reason: 'Waiting for a reply / 等待回复 '.repeat(4),
+        review_date: i % 2 ? null : '2026-10-01', clock: i + 1 }));
+      await window.todos.load(); await window.taskWorkflow.refresh();
+    });
+    await page.locator('[data-waiting-uuid="overflow-0"]').waitFor();
+    assert(await list.evaluate(e => {
+      const box = e.getBoundingClientRect(), content = e.querySelector('.list-content');
+      return box.top >= 0 && box.bottom <= innerHeight && e.scrollWidth <= e.clientWidth &&
+        content.scrollHeight > content.clientHeight;
+    }), 'long waiting list scrolls inside the bounded dialog');
+    await list.locator('select').selectOption('updated');
+    assert.equal(await list.locator('[data-waiting-uuid]').first().getAttribute('data-waiting-uuid'), 'overflow-15');
+    await page.screenshot({ path: resolve(output, `waiting-many-${lang}-${theme}-${width}.png`) });
+    await list.getByRole('button', { name: t('Close', '关闭'), exact: true }).click();
+    await list.waitFor({ state: 'detached' });
     waitingCases++;
   }
   await go('lang=en-US&theme=dark');
