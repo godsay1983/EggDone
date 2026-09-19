@@ -382,6 +382,19 @@ pub struct Proof {
     binding: String,
     claim: Claim,
 }
+pub(crate) fn record_auto_join_proof(c: &Connection, claim: &Claim) -> Result<(), String> {
+    let proof = Proof {
+        version: 1,
+        main: claim.main()?,
+        binding: crate::s3_sync::migration_source_binding(c)?,
+        claim: claim.clone(),
+    };
+    c.execute(
+        "INSERT INTO app_metadata(key,value) VALUES(?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        params![PROOF, serde_json::to_string(&proof).map_err(|_| invalid())?],
+    ).map_err(db)?;
+    Ok(())
+}
 pub fn is_active(c: &Connection) -> Result<bool, String> {
     let raw: Option<String> = c
         .query_row(

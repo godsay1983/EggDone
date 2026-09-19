@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import SyncSpaceDialog from './SyncSpaceDialog.svelte';
+  import { isManagedSyncPath, reconcileSyncDraft } from '$lib/sync/savedSettings';
   import {
     deleteSyncCredentials,
     getSyncRuntimeState,
@@ -17,6 +17,9 @@
     syncRuntimeSnapshot,
     syncStatus,
     syncSummary,
+    savedSyncSettings,
+    refreshSavedSyncSettings,
+    runSettingsUpdate,
   } from "$lib/sync/autoSync";
   import {
     noteAttachmentApi,
@@ -27,8 +30,8 @@
   import { localizedErrorMessage } from "$lib/i18n/errors";
   import { formatFileSize, formatTime } from "$lib/i18n/formatters";
 
-  export let onSpaceActivated: () => Promise<void> = async () => {};
-  let spaceVisible = false;
+  let savedBaseline: SyncSettings | null = null;
+  let editingPath = false;
   let settings: SyncSettings | null = null;
   let accessKey = "";
   let secretKey = "";
@@ -43,8 +46,14 @@
   $: usesHttp = settings?.endpoint.trim().toLowerCase().startsWith("http://") ?? false;
 
   onMount(() => {
+    const unsubscribe = savedSyncSettings.subscribe(saved => {
+      if (!saved) return;
+      if (settings) settings = reconcileSyncDraft(settings, savedBaseline, saved);
+      savedBaseline = { ...saved };
+    });
     void load();
     void loadAttachmentCacheStats();
+    return unsubscribe;
   });
 
   async function loadAttachmentCacheStats() {
@@ -56,13 +65,36 @@
     }
   }
 
-  async function spaceActivated() {
-    settings = await getSyncSettings();
-    accessKey = ''; secretKey = '';
-    configureAutoSync(settings);
-    await onSpaceActivated();
-    await load();
-    await loadAttachmentCacheStats();
+  async function reconcileBeforeSave() {
+    const saved = await refreshSavedSyncSettings();
+    if (settings) settings = reconcileSyncDraft(settings, savedBaseline, saved);
+    savedBaseline = { ...saved };
+  }
+
+  async function persistSettings() {
+    await runSettingsUpdate(async () => {
+      await reconcileBeforeSave();
+      if (!settings) return;
+      settings = await saveSyncSettings({
+        enabled: settings.enabled, endpoint: settings.endpoint, region: settings.region,
+        bucket: settings.bucket, objectKey: settings.objectKey, pathStyle: settings.pathStyle,
+        allowHttp: settings.allowHttp, accessKey: accessKey.trim() || null, secretKey: secretKey || null,
+      });
+      accessKey = ''; secretKey = '';
+      savedBaseline = { ...settings };
+      editingPath = false;
+      configureAutoSync(settings);
+    });
+  }
+
+  function togglePathEditing() {
+    if (busy || !settings) return;
+    if (editingPath && savedBaseline) {
+      settings = { ...settings, objectKey: savedBaseline.objectKey,
+        noteObjectKey: savedBaseline.noteObjectKey, noteAttachmentObjectKey: savedBaseline.noteAttachmentObjectKey,
+        noteAssetPrefix: savedBaseline.noteAssetPrefix };
+    }
+    editingPath = !editingPath;
   }
 
   async function clearAttachmentCache() {
@@ -93,6 +125,7 @@
         getSyncRuntimeState(),
       ]);
       settings = loadedSettings;
+      savedBaseline = { ...loadedSettings };
       syncRuntimeSnapshot.set(runtime);
     } catch (reason) {
       error = errorMessage(reason);
@@ -107,24 +140,11 @@
     error = "";
     message = "";
     try {
-      settings = await saveSyncSettings({
-        enabled: settings.enabled,
-        endpoint: settings.endpoint,
-        region: settings.region,
-        bucket: settings.bucket,
-        objectKey: settings.objectKey,
-        pathStyle: settings.pathStyle,
-        allowHttp: settings.allowHttp,
-        accessKey: accessKey.trim() || null,
-        secretKey: secretKey || null,
-      });
-      accessKey = "";
-      secretKey = "";
-      configureAutoSync(settings);
+      await persistSettings();
       message = $translator("sync.settingsSaved");
       if (testAfterSave) {
         const result = await testSyncConnection();
-        message = localizedSyncMessage(result.message);
+        message = `${localizedSyncMessage(result.message)} ${$translator('sync.connectionOnly')}`;
       }
     } catch (reason) {
       error = errorMessage(reason);
@@ -139,20 +159,7 @@
     error = "";
     message = $translator("sync.downloadingAndMerging");
     try {
-      settings = await saveSyncSettings({
-        enabled: settings.enabled,
-        endpoint: settings.endpoint,
-        region: settings.region,
-        bucket: settings.bucket,
-        objectKey: settings.objectKey,
-        pathStyle: settings.pathStyle,
-        allowHttp: settings.allowHttp,
-        accessKey: accessKey.trim() || null,
-        secretKey: secretKey || null,
-      });
-      accessKey = "";
-      secretKey = "";
-      configureAutoSync(settings);
+      await persistSettings();
       await runManualSync();
       message = $translator(`sync.explain.${$syncSummary}`);
       await loadAttachmentCacheStats();
@@ -176,6 +183,7 @@
   function domainLabel(domain: SyncDirtyDomain) {
     if (domain === "checklists") return $translator("sync.domainChecklists");
     if (domain === "templates") return $translator("sync.domainTemplates");
+    if (domain === "plans") return $translator("sync.domainPlans");
     if (domain === "links") return $translator("sync.domainLinks");
     if (domain === "todos") return $translator("sync.domainTodos");
     if (domain === "notes") return $translator("sync.domainNotes");
@@ -183,6 +191,7 @@
   }
 
   function runtimeErrorLabel(code: string, fallback: string | null) {
+    if (code.includes('SYNC_AUTO_JOIN_') || fallback?.includes('SYNC_AUTO_JOIN_')) return $translator('sync.autoJoinFailed');
     if (code === "SYNC_CLEANUP_SIGNATURE") return $translator("sync.cleanupSignature");
     if (code === "SYNC_CLEANUP_CLOCK") return $translator("sync.cleanupClock");
     if (code === "SYNC_CLEANUP_DENIED") return $translator("sync.cleanupDenied");
@@ -197,6 +206,7 @@
 
   async function copyDiagnostics() {
     if (!settings || !$syncRuntimeSnapshot) return;
+    const actual = savedBaseline ?? settings;
     const runtime = $syncRuntimeSnapshot;
     const summary = [
       `EggDone sync schema: ${runtime.schemaVersion}`,
@@ -207,11 +217,11 @@
       `Pending attachments: ${runtime.pendingAttachmentCount}`,
       `Error code: ${runtime.lastErrorCode ?? "none"}`,
       `Error: ${runtime.lastErrorMessage ?? "none"}`,
-      `Endpoint: ${settings.endpoint}`,
-      `Bucket: ${settings.bucket}`,
-      `Todo object: ${settings.objectKey}`,
-      `Note object: ${settings.noteObjectKey}`,
-      `Attachment object: ${settings.noteAttachmentObjectKey}`,
+      `Endpoint: ${actual.endpoint}`,
+      `Bucket: ${actual.bucket}`,
+      `Todo object: ${actual.objectKey}`,
+      `Note object: ${actual.noteObjectKey}`,
+      `Attachment object: ${actual.noteAttachmentObjectKey}`,
     ].join("\n");
     try {
       await navigator.clipboard.writeText(summary);
@@ -244,6 +254,7 @@
   }
 
   function localizedSyncMessage(raw: string) {
+    if (raw.includes('SYNC_AUTO_JOIN_')) return $translator('sync.autoJoinFailed');
     if (raw === "连接成功，已找到同步文件") return $translator("sync.connectionFound");
     if (raw === "连接成功，同步文件尚未创建") return $translator("sync.connectionMissing");
     if (raw === "任务、便签和附件同步完成") return $translator("sync.serviceCompleted");
@@ -351,7 +362,7 @@
         </div>
       </dl>
       <div class="sync-domain-list">
-        {#each (["todos", "notes", "attachments", "links", "checklists", "templates"] as SyncDirtyDomain[]) as domain}
+        {#each (["todos", "notes", "attachments", "links", "checklists", "templates", "plans"] as SyncDirtyDomain[]) as domain}
           <span class:dirty={$syncRuntimeSnapshot.dirtyDomains.includes(domain)}>
             {domainLabel(domain)}
           </span>
@@ -397,25 +408,10 @@
       </label>
     </div>
 
-    <label class="sync-field">
-      <span>{$translator("sync.todoObjectKey")}</span>
-      <input bind:value={settings.objectKey} disabled={busy} />
-    </label>
-
-    <label class="sync-field">
-      <span>{$translator("sync.noteObjectKey")} <small>{$translator("sync.noteObjectKeyHelp")}</small></span>
-      <input value={settings.noteObjectKey} readonly aria-readonly="true" />
-    </label>
-
-    <label class="sync-field">
-      <span>{$translator("sync.attachmentMetadataKey")} <small>{$translator("sync.readOnlyShared")}</small></span>
-      <input value={settings.noteAttachmentObjectKey} readonly aria-readonly="true" />
-    </label>
-
-    <label class="sync-field">
-      <span>{$translator("sync.assetPrefix")} <small>{$translator("sync.assetPrefixHelp")}</small></span>
-      <input value={settings.noteAssetPrefix} readonly aria-readonly="true" />
-    </label>
+    <div class="storage-location">
+      <span>{$translator('sync.storageLocation')}</span>
+      <strong>{$translator(isManagedSyncPath(settings.objectKey) ? 'sync.storageManaged' : 'sync.storageCustom')}</strong>
+    </div>
 
     <label class="path-style">
       <input type="checkbox" bind:checked={settings.pathStyle} disabled={busy} />
@@ -484,7 +480,30 @@
   <details class="sync-advanced">
     <summary>{$translator('sync.advanced')}</summary>
     <p>{$translator('sync.spaceHelp')}</p>
-    <button type="button" disabled={busy || !settings} onclick={() => spaceVisible = true}>{$translator('sync.space')}</button>
+    {#if settings}
+      <label class="path-style">
+        <input type="checkbox" checked={editingPath} onchange={togglePathEditing} disabled={busy} />
+        <span>{$translator('sync.editStoragePath')}</span>
+      </label>
+      {#if editingPath}<p role="note">{$translator('sync.storagePathWarning')}</p>{/if}
+      <label class="sync-field">
+        <span>{$translator('sync.todoObjectKey')}</span>
+        <input bind:value={settings.objectKey} readonly={!editingPath} aria-readonly={!editingPath} disabled={busy} />
+      </label>
+      {#if editingPath}<p>{$translator('sync.derivedPathsAfterSave')}</p>{/if}
+      <label class="sync-field">
+        <span>{$translator('sync.noteObjectKey')} <small>{$translator('sync.noteObjectKeyHelp')}</small></span>
+        <input value={settings.noteObjectKey} readonly aria-readonly="true" />
+      </label>
+      <label class="sync-field">
+        <span>{$translator('sync.attachmentMetadataKey')} <small>{$translator('sync.readOnlyShared')}</small></span>
+        <input value={settings.noteAttachmentObjectKey} readonly aria-readonly="true" />
+      </label>
+      <label class="sync-field">
+        <span>{$translator('sync.assetPrefix')} <small>{$translator('sync.assetPrefixHelp')}</small></span>
+        <input value={settings.noteAssetPrefix} readonly aria-readonly="true" />
+      </label>
+    {/if}
   </details>
 
   <section class="attachment-cache" aria-labelledby="attachment-cache-title">
@@ -522,11 +541,9 @@
   {#if error}<p class="settings-error" role="alert">{error}</p>{/if}
 </section>
 
-{#if spaceVisible}
-  <SyncSpaceDialog onClose={() => spaceVisible = false} onActivated={spaceActivated} />
-{/if}
-
 <style>
+  .storage-location { display: flex; flex-wrap: wrap; gap: 6px 16px; justify-content: space-between; font-size: 12px; }
+  .sync-advanced .sync-field { margin-top: 12px; }
   .sync-advanced { border-top: 1px solid var(--action-border); padding-top: 12px; }
   .sync-advanced summary { cursor: pointer; font-size: 14px; }
   .sync-advanced p { font-size: 12px; overflow-wrap: anywhere; }

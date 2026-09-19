@@ -136,6 +136,7 @@ fn migration_upgrade_failure_retry_and_disk_reopen() {
         let mut db = Connection::open(&path).unwrap();
         crate::db::migrate(&mut db).unwrap();
         identity = crate::db::device_id(&db).unwrap();
+        crate::db::remove_daily_plan_schema_for_test(&db);
         db.execute_batch(
             "DROP TRIGGER notes_capture_history; DROP TRIGGER notes_delete_history; DROP TABLE note_history;
             DROP TABLE task_note_links; DROP TABLE task_note_link_sync_state;

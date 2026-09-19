@@ -174,6 +174,16 @@ pub(crate) fn merge_remote_document(
     generated_at: i64,
 ) -> Result<SyncDocument, String> {
     let transaction = connection.transaction().map_err(database_error)?;
+    let merged = merge_in_transaction(&transaction, remote, generated_at)?;
+    transaction.commit().map_err(database_error)?;
+    Ok(merged)
+}
+
+pub(crate) fn merge_in_transaction(
+    transaction: &Connection,
+    remote: &SyncDocument,
+    generated_at: i64,
+) -> Result<SyncDocument, String> {
     let index = crate::lifecycle_sync::Index::read(&transaction)?;
     let local = build_document(&transaction, generated_at)?;
     validate_document(remote)?;
@@ -213,18 +223,19 @@ pub(crate) fn merge_remote_document(
             .map_err(database_error)?;
     }
 
-    for todo in &merged.todos {
-        let existing_due_at = transaction
-            .query_row(
-                "SELECT due_at FROM todos WHERE uuid = ?1",
-                params![todo.uuid],
-                |row| row.get::<_, Option<i64>>(0),
-            )
-            .optional()
-            .map_err(database_error)?
-            .flatten();
-        let (due_date, due_at) = schedule_for_local_storage(todo, existing_due_at)?;
-        transaction
+    crate::daily_plan_store::without_lifecycle_events(&transaction, || {
+        for todo in &merged.todos {
+            let existing_due_at = transaction
+                .query_row(
+                    "SELECT due_at FROM todos WHERE uuid = ?1",
+                    params![todo.uuid],
+                    |row| row.get::<_, Option<i64>>(0),
+                )
+                .optional()
+                .map_err(database_error)?
+                .flatten();
+            let (due_date, due_at) = schedule_for_local_storage(todo, existing_due_at)?;
+            transaction
             .execute(
                 "
                 INSERT INTO todos (
@@ -278,9 +289,10 @@ pub(crate) fn merge_remote_document(
                 ],
             )
             .map_err(database_error)?;
-    }
+        }
 
-    transaction.commit().map_err(database_error)?;
+        Ok(())
+    })?;
     Ok(merged)
 }
 

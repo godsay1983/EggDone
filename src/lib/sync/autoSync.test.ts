@@ -8,6 +8,8 @@ import {
   scheduleAutoSync,
   setAutoSyncForeground,
   syncStatus,
+  savedSyncSettings,
+  runSettingsUpdate,
 } from "./autoSync";
 
 vi.mock("$lib/api/syncApi", () => ({
@@ -38,6 +40,107 @@ afterEach(() => {
 });
 
 describe("auto sync", () => {
+  it("serializes form saves after the current sync and queues later syncs until settings are saved", async () => {
+    configureAutoSync(enabledSettings);
+    vi.mocked(syncApi.getSyncSettings).mockResolvedValue(enabledSettings);
+    const first = deferred<syncApi.ManualSyncResult>();
+    vi.mocked(syncApi.syncNow).mockReturnValueOnce(first.promise).mockResolvedValue(syncResult());
+    const active = runManualSync();
+    const saved = deferred<void>();
+    let saving = false;
+    const update = runSettingsUpdate(async () => {
+      saving = true;
+      await saved.promise;
+      configureAutoSync({ ...enabledSettings, objectKey: 'verified/todos.json' });
+    });
+    expect(saving).toBe(false);
+    const queued = runManualSync();
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(1);
+    first.resolve(syncResult());
+    await active;
+    await Promise.resolve();
+    expect(saving).toBe(true);
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(1);
+    saved.resolve(); await update; await queued;
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(2);
+    expect(get(syncStatus).kind).toBe('synced');
+  });
+  it("detects an association change with unchanged old ETags and does not invalidate its session", async () => {
+    vi.useFakeTimers(); configureAutoSync(enabledSettings);
+    const remote = remoteProbe();
+    const result = { ...syncResult(), recurrenceRemoteToken: remote.recurrenceToken };
+    vi.mocked(syncApi.getSyncSettings).mockResolvedValue(enabledSettings);
+    vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue(remote);
+    vi.mocked(syncApi.syncNow).mockResolvedValue(result);
+    setAutoSyncForeground(true);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(1);
+    vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue({ ...remote, targetChanged: true });
+    vi.mocked(syncApi.getSyncSettings).mockResolvedValue({ ...enabledSettings, objectKey: 'verified/todos.json' });
+    vi.mocked(syncApi.syncNow).mockResolvedValue({ ...result, targetChanged: true });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(2);
+    expect(get(savedSyncSettings)?.objectKey).toBe('verified/todos.json');
+    expect(get(syncStatus).kind).toBe('synced');
+    vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue(remote);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(2);
+  });
+
+  it("reads the persisted target after failure and retries even when the later probe is unchanged", async () => {
+    vi.useFakeTimers(); configureAutoSync(enabledSettings);
+    const remote = remoteProbe();
+    const result = { ...syncResult(), recurrenceRemoteToken: remote.recurrenceToken };
+    vi.mocked(syncApi.getSyncSettings).mockResolvedValue(enabledSettings);
+    vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue(remote);
+    vi.mocked(syncApi.syncNow).mockResolvedValue(result);
+    setAutoSyncForeground(true);
+    await vi.advanceTimersByTimeAsync(0);
+    vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue({ ...remote, targetChanged: true });
+    vi.mocked(syncApi.getSyncSettings).mockResolvedValue({ ...enabledSettings, objectKey: 'verified/todos.json' });
+    vi.mocked(syncApi.syncNow).mockRejectedValueOnce(Error('SYNC_AUTO_JOIN_UNSAFE'));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(get(syncStatus).kind).toBe('failed');
+    expect(get(savedSyncSettings)?.objectKey).toBe('verified/todos.json');
+    vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue(remote);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(3);
+    expect(get(syncStatus).kind).toBe('synced');
+  });
+  it("syncs a planning-only remote change and consumes only its successful receipt", async () => {
+    vi.useFakeTimers();
+    configureAutoSync(enabledSettings);
+    const remote = {
+      recurrenceToken: "missing", planToken: 'etag:"plan-1"',
+      todoObjectExists: true, todoEtag: '"todo"',
+      noteObjectExists: true, noteEtag: '"note"',
+      noteAttachmentObjectExists: true, noteAttachmentEtag: '"attachment"',
+    };
+    const result = {
+      message: "Synced", todoCount: 0, noteCount: 0, noteAttachmentCount: 0,
+      pendingAttachmentCount: 0, conflictRetried: false,
+      recurrenceRemoteToken: "missing", planRemoteToken: 'etag:"plan-1"',
+      todoRemoteEtag: '"todo"', noteRemoteEtag: '"note"', noteAttachmentRemoteEtag: '"attachment"',
+    };
+    vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue(remote);
+    vi.mocked(syncApi.syncNow).mockResolvedValue(result);
+    setAutoSyncForeground(true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(1);
+    vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue({ ...remote, planToken: 'etag:"plan-2"' });
+    vi.mocked(syncApi.syncNow).mockRejectedValueOnce(new Error("PLAN_REMOTE_MISSING"));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(2);
+    vi.mocked(syncApi.syncNow).mockResolvedValue({ ...result, planRemoteToken: 'etag:"plan-2"' });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(3);
+  });
+
   it("debounces local changes for four seconds", async () => {
     vi.useFakeTimers();
     configureAutoSync(enabledSettings);

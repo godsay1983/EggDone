@@ -33,6 +33,14 @@ pub async fn migration_space(
         if space::is_active(&*lock_database(&db)?)? {
             return Ok(active_report());
         }
+        if action != "status" {
+            let mut c = lock_database(&db)?;
+            if !crate::daily_plan_protocol::is_empty(
+                &crate::daily_plan_store::snapshot(&mut c)?.document,
+            ) {
+                return Err("MIGRATION_PLANNING_ACTIVE".into());
+            }
+        }
     }
     if action == "prepare" {
         migration_local_backup(app.clone(), "prepare".into(), None).await?;

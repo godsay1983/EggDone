@@ -103,6 +103,20 @@
   import { contentSearchApi, type SearchItem, type SearchTarget } from "$lib/api/contentSearchApi";
   import SettingsPanel from "./SettingsPanel.svelte";
   import TodoItem from "./TodoItem.svelte";
+  import DailyPlanTabs from './DailyPlanTabs.svelte';
+  import DailyPlanList from './DailyPlanList.svelte';
+  import DailyPlanStatus from './DailyPlanStatus.svelte';
+  import { dailyPlans } from '$lib/stores/dailyPlanStore';
+  import { syncStatus } from '$lib/sync/autoSync';
+  let todayView: 'due' | 'planned' = 'due';
+  $: plannedView = listView === 'today' && todayView === 'planned';
+  function changeTodayView(value: 'due' | 'planned') {
+    todayView = value;
+    batchMode = false;
+    clearBatchSelection();
+    selectedTodoId = null;
+    if (value === 'planned') void dailyPlans.refresh();
+  }
   import { refreshChecklistProgress } from '$lib/stores/taskChecklistStore';
   $: { $todos.items; void refreshChecklistProgress(); }
   import { refreshRecurrenceRules } from "$lib/stores/recurrenceStore";
@@ -701,7 +715,11 @@
   onMount(() => {
     let lastItems: Todo[] | null = null;
     const unsubscribeRules = todos.subscribe(state => {
-      if (state.items !== lastItems) { lastItems = state.items; void refreshRecurrenceRules(); }
+      if (state.items !== lastItems) {
+        lastItems = state.items;
+        void refreshRecurrenceRules();
+        void dailyPlans.refresh();
+      }
       if (!state.loading && !state.error && selectedGroup !== 'all' && selectedGroup !== 'ungrouped' &&
         !state.groups.some(group => group.uuid === selectedGroup)) {
         selectedGroup = 'all';
@@ -709,9 +727,22 @@
       }
     });
     let filterTimezoneOffset = new Date().getTimezoneOffset();
+    let wasSyncing = false;
+    const unsubscribePlanningSync = syncStatus.subscribe(status => {
+      if (wasSyncing && status.kind !== 'syncing') {
+        void Promise.all([todos.refresh(), notes.refresh()]).then(async () => {
+          linkedRevision++;
+          await Promise.all([dailyPlans.refresh(), loadAllNoteAttachments()]);
+        }).catch(() => { /* Individual stores expose their refresh errors. */ });
+      }
+      wasSyncing = status.kind === 'syncing';
+    });
+    const refreshPlanning = () => { void dailyPlans.refresh(); };
+    window.addEventListener('focus', refreshPlanning);
     const refreshFilterTime = () => {
       filterNow = new Date();
       filterTimezoneOffset = filterNow.getTimezoneOffset();
+      void dailyPlans.checkDate();
     };
     const filterTimer = window.setInterval(() => {
       if (Math.floor(Date.now() / 60000) !== Math.floor(filterNow.getTime() / 60000) ||
@@ -817,6 +848,7 @@
         showSettings = false;
         showSearch = false;
         searchQuery = "";
+        changeTodayView('due');
         setListView("today");
         requestAnimationFrame(() => inputElement?.focus());
       }).then((unlisten) => unlisteners.push(unlisten));
@@ -830,7 +862,7 @@
         requestAnimationFrame(() => inputElement?.focus());
       }).then((unlisten) => unlisteners.push(unlisten));
       void listen("todos-changed", () => {
-        void todos.refresh();
+        void todos.refresh().then(() => dailyPlans.refresh());
       }).then((unlisten) => unlisteners.push(unlisten));
       void listen("notes-changed", () => {
         notes.markSynced();
@@ -850,6 +882,8 @@
 
     return () => {
       unsubscribeRules();
+      unsubscribePlanningSync();
+      window.removeEventListener('focus', refreshPlanning);
       mounted = false;
       setAutoSyncForeground(false);
       window.removeEventListener("pointerdown", handlePointerDown, true);
@@ -1991,7 +2025,8 @@
       void flushAllNoteChanges().catch(() => undefined);
       return;
     }
-    if (shouldIgnoreKeyboardNavigation(event)) return;
+    if (plannedView || shouldIgnoreKeyboardNavigation(event) ||
+      (event.target instanceof Element && event.target.closest('.plan-tabs, .actions-menu'))) return;
     if (event.key === "ArrowDown" || event.key === "j") {
       event.preventDefault();
       moveKeyboardSelection(1);
@@ -3053,7 +3088,7 @@
             </button>
             {#if confirmingClear}<p role="status">{$translator("todo.deleteCompletedHint")}</p>{/if}
           {/if}
-          {#if listView !== "notes" && renderedTodos.length > 0}
+          {#if listView !== "notes" && !plannedView && renderedTodos.length > 0}
             <button
               class:active={batchMode}
               type="button"
@@ -3072,7 +3107,7 @@
   </section>
   {/if}
 
-  {#if listView !== "notes" && batchMode && renderedTodos.length > 0}
+  {#if listView !== "notes" && !plannedView && batchMode && renderedTodos.length > 0}
     <section class="batch-toolbar" aria-label={$translator("batch.actions")}>
       <span>{batchSelectionCount > 0 ? $translator("todo.selectedCount", { count: batchSelectionCount }) : $translator("todo.selectTasks")}</span>
       <button
@@ -3146,6 +3181,10 @@
       onOpen={item => openRelatedContent(item, linkManager!.scope)}
       saveSource={saveLinkSource} afterCommit={refreshLinkChange} onClose={() => linkManager = null} />
   {/if}
+  {#if listView === 'today' && !linkedTodoUuid && !selectedNote && !linkHistory.length}
+    <DailyPlanTabs value={todayView} onChange={changeTodayView} />
+  {/if}
+  <DailyPlanStatus showLoading={plannedView} />
   <LinkWorkspace active={linkHistory.length > 0} busy={linkNavigating || linkedTaskEditing || noteAttachmentBusy} onBack={backFromLinkedContent}>
   {#if linkedTodoUuid}
     <button class="action-button" disabled={linkNavigating || linkedTaskEditing} onclick={backFromLinkedContent}>{$translator("links.backSource")}</button>
@@ -3219,6 +3258,28 @@
       attachmentsByNote={noteAttachmentsByNote}
       attachmentPreviewUrls={noteAttachmentPreviewUrls}
     />
+  {:else if plannedView}
+    {#if $todos.loading}
+      <div class="status">{$translator('empty.loading')}</div>
+    {:else if $todos.error}
+      <div class="status error" role="alert">
+        <span>{$todos.error}</span>
+        <button class="action-button" onclick={() => void todos.refresh()}>{$translator('common.retry')}</button>
+      </div>
+    {:else}
+      <DailyPlanList items={$todos.items} query={taskSearchQuery} groupUuid={activeGroupUuid}
+        onOpen={todo => { void focusTodoByUuid(todo.uuid); }} onToggle={todo => todos.toggle(todo)}
+        let:todo let:locked let:onToggle let:canPlanMoveUp let:canPlanMoveDown>
+        <TodoItem {todo} animationEnabled={false} {onToggle} toggleDisabled={locked}
+          planOrder={{ canMoveUp: canPlanMoveUp, canMoveDown: canPlanMoveDown }}
+          onEdit={editTodo} onNote={noteTodo} onPin={pinTodo} onPriority={priorityTodo}
+          onFocus={openFocusForTodo} onManageLinks={manageTaskLinks} onSchedule={scheduleTodo}
+          onSnooze={snoozeTodo} groups={$todos.groups} onGroupChange={moveTodoToGroup}
+          onDelete={deleteTodo} onMove={moveTodo} onDragStart={startDrag}
+          onBatchSelect={toggleBatchTodo} dragDisabled={true} reorderDisabled={true}
+          editRequest={editRequestTodoId === todo.id ? editRequestSeq : 0} />
+      </DailyPlanList>
+    {/if}
   {:else}
   <section class="todo-list" aria-live="polite"
     use:preserveScroll={{ positions: listScrollPositions, key: 'tasks', ready: !$todos.loading }}>
@@ -3617,7 +3678,6 @@
     onClose={() => (showSettings = false)}
     onChange={(settings) => (desktopSettings = settings)}
     onDefaultListViewChange={setDefaultListViewMode}
-    onSpaceActivated={refreshAfterTrash}
   />
 {/if}
 

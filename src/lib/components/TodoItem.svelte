@@ -13,6 +13,8 @@
   import type { TaskCopyDraft } from '$lib/utils/taskCopyDraft';
   import { checklistProgress, refreshChecklistProgress } from '$lib/stores/taskChecklistStore';
   import { todos } from '$lib/stores/todoStore';
+  import { dailyPlans, dailyPlanLocked, isPlannedToday } from '$lib/stores/dailyPlanStore';
+  $: inDailyPlan = isPlannedToday($dailyPlans, todo);
   let checklistOpen = false;
   $: checklistCount = $checklistProgress?.[todo.uuid];
   function openChecklist() { actionsOpen=false;checklistOpen=true; }
@@ -101,6 +103,8 @@
   export let isDragTarget = false;
   export let dragDisabled = false;
   export let reorderDisabled = false;
+  export let toggleDisabled = false;
+  export let planOrder: { canMoveUp: boolean; canMoveDown: boolean } | null = null;
   export let editRequest = 0;
   export let onEditingChange: (editing: boolean) => void = () => {};
 
@@ -241,6 +245,42 @@
     scheduleOpen = false;
     noteOpen = false;
     actionsOpen = !actionsOpen;
+  }
+
+  function fitActionsMenu(menu: HTMLElement) {
+    const anchor = menu.previousElementSibling as HTMLElement;
+    const parent = menu.offsetParent as HTMLElement;
+    let viewport: HTMLElement | null = itemElement.parentElement;
+    while (viewport && !/(auto|scroll|hidden)/.test(getComputedStyle(viewport).overflowY)) {
+      viewport = viewport.parentElement;
+    }
+    function position() {
+      if (!menu.isConnected) return;
+      const bounds = viewport?.getBoundingClientRect();
+      const top = Math.max(0, bounds?.top ?? 0) + 6;
+      const bottom = Math.min(window.innerHeight, bounds?.bottom ?? window.innerHeight) - 6;
+      const left = Math.max(0, bounds?.left ?? 0) + 6;
+      const right = Math.min(window.innerWidth, bounds?.right ?? window.innerWidth) - 6;
+      menu.style.maxHeight = `${Math.max(0, Math.min(360, bottom - top))}px`;
+      menu.style.maxWidth = `${Math.max(0, right - left)}px`;
+      const trigger = anchor.getBoundingClientRect(), origin = parent.getBoundingClientRect();
+      const size = menu.getBoundingClientRect();
+      // Keep the full menu inside the list; long menus scroll independently.
+      menu.style.top = `${Math.max(top, Math.min(trigger.bottom + 6, bottom - size.height)) - origin.top}px`;
+      menu.style.left = `${Math.max(left, Math.min(trigger.right - size.width, right - size.width)) - origin.left}px`;
+      menu.style.right = 'auto';
+    }
+    function onScroll(event: Event) { if (event.target !== menu) position(); }
+    void tick().then(position);
+    const observer = new ResizeObserver(position);
+    observer.observe(viewport ?? document.documentElement);
+    window.addEventListener('resize', position);
+    window.addEventListener('scroll', onScroll, true);
+    return { destroy() {
+      observer.disconnect();
+      window.removeEventListener('resize', position);
+      window.removeEventListener('scroll', onScroll, true);
+    } };
   }
 
   async function openNoteEditor() {
@@ -515,7 +555,7 @@
     type="button"
     aria-label={todo.completed ? $translator("todo.markIncomplete") : $translator("todo.markCompleted")}
     onclick={() => void onToggle(todo)}
-    disabled={editing}
+    disabled={editing || toggleDisabled}
   >
     {#if todo.completed}
       <svg viewBox="0 0 20 20" aria-hidden="true">
@@ -549,7 +589,7 @@
           {notePreview}
         </button>
       {/if}
-      {#if checklistCount?.total || currentGroup || dueLabel || todo.pinned || todo.priority === 1 || todo.reminder_at !== null || todo.repeat_rule !== null || customSummary}
+      {#if inDailyPlan || checklistCount?.total || currentGroup || dueLabel || todo.pinned || todo.priority === 1 || todo.reminder_at !== null || todo.repeat_rule !== null || customSummary}
         <div class="todo-meta">
           {#if currentGroup}
             <span
@@ -586,6 +626,9 @@
             >
               {$translator("todo.important")}
             </button>
+          {/if}
+          {#if inDailyPlan}
+            <span class="daily-plan-badge">{$translator('dailyPlan.title')}</span>
           {/if}
           {#if dueLabel}
             <button
@@ -763,7 +806,24 @@
       </svg>
     </button>
     {#if actionsOpen}
-      <div class="actions-menu" role="menu">
+      <div class="actions-menu" role="menu" use:fitActionsMenu>
+        {#if !todo.completed && todo.archived_at === null && todo.deleted_at === null}
+          {#if planOrder && inDailyPlan}
+            <button type="button" role="menuitem" disabled={toggleDisabled || dailyPlanLocked($dailyPlans) || !planOrder.canMoveUp}
+              onclick={() => { actionsOpen = false; void dailyPlans.act(todo.uuid, 'up'); }}>
+              {$translator('dailyPlan.up')}
+            </button>
+            <button type="button" role="menuitem" disabled={toggleDisabled || dailyPlanLocked($dailyPlans) || !planOrder.canMoveDown}
+              onclick={() => { actionsOpen = false; void dailyPlans.act(todo.uuid, 'down'); }}>
+              {$translator('dailyPlan.down')}
+            </button>
+          {/if}
+          <button type="button" role="menuitem" disabled={toggleDisabled || dailyPlanLocked($dailyPlans)}
+            onclick={() => { actionsOpen = false; void dailyPlans.act(todo.uuid, inDailyPlan ? 'remove' : 'add'); }}>
+            {$translator(inDailyPlan ? 'dailyPlan.remove' : 'dailyPlan.add')}
+          </button>
+          {#if planOrder}<div class="plan-menu-divider" role="separator"></div>{/if}
+        {/if}
           <button type="button" role="menuitem" disabled={copyLoading} onclick={()=>void copyTask()}>{$translator('todo.copy')}</button>
           <button type="button" role="menuitem" onclick={()=>{actionsOpen=false;templateOpen=true;}}>{$translator('templates.saveAs')}</button>
         <button type="button" role="menuitem" onclick={openChecklist}>{$translator('checklist.title')}</button>
@@ -930,6 +990,7 @@
 {/if}
 
 <style>
+  .plan-menu-divider { border-top: 1px solid var(--action-border); margin: 4px; }
   .copy-status { font-size:12px; margin:4px 12px; overflow-wrap:anywhere; }
   .todo-meta .checklist-progress {
     display:inline-flex;align-items:center;border:0;border-radius:8px;padding:2px 7px;margin:0;

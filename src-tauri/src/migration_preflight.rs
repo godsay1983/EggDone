@@ -10,6 +10,7 @@ const STATE_SQL: &str = "SELECT 'rules' AS domain, revision, synced_revision, 0 
 UNION ALL SELECT 'links', revision, synced_revision, 0, etag FROM task_note_link_sync_state WHERE id=1
 UNION ALL SELECT domain, revision, synced_revision, generation, etag FROM task_checklist_sync_state
 UNION ALL SELECT 'templates', revision, synced_revision, generation, etag FROM task_template_sync_state WHERE id=1
+UNION ALL SELECT 'plans', revision, synced_revision, generation, etag FROM daily_plan_sync_state WHERE id=1
 ORDER BY domain";
 const INVENTORY_SQL: &str = "SELECT 'todos' AS name, COUNT(*) AS value FROM todos
 UNION ALL SELECT 'groups', COUNT(*) FROM groups
@@ -20,6 +21,7 @@ UNION ALL SELECT 'links', COUNT(*) FROM task_note_links
 UNION ALL SELECT 'items', COUNT(*) FROM task_checklist_items
 UNION ALL SELECT 'definitions', COUNT(*) FROM task_checklist_definitions
 UNION ALL SELECT 'templates', COUNT(*) FROM task_templates
+UNION ALL SELECT 'daily_planning_present', (SELECT COUNT(*) FROM daily_plans)+(SELECT COUNT(*) FROM daily_plan_events)+(SELECT COUNT(*) FROM daily_plan_completions)
 UNION ALL SELECT 'recurrence_instances', COUNT(*) FROM app_metadata WHERE key LIKE 'recurrence.instance.v1:%'
 UNION ALL SELECT 'local_note_history', COUNT(*) FROM note_history
 UNION ALL SELECT 'local_checklist_receipts', COUNT(*) FROM task_checklist_operations
@@ -99,6 +101,7 @@ impl LocalMigrationSnapshot {
             "local_purge_terminals",
             "pending_purge_targets",
             "pending_purge_assets",
+            "daily_planning_present",
         ] {
             if self
                 .inventory
@@ -113,6 +116,14 @@ impl LocalMigrationSnapshot {
 
     // Never clear dirty flags or accept an old preview just because the new state is also clean.
     pub fn require_unchanged(&self, current: &Self) -> Result<(), String> {
+        if self
+            .blockers()
+            .iter()
+            .chain(current.blockers().iter())
+            .any(|b| b == "daily_planning_present")
+        {
+            return Err("MIGRATION_PLANNING_ACTIVE".into());
+        }
         if !self.blockers().is_empty() || !current.blockers().is_empty() {
             return Err("MIGRATION_LOCAL_NOT_SETTLED".into());
         }
@@ -178,7 +189,14 @@ pub(crate) fn read(connection: &mut Connection) -> Result<LocalMigrationSnapshot
         .collect::<Result<Vec<_>, _>>()
         .map_err(invalid)?;
     if states.iter().map(|s| s.domain.as_str()).collect::<Vec<_>>()
-        != ["definitions", "items", "links", "rules", "templates"]
+        != [
+            "definitions",
+            "items",
+            "links",
+            "plans",
+            "rules",
+            "templates",
+        ]
         || states.iter().any(|s| {
             !valid_clock(s.revision)
                 || !valid_clock(s.synced_revision)

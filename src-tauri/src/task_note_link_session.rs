@@ -11,6 +11,7 @@ use crate::{
 };
 
 pub(crate) struct EntityLinkResult {
+    pub plan_receipt: crate::daily_plan_session::Receipt,
     pub template_token: Option<String>,
     pub todo: TodoRunResult,
     pub note_count: usize,
@@ -91,6 +92,7 @@ pub(crate) async fn run(
     let transport = prepared.link_transport()?;
     let mut conflict_retried = false;
     prepared.template_transport()?;
+    prepared.plan_transport()?;
     prepared.checklist_transport(crate::task_checklist_sync::Domain::Items)?;
     prepared.checklist_transport(crate::task_checklist_sync::Domain::Definitions)?;
     for attempt in 0..2 {
@@ -103,6 +105,10 @@ pub(crate) async fn run(
         };
         let Some(template_token) = crate::task_template_session::attempt(db, prepared).await?
         else {
+            conflict_retried = true;
+            continue;
+        };
+        let Some(plan_receipt) = crate::daily_plan_session::attempt(db, prepared).await? else {
             conflict_retried = true;
             continue;
         };
@@ -167,6 +173,7 @@ pub(crate) async fn run(
             }
         };
         return Ok(EntityLinkResult {
+            plan_receipt,
             template_token: Some(template_token),
             checklist_token: Some(checklist_token),
             todo,

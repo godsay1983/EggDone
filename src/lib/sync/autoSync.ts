@@ -42,6 +42,34 @@ export const syncStatus = writable<SyncStatus>({
 });
 
 export const syncRuntimeSnapshot = writable<SyncRuntimeSnapshot | null>(null);
+export const savedSyncSettings = writable<SyncSettings | null>(null);
+
+export async function refreshSavedSyncSettings(current: () => boolean = () => true): Promise<SyncSettings> {
+  const settings = await getSyncSettings();
+  if (current()) savedSyncSettings.set(settings);
+  return settings;
+}
+
+let settingsUpdate: Promise<unknown> | null = null;
+
+export function runSettingsUpdate<T>(action: () => Promise<T>): Promise<T> {
+  const previous = settingsUpdate;
+  const update = (async () => {
+    if (previous) { try { await previous; } catch { /* A failed settings form must not block the next one. */ } }
+    if (running) { try { await running; } catch { /* Read the persisted target even after failure. */ } }
+    clearDebounce();
+    return action();
+  })();
+  settingsUpdate = update;
+  const release = () => {
+    if (settingsUpdate === update) {
+      settingsUpdate = null;
+      if (pendingAfterRun && enabled) { pendingAfterRun = false; scheduleAutoSync(); }
+    }
+  };
+  void update.then(release, release);
+  return update;
+}
 const syncAvailability = writable<{ enabled: boolean; configured: boolean } | null>(null);
 export const syncSummary = derived([syncStatus, syncAvailability], ([status, availability]) =>
   syncSummaryState({
@@ -85,6 +113,7 @@ export async function initializeAutoSync() {
 }
 
 export function configureAutoSync(settings: SyncSettings) {
+  savedSyncSettings.set(settings);
   pollState.reset();
   clearDebounce();
   enabled = settings.enabled && settings.credentialsConfigured;
@@ -102,9 +131,12 @@ export function configureAutoSync(settings: SyncSettings) {
       message: settings.enabled ? "同步凭据未配置" : "同步未启用",
       updatedAt: null,
     });
-  } else if (foreground) {
-    startForegroundPolling();
-    void checkRemoteAndSync();
+  } else {
+    syncStatus.set({ kind: "pending", message: "有修改未同步", updatedAt: Date.now() });
+    if (foreground) {
+      startForegroundPolling();
+      void checkRemoteAndSync();
+    }
   }
 }
 
@@ -200,6 +232,7 @@ async function runAutomaticSync() {
 }
 
 function runSyncWithRetry(): Promise<ManualSyncResult> {
+  if (settingsUpdate) return settingsUpdate.then(() => runSyncWithRetry());
   if (running) {
     pendingAfterRun = true;
     return running;
@@ -229,10 +262,14 @@ async function performSyncWithRetry(): Promise<ManualSyncResult> {
     try {
       const result = await syncNow();
       if (!pollState.isGenerationCurrent(generation)) throw new Error("RECURRENCE_CONFIG_CHANGED");
+      // A backend auto-join belongs to this session: publishing settings must not reset its generation.
+      await refreshSavedSyncSettings(() => pollState.isGenerationCurrent(generation));
+      if (!pollState.isGenerationCurrent(generation)) throw new Error("RECURRENCE_CONFIG_CHANGED");
       if (result.recurrenceRemoteToken !== undefined) pollState.acknowledgeRules(generation, result.recurrenceRemoteToken);
       if (result.linkRemoteToken !== undefined) pollState.acknowledgeLinks(generation, result.linkRemoteToken);
       if (result.checklistRemoteToken !== undefined) pollState.acknowledgeChecklists(generation, result.checklistRemoteToken);
       if (result.templateRemoteToken !== undefined) pollState.acknowledgeTemplates(generation, result.templateRemoteToken);
+      if (result.planRemoteToken !== undefined) pollState.acknowledgePlans(generation, result.planRemoteToken);
       const cleanupNotice = result.message.includes("远端附件");
       let snapshot: SyncRuntimeSnapshot | null = null;
       try {
@@ -259,6 +296,9 @@ async function performSyncWithRetry(): Promise<ManualSyncResult> {
       return result;
     } catch (reason) {
       if (!pollState.isGenerationCurrent(generation)) throw reason;
+      try { await refreshSavedSyncSettings(() => pollState.isGenerationCurrent(generation)); } catch { /* Keep the original sync error. */ }
+      if (!pollState.isGenerationCurrent(generation)) throw reason;
+      remoteStateInitialized = false;
       lastError = reason;
       if (!isRetryable(reason) || attempt === RETRY_DELAYS_MS.length) {
         setFailureStatus(reason);
@@ -276,7 +316,7 @@ async function performSyncWithRetry(): Promise<ManualSyncResult> {
 }
 
 async function checkRemoteAndSync() {
-  if (!enabled || !foreground || remoteCheckRunning) return;
+  if (!enabled || !foreground || remoteCheckRunning || settingsUpdate) return;
   if (running) {
     pendingAfterRun = true;
     return;
@@ -287,12 +327,14 @@ async function checkRemoteAndSync() {
   let startedSync = false;
   try {
     const remote = await getRemoteStateWithRetry(() => pollState.isCurrent(ticket) && enabled && foreground);
-    if (!pollState.isCurrent(ticket) || !enabled || !foreground || running) return;
+    if (!pollState.isCurrent(ticket) || !enabled || !foreground || running || settingsUpdate) return;
     const changed =
+      remote.targetChanged === true ||
       pollState.rulesChanged(remote.recurrenceToken) ||
       pollState.linksChanged(remote.linkToken) ||
       pollState.checklistsChanged(remote.checklistToken) ||
       pollState.templatesChanged(remote.templateToken) ||
+      pollState.plansChanged(remote.planToken) ||
       !remoteStateInitialized ||
       remote.todoObjectExists !== (knownTodoRemoteEtag !== null) ||
       remote.todoEtag !== knownTodoRemoteEtag ||
@@ -304,7 +346,9 @@ async function checkRemoteAndSync() {
       startedSync = true;
       // Do not consume the observation on failure, or the next unchanged HEAD would skip retry.
       const result = await runSyncWithRetry();
-      pollState.acknowledgeRules(ticket.generation, result.recurrenceRemoteToken ?? remote.recurrenceToken);
+      if (!remote.targetChanged && !result.targetChanged) {
+        pollState.acknowledgeRules(ticket.generation, result.recurrenceRemoteToken ?? remote.recurrenceToken);
+      }
     }
   } catch (reason) {
     if ((pollState.isCurrent(ticket) || (startedSync && pollState.isGenerationCurrent(ticket.generation))) &&
@@ -376,6 +420,7 @@ function isRetryable(reason: unknown) {
     message.includes("配置") ||
     message.includes("recurrence_config_changed") ||
     message.includes("sync_target_save_incomplete") ||
+    message.includes("sync_auto_join_") ||
     isConflict(message)
   ) {
     return false;

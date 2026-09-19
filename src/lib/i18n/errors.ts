@@ -31,6 +31,7 @@ export function ensureErrorCode(reason: unknown, code: EggDoneErrorCode): string
 
 export function localizedErrorMessage(reason: unknown): string {
   const raw = rawError(reason);
+  if (raw.includes('SYNC_AUTO_JOIN_')) return translate(getLanguageState().resolvedLocale, 'sync.autoJoinFailed');
   const parsed = parseCodedError(raw);
   if (!parsed) return safeDetail(raw);
   const locale = getLanguageState().resolvedLocale;

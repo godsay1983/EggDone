@@ -4,7 +4,7 @@ export function migrationFailure(error: unknown): { message: TranslationKey; dia
   const raw = error instanceof Error ? error.message : String(error);
   const diagnostic = /^MIGRATION_[A-Z_]+(?::[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}:(?:original|preview\.jpg))?$/.test(raw) ? raw : '';
   const code = diagnostic.split(':')[0];
-  const message: TranslationKey = code.includes('LOCAL_NOT_SETTLED') ? 'migrationBackup.unsettled' :
+  const message: TranslationKey = code.includes('PLANNING_ACTIVE') ? 'dailyPlan.migrationBlocked' : code.includes('LOCAL_NOT_SETTLED') ? 'migrationBackup.unsettled' :
     code.includes('BUSY') ? 'migrationBackup.busy' : code.includes('LIMIT') ? 'migrationBackup.limit' :
     code.includes('ASSET_NOT_FOUND') ? 'migrationBackup.assetNotFound' :
     code.includes('ASSET_DENIED') ? 'migrationBackup.assetDenied' :

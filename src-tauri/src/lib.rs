@@ -9,6 +9,13 @@ mod content_search;
 mod content_search_commands;
 #[cfg(test)]
 mod content_search_tests;
+mod daily_plan_commands;
+#[cfg(test)]
+mod daily_plan_lifecycle_tests;
+pub mod daily_plan_protocol;
+mod daily_plan_session;
+pub mod daily_plan_store;
+pub mod daily_plan_sync;
 mod data_exchange;
 mod db;
 mod error_codes;
@@ -57,6 +64,7 @@ mod shortcut_preferences;
 mod space_activation;
 mod space_activation_commands;
 mod sync;
+mod sync_auto_join;
 mod sync_runtime_state;
 mod sync_space;
 mod sync_target;
@@ -208,6 +216,8 @@ pub fn run() {
             task_batch_commands::load_task_batch_recovery,
             task_batch_commands::forget_task_batch_recovery,
             task_template_commands::save_task_template,
+            daily_plan_commands::list_daily_plans,
+            daily_plan_commands::write_daily_plan,
             task_checklist_commands::save_task_checklist_editor,
             task_checklist_commands::create_task_checklist_editor,
             task_checklist_commands::resolve_checklist_rule_time,

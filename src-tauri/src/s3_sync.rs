@@ -79,6 +79,86 @@ pub struct PreparedManualSync {
 }
 
 impl PreparedManualSync {
+    pub(crate) fn main_key(&self) -> &str {
+        &self.object_key
+    }
+
+    pub(crate) fn retarget(&self, main: &str, epoch: &str) -> Self {
+        Self {
+            bucket: self.bucket.clone(),
+            target_epoch: epoch.into(),
+            object_key: main.into(),
+            note_object_key: derive_note_object_key(main),
+            note_attachment_object_key: derive_note_attachment_object_key(main),
+            note_asset_prefix: derive_note_asset_prefix(main),
+        }
+    }
+
+    // Same bucket and credentials only. Keys are derived by the auto-join coordinator.
+    pub(crate) async fn read_join_object(
+        &self,
+        key: &str,
+        limit: usize,
+    ) -> Result<Option<Vec<u8>>, String> {
+        let request = ReqwestRequest::new(&self.bucket, key, Command::GetObject)
+            .await
+            .map_err(|_| "SYNC_AUTO_JOIN_NETWORK")?;
+        let mut response = request
+            .response()
+            .await
+            .map_err(|_| "SYNC_AUTO_JOIN_NETWORK")?;
+        match response.status().as_u16() {
+            404 => return Ok(None),
+            401 | 403 => return Err("SYNC_AUTO_JOIN_DENIED".into()),
+            200 => {}
+            _ => return Err("SYNC_AUTO_JOIN_NETWORK".into()),
+        }
+        let tags = response
+            .headers()
+            .get_all("etag")
+            .iter()
+            .collect::<Vec<_>>();
+        if tags.len() != 1
+            || !tags[0]
+                .to_str()
+                .is_ok_and(crate::migration_backup::cloud::valid_etag)
+        {
+            return Err("SYNC_AUTO_JOIN_INVALID".into());
+        }
+        if response.content_length().is_some_and(|n| n > limit as u64) {
+            return Err("SYNC_AUTO_JOIN_LIMIT".into());
+        }
+        let mut bytes = Vec::new();
+        while let Some(chunk) = response
+            .chunk()
+            .await
+            .map_err(|_| "SYNC_AUTO_JOIN_NETWORK")?
+        {
+            if chunk.len() > limit - bytes.len() {
+                return Err("SYNC_AUTO_JOIN_LIMIT".into());
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        Ok(Some(bytes))
+    }
+    pub(crate) fn plan_transport(
+        &self,
+    ) -> Result<crate::task_checklist_transport::TaskChecklistTransport, String> {
+        crate::task_checklist_transport::TaskChecklistTransport::planning(
+            &self.bucket,
+            &self.object_key,
+            &[
+                self.note_object_key.clone(),
+                self.note_attachment_object_key.clone(),
+                crate::recurrence_protocol::recurrence_object_key(&self.object_key, &[])?,
+                crate::task_note_link_protocol::object_key(&self.object_key, &[])?,
+                crate::task_checklist_sync::Domain::Items.object_key(&self.object_key, &[])?,
+                crate::task_checklist_sync::Domain::Definitions
+                    .object_key(&self.object_key, &[])?,
+                crate::task_template_sync::object_key(&self.object_key, &[])?,
+            ],
+        )
+    }
     pub(crate) fn is_versioned_space(&self) -> Result<bool, String> {
         Ok(crate::sync_space::scope(&self.object_key)?.is_some())
     }
@@ -202,6 +282,9 @@ pub struct RemoteNoteAttachmentSyncObject {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoteSyncState {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_changed: Option<bool>,
+    pub plan_token: String,
     pub template_token: String,
     pub checklist_token: String,
     pub link_token: String,
@@ -217,6 +300,10 @@ pub struct RemoteSyncState {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ManualSyncResult {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_changed: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plan_remote_token: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub template_remote_token: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -653,6 +740,30 @@ pub fn migration_source_binding(connection: &Connection) -> Result<String, Strin
     let s = read_settings(connection).map_err(|_| "MIGRATION_BACKUP_ASSET_CONFIG")?;
     s.validate_connection()
         .map_err(|_| "MIGRATION_BACKUP_ASSET_CONFIG")?;
+    source_binding(&s)
+}
+
+pub(crate) fn matches_auto_join_source_binding(
+    connection: &Connection,
+    source: &str,
+) -> Result<bool, String> {
+    let mut settings = read_settings(connection).map_err(|_| "MIGRATION_BACKUP_ASSET_CONFIG")?;
+    settings
+        .validate_connection()
+        .map_err(|_| "MIGRATION_BACKUP_ASSET_CONFIG")?;
+    if source_binding(&settings)? == source {
+        return Ok(true);
+    }
+    // Do not change persisted proof hashes. For HTTPS only, the old HTTP opt-in
+    // flag does not change the addressed storage or the transport security.
+    if !settings.endpoint.starts_with("https://") {
+        return Ok(false);
+    }
+    settings.allow_http = !settings.allow_http;
+    Ok(source_binding(&settings)? == source)
+}
+
+fn source_binding(s: &StoredSyncSettings) -> Result<String, String> {
     let bytes = serde_json::to_vec(&serde_json::json!([
         s.endpoint,
         s.region,
@@ -941,6 +1052,29 @@ pub async fn get_remote_state(
     prepared: &PreparedManualSync,
     database: &crate::db::Database,
 ) -> Result<RemoteSyncState, String> {
+    if crate::sync_auto_join::probe(database, prepared).await? {
+        return Ok(RemoteSyncState {
+            target_changed: Some(true),
+            plan_token: String::new(),
+            template_token: String::new(),
+            checklist_token: String::new(),
+            link_token: String::new(),
+            recurrence_token: String::new(),
+            todo_object_exists: false,
+            todo_etag: None,
+            note_object_exists: false,
+            note_etag: None,
+            note_attachment_object_exists: false,
+            note_attachment_etag: None,
+        });
+    }
+    get_current_remote_state(prepared, database).await
+}
+
+pub(crate) async fn get_current_remote_state(
+    prepared: &PreparedManualSync,
+    database: &crate::db::Database,
+) -> Result<RemoteSyncState, String> {
     let guard = || {
         let connection = database
             .connection
@@ -975,7 +1109,11 @@ pub async fn get_remote_state(
         guard()?;
         let template_token = prepared.template_transport()?.probe().await?;
         guard()?;
+        let plan_token = prepared.plan_transport()?.probe().await?;
+        guard()?;
         Ok(RemoteSyncState {
+            target_changed: None,
+            plan_token,
             template_token,
             checklist_token: serde_json::to_string(&[definitions, items])
                 .map_err(|_| "CHECKLIST_TOKEN_INVALID")?,

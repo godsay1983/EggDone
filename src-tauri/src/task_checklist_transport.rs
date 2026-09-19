@@ -14,6 +14,7 @@ use crate::task_checklist_sync::Domain;
 enum WireDomain {
     Checklist(Domain),
     Templates,
+    Planning,
 }
 impl WireDomain {
     fn canonical(self, raw: &str) -> Result<String, String> {
@@ -21,6 +22,9 @@ impl WireDomain {
             Self::Checklist(domain) => domain.canonical(raw),
             Self::Templates => {
                 crate::task_template_protocol::encode(&crate::task_template_protocol::parse(raw)?)
+            }
+            Self::Planning => {
+                crate::daily_plan_protocol::encode(&crate::daily_plan_protocol::parse(raw)?)
             }
         }
     }
@@ -40,6 +44,12 @@ pub struct RemoteChecklist {
     etag: Option<String>,
     owner: Uuid,
     domain: WireDomain,
+}
+
+impl RemoteChecklist {
+    pub(crate) fn etag(&self) -> Option<&str> {
+        self.etag.as_deref()
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -109,6 +119,18 @@ impl TaskChecklistTransport {
             bucket,
             crate::task_template_sync::object_key(todo_key, occupied_keys)?,
             WireDomain::Templates,
+        )
+    }
+
+    pub fn planning(
+        bucket: &Bucket,
+        todo_key: &str,
+        occupied_keys: &[String],
+    ) -> Result<Self, String> {
+        Self::for_key(
+            bucket,
+            crate::daily_plan_sync::object_key(todo_key, occupied_keys)?,
+            WireDomain::Planning,
         )
     }
 

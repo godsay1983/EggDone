@@ -233,6 +233,7 @@ fn entities(link_status: u16) -> Vec<Reply> {
         Reply::new(404, None, b""), // checklist definitions
         Reply::new(404, None, b""), // checklist items
         Reply::new(404, None, b""), // templates
+        Reply::new(404, None, b""), // planning
         Reply::new(404, None, b""),
         Reply::new(200, None, b""),
         Reply::new(404, None, b""),
@@ -253,6 +254,7 @@ fn tail() -> Vec<Reply> {
         Reply::new(404, None, b""), // checklist definitions HEAD
         Reply::new(404, None, b""), // checklist items HEAD
         Reply::new(404, None, b""), // templates HEAD
+        Reply::new(404, None, b""), // planning HEAD
     ]
 }
 
@@ -300,6 +302,13 @@ fn assert_entity_order(server: &Server) {
             let body: serde_json::Value = serde_json::from_slice(&r.body).unwrap();
             assert!(body.is_object());
         }
+        if key == "task-templates.json" {
+            let planning = crate::daily_plan_sync::object_key("account/todos.json", &[]).unwrap();
+            assert!(server
+                .request()
+                .head
+                .starts_with(&format!("GET /rules-test/{planning} ")));
+        }
     }
 }
 
@@ -320,6 +329,7 @@ fn core_orders_entities_links_attachments_and_final_probes() {
             (1, 1, 0)
         );
         assert_eq!(result.link_remote_token.as_deref(), Some("etag:\"link\""));
+        assert_eq!(result.plan_remote_token.as_deref(), Some("missing"));
         assert_eq!(result.todo_remote_etag.as_deref(), Some("\"todos\""));
         assert_eq!(result.note_remote_etag.as_deref(), Some("\"notes\""));
         assert_eq!(
@@ -347,6 +357,11 @@ fn core_orders_entities_links_attachments_and_final_probes() {
                 .head
                 .starts_with(&format!("{method} /rules-test/account/{key} ")));
         }
+        let planning = crate::daily_plan_sync::object_key("account/todos.json", &[]).unwrap();
+        assert!(server
+            .request()
+            .head
+            .starts_with(&format!("HEAD /rules-test/{planning} ")));
     });
 }
 
@@ -488,6 +503,26 @@ fn core_target_change_during_attachment_reply_does_not_ack_the_new_target() {
             assert!(client.state().dirty_domains.contains(&domain.into()));
         }
         assert!(client.runtime.acquire().is_ok());
+    });
+}
+
+#[test]
+fn core_late_plan_edit_stays_dirty_and_does_not_return_a_stale_receipt() {
+    tauri::async_runtime::block_on(async {
+        let client = Arc::new(Client::new(TODO, NOTE));
+        let captured = client.clone();
+        let mut replies = entities(200);
+        let mut final_replies = tail();
+        final_replies[1] = Reply::new(200, None, b"").with_hook(move || {
+            captured.db.connection.lock().unwrap().execute(
+                "INSERT INTO daily_plans(task_uuid,plan_date,included,position,clock,writer,basis) VALUES(?1,'2026-09-19',1,0,1,'desktop','')", [TODO]
+            ).unwrap();
+        });
+        replies.extend(final_replies);
+        let server = core_server(replies);
+        let result = client.sync(server.bucket()).await.unwrap();
+        assert!(result.plan_remote_token.is_none());
+        assert!(client.state().dirty_domains.contains(&"plans".into()));
     });
 }
 

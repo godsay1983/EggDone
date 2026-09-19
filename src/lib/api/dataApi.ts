@@ -23,6 +23,9 @@ export interface ImportPreview {
   template_total: number;
   template_deleted: number;
   template_metadata_included: boolean;
+  planning_metadata_included: boolean;
+  planning_relations: number;
+  planning_completions: number;
   link_deleted: number;
   link_metadata_included: boolean;
   attachment_added: number;

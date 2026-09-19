@@ -100,6 +100,7 @@ fn changed(work: &Work, change: impl FnOnce(&mut serde_json::Value)) -> (Vec<u8>
 #[test]
 fn legacy_v22_without_retry_counter_recovers_then_upgrades_without_data_loss() {
     let (root, mut c, _) = fixture();
+    remove_planning_schema(&c);
     c.execute_batch(
         "ALTER TABLE purge_cleanup DROP COLUMN local_attempts;
         DELETE FROM schema_migrations WHERE version=23;",
@@ -123,7 +124,7 @@ fn legacy_v22_without_retry_counter_recovers_then_upgrades_without_data_loss() {
         c.query_row("SELECT MAX(version) FROM schema_migrations", [], |r| r
             .get::<_, i64>(0))
             .unwrap(),
-        23
+        25
     );
     assert_eq!(
         c.query_row("SELECT local_attempts FROM purge_cleanup", [], |r| r
@@ -144,6 +145,7 @@ fn legacy_v22_without_retry_counter_recovers_then_upgrades_without_data_loss() {
 #[test]
 fn v22_with_existing_retry_counter_keeps_values_and_upgrade_is_idempotent() {
     let (root, mut c, _) = fixture();
+    remove_planning_schema(&c);
     c.execute_batch("UPDATE purge_cleanup SET local_attempts=7; DELETE FROM schema_migrations WHERE version=23;").unwrap();
     let before = capture(&c).unwrap();
     crate::db::migrate(&mut c).unwrap();
@@ -156,6 +158,32 @@ fn v22_with_existing_retry_counter_keeps_values_and_upgrade_is_idempotent() {
     );
     verify_restored(&c, &before).unwrap();
     drop(c);
+    fs::remove_dir_all(root).unwrap();
+}
+
+fn remove_planning_schema(c: &Connection) {
+    crate::db::remove_daily_plan_schema_for_test(c);
+}
+
+#[test]
+fn planning_recovery_preserves_evidence_membership_and_receipts() {
+    let (root, mut c, _) = fixture();
+    c.execute_batch("INSERT INTO daily_plan_events VALUES('11111111-1111-4111-8111-111111111111','1:61:0:-:-');
+        INSERT INTO daily_plans VALUES('11111111-1111-4111-8111-111111111111','2026-09-19',1,0,1,'a','1:61:0:-:-');
+        INSERT INTO daily_plan_operations VALUES('operation','payload');").unwrap();
+    let work = prepare(&mut c, 50).unwrap();
+    let mut target = Connection::open_in_memory().unwrap();
+    restore(&mut target, &work.data, &work.plan).unwrap();
+    verify_restored(&target, &work.data).unwrap();
+    assert_eq!(
+        target
+            .query_row("SELECT COUNT(*) FROM daily_plans", [], |r| r
+                .get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
+    drop(c);
+    drop(target);
     fs::remove_dir_all(root).unwrap();
 }
 

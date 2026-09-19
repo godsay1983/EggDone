@@ -64,7 +64,8 @@ pub fn get_snapshot(connection: &Connection) -> Result<SyncRuntimeSnapshot, Stri
                     pending_attachment_count, updated_at,
                     (SELECT revision>synced_revision FROM task_note_link_sync_state WHERE id=1),
                     EXISTS(SELECT 1 FROM task_checklist_sync_state WHERE revision>synced_revision),
-                    EXISTS(SELECT 1 FROM task_template_sync_state WHERE revision>synced_revision)
+                    EXISTS(SELECT 1 FROM task_template_sync_state WHERE revision>synced_revision),
+                    EXISTS(SELECT 1 FROM daily_plan_sync_state WHERE revision>synced_revision)
              FROM sync_runtime_state WHERE id = ?1",
             params![STATE_ID],
             |row| {
@@ -79,6 +80,9 @@ pub fn get_snapshot(connection: &Connection) -> Result<SyncRuntimeSnapshot, Stri
                 }
                 if row.get::<_, bool>(12)? {
                     domains.push("templates".into());
+                }
+                if row.get::<_, bool>(13)? {
+                    domains.push("plans".into());
                 }
                 Ok(SyncRuntimeSnapshot {
                     schema_version: row.get(0)?,

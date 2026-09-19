@@ -38,6 +38,7 @@ fn entity_replies() -> Vec<Reply> {
         Reply::new(404, None, b""), // checklist definitions
         Reply::new(404, None, b""), // checklist items
         Reply::new(404, None, b""), // templates
+        Reply::new(404, None, b""), // planning
         Reply::new(404, None, b""),
         Reply::new(200, None, b""),
     ]
@@ -87,6 +88,14 @@ fn actual_signed_transport_entity_order_and_bounded_conflict_retry() {
                     assert!(r
                         .head
                         .starts_with(&format!("{method} /rules-test/account/{key} ")));
+                    if key == "task-templates.json" {
+                        let planning =
+                            crate::daily_plan_sync::object_key("account/todos.json", &[]).unwrap();
+                        assert!(server
+                            .request()
+                            .head
+                            .starts_with(&format!("GET /rules-test/{planning} ")));
+                    }
                     if key == "task-note-links.json" && method == "PUT" {
                         assert!(r.head.to_lowercase().contains("if-none-match: *"));
                         protocol::parse_document(std::str::from_utf8(&r.body).unwrap()).unwrap();

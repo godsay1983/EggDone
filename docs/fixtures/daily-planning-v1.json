@@ -1,0 +1,461 @@
+{
+  "format_version": 1,
+  "valid": [
+    {
+      "id": "empty",
+      "document": {
+        "format_version": 1,
+        "events": [],
+        "plans": [],
+        "completions": []
+      }
+    },
+    {
+      "id": "lifecycle-receipt",
+      "document": {
+        "format_version": 1,
+        "events": [
+          {
+            "task_uuid": "11111111-1111-4111-8111-111111111111",
+            "event_id": "10:646576696365:1:-:-"
+          }
+        ],
+        "plans": [
+          {
+            "task_uuid": "11111111-1111-4111-8111-111111111111",
+            "plan_date": "2026-09-19",
+            "included": true,
+            "position": 10,
+            "clock": 100,
+            "writer": "device",
+            "basis": ""
+          }
+        ],
+        "completions": [
+          {
+            "task_uuid": "11111111-1111-4111-8111-111111111111",
+            "plan_date": "2026-09-19",
+            "event_id": "10:646576696365:1:-:-",
+            "basis": "",
+            "position": 10
+          }
+        ]
+      }
+    },
+    {
+      "id": "boundary-date-clock",
+      "document": {
+        "format_version": 1,
+        "events": [],
+        "plans": [
+          {
+            "task_uuid": "11111111-1111-4111-8111-111111111111",
+            "plan_date": "0001-01-01",
+            "included": false,
+            "position": 9007199254740991,
+            "clock": 9007199254740991,
+            "writer": "a._:-",
+            "basis": ""
+          }
+        ],
+        "completions": []
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "id": "invalid-leap-day",
+      "document": {
+        "format_version": 1,
+        "events": [],
+        "plans": [
+          {
+            "task_uuid": "11111111-1111-4111-8111-111111111111",
+            "plan_date": "2025-02-29",
+            "included": true,
+            "position": 10,
+            "clock": 100,
+            "writer": "device",
+            "basis": ""
+          }
+        ],
+        "completions": []
+      }
+    },
+    {
+      "id": "year-zero",
+      "document": {
+        "format_version": 1,
+        "events": [],
+        "plans": [
+          {
+            "task_uuid": "11111111-1111-4111-8111-111111111111",
+            "plan_date": "0000-01-01",
+            "included": true,
+            "position": 10,
+            "clock": 100,
+            "writer": "device",
+            "basis": ""
+          }
+        ],
+        "completions": []
+      }
+    },
+    {
+      "id": "fractional-position",
+      "document": {
+        "format_version": 1,
+        "events": [],
+        "plans": [
+          {
+            "task_uuid": "11111111-1111-4111-8111-111111111111",
+            "plan_date": "2026-09-19",
+            "included": true,
+            "position": 0.5,
+            "clock": 100,
+            "writer": "device",
+            "basis": ""
+          }
+        ],
+        "completions": []
+      }
+    },
+    {
+      "id": "unsafe-clock",
+      "document": {
+        "format_version": 1,
+        "events": [],
+        "plans": [
+          {
+            "task_uuid": "11111111-1111-4111-8111-111111111111",
+            "plan_date": "2026-09-19",
+            "included": true,
+            "position": 10,
+            "clock": 9007199254740992,
+            "writer": "device",
+            "basis": ""
+          }
+        ],
+        "completions": []
+      }
+    },
+    {
+      "id": "non-ascii-writer",
+      "document": {
+        "format_version": 1,
+        "events": [],
+        "plans": [
+          {
+            "task_uuid": "11111111-1111-4111-8111-111111111111",
+            "plan_date": "2026-09-19",
+            "included": true,
+            "position": 10,
+            "clock": 100,
+            "writer": "é",
+            "basis": ""
+          }
+        ],
+        "completions": []
+      }
+    },
+    {
+      "id": "unsorted-basis",
+      "document": {
+        "format_version": 1,
+        "events": [],
+        "plans": [
+          {
+            "task_uuid": "11111111-1111-4111-8111-111111111111",
+            "plan_date": "2026-09-19",
+            "included": true,
+            "position": 10,
+            "clock": 100,
+            "writer": "device",
+            "basis": "2:61:0:-:-|1:61:0:-:-"
+          }
+        ],
+        "completions": []
+      }
+    },
+    {
+      "id": "duplicate-basis",
+      "document": {
+        "format_version": 1,
+        "events": [],
+        "plans": [
+          {
+            "task_uuid": "11111111-1111-4111-8111-111111111111",
+            "plan_date": "2026-09-19",
+            "included": true,
+            "position": 10,
+            "clock": 100,
+            "writer": "device",
+            "basis": "1:61:0:-:-|1:61:0:-:-"
+          }
+        ],
+        "completions": []
+      }
+    },
+    {
+      "id": "empty-hex",
+      "document": {
+        "format_version": 1,
+        "events": [
+          {
+            "task_uuid": "11111111-1111-4111-8111-111111111111",
+            "event_id": "1::0:-:-"
+          }
+        ],
+        "plans": [],
+        "completions": []
+      }
+    },
+    {
+      "id": "uppercase-hex",
+      "document": {
+        "format_version": 1,
+        "events": [
+          {
+            "task_uuid": "11111111-1111-4111-8111-111111111111",
+            "event_id": "1:AA:0:-:-"
+          }
+        ],
+        "plans": [],
+        "completions": []
+      }
+    },
+    {
+      "id": "leading-zero-stamp",
+      "document": {
+        "format_version": 1,
+        "events": [
+          {
+            "task_uuid": "11111111-1111-4111-8111-111111111111",
+            "event_id": "01:61:0:-:-"
+          }
+        ],
+        "plans": [],
+        "completions": []
+      }
+    },
+    {
+      "id": "odd-hex",
+      "document": {
+        "format_version": 1,
+        "events": [
+          {
+            "task_uuid": "11111111-1111-4111-8111-111111111111",
+            "event_id": "1:6:0:-:-"
+          }
+        ],
+        "plans": [],
+        "completions": []
+      }
+    },
+    {
+      "id": "own-completion-event-in-basis",
+      "document": {
+        "format_version": 1,
+        "events": [],
+        "plans": [],
+        "completions": [
+          {
+            "task_uuid": "11111111-1111-4111-8111-111111111111",
+            "plan_date": "2026-09-19",
+            "event_id": "10:646576696365:1:-:-",
+            "basis": "10:646576696365:1:-:-",
+            "position": 10
+          }
+        ]
+      }
+    },
+    {
+      "id": "unknown-top-field",
+      "document": {
+        "format_version": 1,
+        "events": [],
+        "plans": [],
+        "completions": [],
+        "extra": true
+      }
+    },
+    {
+      "id": "duplicate-identity",
+      "document": {
+        "format_version": 1,
+        "events": [],
+        "plans": [
+          {
+            "task_uuid": "11111111-1111-4111-8111-111111111111",
+            "plan_date": "2026-09-19",
+            "included": true,
+            "position": 10,
+            "clock": 100,
+            "writer": "device",
+            "basis": ""
+          },
+          {
+            "task_uuid": "11111111-1111-4111-8111-111111111111",
+            "plan_date": "2026-09-19",
+            "included": true,
+            "position": 10,
+            "clock": 100,
+            "writer": "device",
+            "basis": ""
+          }
+        ],
+        "completions": []
+      }
+    }
+  ],
+  "merges": [
+    {
+      "id": "numeric-position-tie",
+      "left": {
+        "format_version": 1,
+        "events": [],
+        "plans": [
+          {
+            "task_uuid": "11111111-1111-4111-8111-111111111111",
+            "plan_date": "2026-09-19",
+            "included": true,
+            "position": 2,
+            "clock": 100,
+            "writer": "device",
+            "basis": ""
+          }
+        ],
+        "completions": []
+      },
+      "right": {
+        "format_version": 1,
+        "events": [],
+        "plans": [
+          {
+            "task_uuid": "11111111-1111-4111-8111-111111111111",
+            "plan_date": "2026-09-19",
+            "included": true,
+            "position": 10,
+            "clock": 100,
+            "writer": "device",
+            "basis": ""
+          }
+        ],
+        "completions": []
+      },
+      "expected": {
+        "format_version": 1,
+        "events": [],
+        "plans": [
+          {
+            "task_uuid": "11111111-1111-4111-8111-111111111111",
+            "plan_date": "2026-09-19",
+            "included": true,
+            "position": 10,
+            "clock": 100,
+            "writer": "device",
+            "basis": ""
+          }
+        ],
+        "completions": []
+      }
+    },
+    {
+      "id": "false-before-true",
+      "left": {
+        "format_version": 1,
+        "events": [],
+        "plans": [
+          {
+            "task_uuid": "11111111-1111-4111-8111-111111111111",
+            "plan_date": "2026-09-19",
+            "included": false,
+            "position": 99,
+            "clock": 100,
+            "writer": "device",
+            "basis": ""
+          }
+        ],
+        "completions": []
+      },
+      "right": {
+        "format_version": 1,
+        "events": [],
+        "plans": [
+          {
+            "task_uuid": "11111111-1111-4111-8111-111111111111",
+            "plan_date": "2026-09-19",
+            "included": true,
+            "position": 10,
+            "clock": 100,
+            "writer": "device",
+            "basis": ""
+          }
+        ],
+        "completions": []
+      },
+      "expected": {
+        "format_version": 1,
+        "events": [],
+        "plans": [
+          {
+            "task_uuid": "11111111-1111-4111-8111-111111111111",
+            "plan_date": "2026-09-19",
+            "included": true,
+            "position": 10,
+            "clock": 100,
+            "writer": "device",
+            "basis": ""
+          }
+        ],
+        "completions": []
+      }
+    },
+    {
+      "id": "completion-numeric-position",
+      "left": {
+        "format_version": 1,
+        "events": [],
+        "plans": [],
+        "completions": [
+          {
+            "task_uuid": "11111111-1111-4111-8111-111111111111",
+            "plan_date": "2026-09-19",
+            "event_id": "10:646576696365:1:-:-",
+            "basis": "",
+            "position": 2
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "events": [],
+        "plans": [],
+        "completions": [
+          {
+            "task_uuid": "11111111-1111-4111-8111-111111111111",
+            "plan_date": "2026-09-19",
+            "event_id": "10:646576696365:1:-:-",
+            "basis": "",
+            "position": 10
+          }
+        ]
+      },
+      "expected": {
+        "format_version": 1,
+        "events": [],
+        "plans": [],
+        "completions": [
+          {
+            "task_uuid": "11111111-1111-4111-8111-111111111111",
+            "plan_date": "2026-09-19",
+            "event_id": "10:646576696365:1:-:-",
+            "basis": "",
+            "position": 10
+          }
+        ]
+      }
+    }
+  ],
+  "keys": []
+}

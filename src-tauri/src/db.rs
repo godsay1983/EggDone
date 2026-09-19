@@ -9,7 +9,7 @@ use rusqlite::{params, Connection, Transaction};
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
-const CURRENT_SCHEMA_VERSION: i64 = 23;
+const CURRENT_SCHEMA_VERSION: i64 = 25;
 const DEVICE_ID_KEY: &str = "device_id";
 
 pub struct Database {
@@ -110,6 +110,12 @@ pub(crate) fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {
             )?;
         }
         Ok(())
+    })?;
+    apply_migration(connection, 24, |transaction| {
+        transaction.execute_batch(include_str!("migrations/024_daily_planning.sql"))
+    })?;
+    apply_migration(connection, 25, |transaction| {
+        transaction.execute_batch(include_str!("migrations/025_daily_plan_remote_guard.sql"))
     })?;
     debug_assert_eq!(schema_version(connection)?, CURRENT_SCHEMA_VERSION);
     Ok(())
@@ -666,6 +672,14 @@ fn database_path(app: &AppHandle) -> Result<PathBuf, Box<dyn std::error::Error>>
 }
 
 #[cfg(test)]
+pub(crate) fn remove_daily_plan_schema_for_test(connection: &Connection) {
+    connection.execute_batch("DROP TRIGGER daily_plan_task_lifecycle; DROP TRIGGER daily_plan_task_removed;
+        DROP VIEW daily_plan_basis; DROP TABLE daily_plans; DROP TABLE daily_plan_events;
+        DROP TABLE daily_plan_completions; DROP TABLE daily_plan_operations; DROP TABLE daily_plan_sync_state;
+        DELETE FROM schema_migrations WHERE version>=24;").unwrap();
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -918,6 +932,7 @@ mod tests {
         let mut connection = Connection::open_in_memory().unwrap();
         configure_connection(&connection).unwrap();
         migrate(&mut connection).unwrap();
+        remove_daily_plan_schema_for_test(&connection);
         remove_sync_runtime_migration(&connection);
         connection
             .execute_batch(

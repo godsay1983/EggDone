@@ -134,9 +134,25 @@ pub(crate) fn merge_in_transaction(
     remote: &NoteAttachmentSyncDocument,
     generated_at: i64,
 ) -> Result<NoteAttachmentSyncDocument, String> {
-    let local = build_document(transaction, generated_at)?;
+    merge_with_remote_evidence(transaction, remote, generated_at, true, false)
+}
+
+pub(crate) fn merge_with_remote_evidence(
+    transaction: &Connection,
+    remote: &NoteAttachmentSyncDocument,
+    generated_at: i64,
+    capture_evidence: bool,
+    include_pending: bool,
+) -> Result<NoteAttachmentSyncDocument, String> {
+    let local = if include_pending {
+        build_backup_document(transaction, generated_at)?
+    } else {
+        build_document(transaction, generated_at)?
+    };
     let mut merged = merge_documents(&local, remote, generated_at)?;
-    crate::purge_remote::capture(transaction, &remote.attachments)?;
+    if capture_evidence {
+        crate::purge_remote::capture(transaction, &remote.attachments)?;
+    }
     let index = crate::lifecycle_sync::Index::read(transaction)?;
     merged
         .attachments

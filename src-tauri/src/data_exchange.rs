@@ -22,7 +22,7 @@ use crate::{
     tray::PanelState,
 };
 
-const FORMAT_VERSION: u32 = 6;
+const FORMAT_VERSION: u32 = 7;
 const BACKUP_FORMAT_VERSION: u32 = 1;
 const BACKUP_MAX_ENTRY_COUNT: usize = 10_000;
 const BACKUP_MAX_TOTAL_BYTES: u64 = 512 * 1024 * 1024;
@@ -168,6 +168,9 @@ pub struct ImportPreview {
     template_total: usize,
     template_deleted: usize,
     template_metadata_included: bool,
+    planning_metadata_included: bool,
+    planning_relations: usize,
+    planning_completions: usize,
     attachment_added: usize,
     attachment_updated: usize,
     attachment_unchanged: usize,
@@ -1065,18 +1068,28 @@ fn capture_export(
         note_attachment_sync::build_document(&tx, exported_at)?
     };
     let terminals = crate::purge::terminals(&tx)?;
+    let planning = crate::daily_plan_store::read_in_transaction(&tx)?.document;
+    let has_planning = !crate::daily_plan_protocol::is_empty(&planning);
     let mut extra = std::collections::BTreeMap::new();
-    if !terminals.is_empty() {
+    if !terminals.is_empty() || has_planning {
         extra.insert(
             "lifecycle_terminals".into(),
             serde_json::to_value(&terminals).map_err(|_| "PURGE_LEDGER_INVALID")?,
         );
     }
+    if has_planning {
+        extra.insert(
+            "daily_planning".into(),
+            serde_json::to_value(&planning).map_err(|_| "PLAN_INVALID")?,
+        );
+    }
     let export = TodoExport {
-        format_version: if terminals.is_empty() {
+        format_version: if has_planning {
+            7
+        } else if terminals.is_empty() {
             5
         } else {
-            FORMAT_VERSION
+            6
         },
         exported_at,
         groups: read_all_groups(&tx)?,
@@ -1094,6 +1107,16 @@ fn capture_export(
     validate_import_mode(&export, full)?;
     tx.commit().map_err(database_error)?;
     Ok(export)
+}
+
+#[cfg(test)]
+pub(crate) fn planning_test_export(connection: &mut Connection) -> Result<String, String> {
+    serde_json::to_string(&capture_export(connection, false, 20)?).map_err(|e| e.to_string())
+}
+#[cfg(test)]
+pub(crate) fn planning_test_import(connection: &mut Connection, raw: &str) -> Result<(), String> {
+    let document: TodoExport = serde_json::from_str(raw).map_err(|e| e.to_string())?;
+    merge_import(connection, document).map(|_| ())
 }
 
 fn read_import_file(path: &Path) -> Result<TodoExport, String> {
@@ -1179,14 +1202,96 @@ mod purge_backup_tests {
     }
 }
 
+#[cfg(test)]
+mod daily_plan_backup_tests {
+    use super::*;
+    use crate::daily_plan_store as plan;
+    const ID: &str = "123e4567-e89b-42d3-a456-426614174000";
+    const DAY: &str = "2026-09-19";
+    fn db() -> Connection {
+        let mut c = Connection::open_in_memory().unwrap();
+        crate::db::migrate(&mut c).unwrap();
+        c
+    }
+    #[test]
+    #[ignore = "Invoked by the isolated cross-client planning backup harness"]
+    fn daily_plan_backup_cross_client_exchange() {
+        let input = std::env::var("EGGDONE_PLAN_BACKUP_INPUT").unwrap();
+        let output = std::env::var("EGGDONE_PLAN_BACKUP_OUTPUT").unwrap();
+        let mut c = db();
+        merge_import(&mut c, read_import_file(Path::new(&input)).unwrap()).unwrap();
+        let export = capture_export(&mut c, false, 4000).unwrap();
+        assert_eq!(export.format_version, 7);
+        fs::write(output, serde_json::to_vec(&export).unwrap()).unwrap();
+    }
+    #[test]
+    fn v7_roundtrip_preserves_plans_and_legacy_missing_domain() {
+        let mut source = db();
+        source.execute("INSERT INTO todos(uuid,title,sort_order,created_at,updated_at,updated_by) VALUES(?1,'planned',0,1,1,'test')",[ID]).unwrap();
+        let legacy = capture_export(&mut source, false, 2).unwrap();
+        assert!(
+            !build_preview(&source, Path::new("legacy.json"), &legacy)
+                .unwrap()
+                .planning_metadata_included
+        );
+        let r = plan::DailyPlanWrite {
+            operation_uuid: uuid::Uuid::new_v4().to_string(),
+            task_uuid: ID.into(),
+            plan_date: DAY.into(),
+            action: "add".into(),
+            expected: plan::list(&mut source, DAY).unwrap().revision,
+        };
+        plan::write(&mut source, &r, 3, "test").unwrap();
+        let export = capture_export(&mut source, false, 4).unwrap();
+        let preview = build_preview(&source, Path::new("planning.json"), &export).unwrap();
+        assert!(preview.planning_metadata_included);
+        assert_eq!(preview.planning_relations, 1);
+        assert_eq!(preview.planning_completions, 0);
+        assert_eq!(export.format_version, 7);
+        assert_eq!(export.extra.len(), 2);
+        let raw = serde_json::to_string(&export).unwrap();
+        let mut target = db();
+        merge_import(&mut target, serde_json::from_str(&raw).unwrap()).unwrap();
+        assert_eq!(plan::list(&mut target, DAY).unwrap().current.len(), 1);
+        merge_import(&mut target, legacy).unwrap();
+        assert_eq!(plan::list(&mut target, DAY).unwrap().current.len(), 1);
+        let mut invalid: TodoExport = serde_json::from_str(&raw).unwrap();
+        invalid.format_version = 6;
+        assert!(validate_import(&invalid).is_err());
+        let mut invalid = export;
+        invalid.extra.remove("daily_planning");
+        assert!(validate_import(&invalid).is_err());
+        target
+            .execute(
+                "UPDATE todos SET completed=1,updated_at=5 WHERE uuid=?1",
+                [ID],
+            )
+            .unwrap();
+        target
+            .execute(
+                "UPDATE todos SET completed=0,updated_at=6 WHERE uuid=?1",
+                [ID],
+            )
+            .unwrap();
+        let export = capture_export(&mut target, false, 7).unwrap();
+        let mut recovered = db();
+        merge_import(&mut recovered, export).unwrap();
+        assert!(plan::list(&mut recovered, DAY).unwrap().current.is_empty());
+    }
+}
+
 fn import_terminals(import: &TodoExport) -> Result<Vec<crate::purge::Terminal>, String> {
     if import.format_version < 6 {
-        if import.extra.contains_key("lifecycle_terminals") {
+        if import.extra.contains_key("lifecycle_terminals")
+            || import.extra.contains_key("daily_planning")
+        {
             return Err("PURGE_BACKUP_VERSION".into());
         }
         return Ok(Vec::new());
     }
-    if import.format_version != 6 || import.extra.len() != 1 {
+    if !matches!(import.format_version, 6 | 7)
+        || import.extra.len() != if import.format_version == 7 { 2 } else { 1 }
+    {
         return Err("PURGE_BACKUP_VERSION".into());
     }
     let records: Vec<crate::purge::Terminal> = serde_json::from_value(
@@ -1201,6 +1306,16 @@ fn import_terminals(import: &TodoExport) -> Result<Vec<crate::purge::Terminal>, 
     Ok(records)
 }
 
+fn import_planning(
+    import: &TodoExport,
+) -> Result<Option<crate::daily_plan_protocol::Document>, String> {
+    match (import.format_version, import.extra.get("daily_planning")) {
+        (7, Some(value)) => Ok(Some(crate::daily_plan_protocol::parse(&value.to_string())?)),
+        (0..=6, None) => Ok(None),
+        _ => Err("PLAN_INVALID".into()),
+    }
+}
+
 fn validate_import(import: &TodoExport) -> Result<(), String> {
     validate_import_mode(import, false)
 }
@@ -1211,6 +1326,7 @@ fn validate_complete_import(import: &TodoExport) -> Result<(), String> {
 
 fn validate_import_mode(import: &TodoExport, expect_attachment_files: bool) -> Result<(), String> {
     let terminals = import_terminals(import)?;
+    import_planning(import)?;
     if terminals.iter().any(|terminal| {
         if terminal.kind == "todo" {
             import.todos.iter().any(|todo| todo.uuid == terminal.uuid)
@@ -1222,7 +1338,7 @@ fn validate_import_mode(import: &TodoExport, expect_attachment_files: bool) -> R
     }
     match (import.format_version, &import.recurrence) {
         (1, None) => {}
-        (2 | 3 | 4 | 5 | 6, Some(backup)) => {
+        (2 | 3 | 4 | 5 | 6 | 7, Some(backup)) => {
             crate::recurrence_backup::validate(backup)?;
             if backup
                 .instances
@@ -1236,7 +1352,7 @@ fn validate_import_mode(import: &TodoExport, expect_attachment_files: bool) -> R
     }
     match (import.format_version, &import.task_note_links) {
         (1 | 2, None) => {}
-        (3 | 4 | 5 | 6, Some(links)) => {
+        (3 | 4 | 5 | 6 | 7, Some(links)) => {
             crate::task_note_link_protocol::encode_document(links)?;
         }
         _ => return Err("INVALID_TASK_NOTE_LINK_BACKUP_VERSION".into()),
@@ -1247,8 +1363,8 @@ fn validate_import_mode(import: &TodoExport, expect_attachment_files: bool) -> R
         &import.task_checklist_definitions,
     ) {
         (1..=3, None, None) => {}
-        (4 | 5 | 6, Some(items), Some(definitions))
-            if import.extra.is_empty() || import.format_version == 6 =>
+        (4 | 5 | 6 | 7, Some(items), Some(definitions))
+            if import.extra.is_empty() || matches!(import.format_version, 6 | 7) =>
         {
             crate::task_checklist_protocol::encode_items(items)?;
             crate::task_checklist_protocol::encode_definitions(definitions)?;
@@ -1466,6 +1582,7 @@ fn build_preview(
     let (attachment_added, attachment_updated, attachment_unchanged) =
         count_attachment_changes(connection, &import.note_attachments)?;
     let parent_uuids: HashSet<&str> = import.todos.iter().map(|todo| todo.uuid.as_str()).collect();
+    let planning = import_planning(import)?;
 
     Ok(ImportPreview {
         path: path.to_string_lossy().into_owned(),
@@ -1519,6 +1636,9 @@ fn build_preview(
                 .count()
         }),
         template_metadata_included: import.task_templates.is_some(),
+        planning_metadata_included: planning.is_some(),
+        planning_relations: planning.as_ref().map_or(0, |d| d.plans.len()),
+        planning_completions: planning.as_ref().map_or(0, |d| d.completions.len()),
         recurrence_total: import
             .recurrence
             .as_ref()
@@ -1597,6 +1717,7 @@ fn merge_import_in_transaction(
     import: TodoExport,
 ) -> Result<ImportResult, String> {
     let terminals = import_terminals(&import)?;
+    let planning = import_planning(&import)?;
     crate::purge::restore_terminals(connection, &terminals)?;
     let index = crate::lifecycle_sync::Index::read(connection)?;
     if import.todos.iter().any(|todo| index.todo(&todo.uuid))
@@ -1610,7 +1731,13 @@ fn merge_import_in_transaction(
     }
     let note_changes = count_note_changes(connection, &import.notes)?;
     let attachment_changes = count_attachment_changes(connection, &import.note_attachments)?;
-    let mut result = merge_transfer(connection, &import.groups, &import.todos)?;
+    let mut result = if planning.is_some() {
+        crate::daily_plan_store::without_lifecycle_events(connection, || {
+            merge_transfer(connection, &import.groups, &import.todos)
+        })?
+    } else {
+        merge_transfer(connection, &import.groups, &import.todos)?
+    };
     result.note_added = note_changes.0;
     result.note_updated = note_changes.1;
     result.note_unchanged = note_changes.2;
@@ -1651,6 +1778,9 @@ fn merge_import_in_transaction(
         import.task_checklist_definitions.as_ref(),
     )?;
     crate::task_template_backup::restore(connection, import.task_templates.as_ref())?;
+    if let Some(planning) = planning {
+        crate::daily_plan_store::merge_in_transaction(connection, &planning)?;
+    }
     crate::archive::invalidate_in_transaction(connection)?;
     Ok(result)
 }

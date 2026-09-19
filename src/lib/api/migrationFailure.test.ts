@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { migrationFailure } from './migrationFailure';
 
 describe('migration failure diagnostics', () => {
+  it('explains that planning does not require the legacy migration tool', () => {
+    expect(migrationFailure('MIGRATION_PLANNING_ACTIVE')).toEqual({
+      message: 'dailyPlan.migrationBlocked', diagnostic: 'MIGRATION_PLANNING_ACTIVE',
+    });
+  });
   it.each([
     ['ASSET_NOT_FOUND', 'assetNotFound'], ['ASSET_DENIED', 'assetDenied'],
     ['ASSET_DOWNLOAD', 'assetDownload'], ['ASSET_INVALID', 'assetMissing'],

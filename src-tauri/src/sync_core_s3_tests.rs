@@ -17,6 +17,8 @@ mod purge_compat;
 
 #[path = "sync_core_activation_s3_tests.rs"]
 mod activation;
+#[path = "sync_core_auto_join_s3_tests.rs"]
+mod auto_join;
 #[path = "sync_core_migration_s3_tests.rs"]
 mod migration;
 #[path = "sync_core_purge_remote_s3_tests.rs"]

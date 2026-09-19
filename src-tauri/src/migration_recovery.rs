@@ -47,6 +47,11 @@ fn column_mapping(table: &Table, actual: &[&str], schema: i64) -> Result<Vec<usi
 fn verify_restored(c: &Connection, data: &[u8]) -> Result<(), String> {
     let expected: Snapshot = serde_json::from_slice(data).map_err(|_| invalid())?;
     let mut actual: Snapshot = serde_json::from_slice(&capture(c)?).map_err(|_| invalid())?;
+    if expected.schema < 24 {
+        actual
+            .tables
+            .truncate(tables_for_schema(expected.schema).len());
+    }
     if actual.tables.len() != expected.tables.len() {
         return Err(invalid());
     }
@@ -87,8 +92,8 @@ fn restore(c: &mut Connection, data: &[u8], plan: &BackupPlan) -> Result<(), Str
     let snapshot: Snapshot = serde_json::from_slice(data).map_err(|_| invalid())?;
     if snapshot.format != "eggdone.local-migration-recovery.v1"
         || snapshot.client != "desktop"
-        || ![22, 23].contains(&snapshot.schema)
-        || snapshot.tables.len() != TABLES.len()
+        || ![22, 23, 24, 25].contains(&snapshot.schema)
+        || snapshot.tables.len() != tables_for_schema(snapshot.schema).len()
     {
         return Err(invalid());
     }
@@ -102,7 +107,8 @@ fn restore(c: &mut Connection, data: &[u8], plan: &BackupPlan) -> Result<(), Str
     crate::db::configure_connection(c).map_err(db)?;
     crate::db::migrate(c).map_err(db)?;
     let tx = c.transaction().map_err(db)?;
-    for (table, expected) in snapshot.tables.iter().zip(TABLES.iter()) {
+    let source_tables = tables_for_schema(snapshot.schema);
+    for (table, expected) in snapshot.tables.iter().zip(source_tables.iter()) {
         if table.name != *expected || table.rows.len() > 100_000 {
             return Err(invalid());
         }
@@ -126,18 +132,21 @@ fn restore(c: &mut Connection, data: &[u8], plan: &BackupPlan) -> Result<(), Str
     }
     // Clear only fresh migration seeds. Keep triggers enabled, load guards before business rows,
     // and restore sync counters after business inserts so no artificial dirty revisions survive.
-    for table in TABLES.iter().rev() {
+    for table in source_tables.iter().rev() {
         tx.execute(&format!("DELETE FROM {table}"), [])
             .map_err(db)?;
     }
     let order = ["lifecycle_terminals", "purge_cleanup"].into_iter().chain(
-        TABLES
+        source_tables
             .iter()
             .copied()
             .filter(|t| !["lifecycle_terminals", "purge_cleanup"].contains(t)),
     );
     for name in order {
-        let index = TABLES.iter().position(|t| *t == name).ok_or_else(invalid)?;
+        let index = source_tables
+            .iter()
+            .position(|t| *t == name)
+            .ok_or_else(invalid)?;
         let table = &snapshot.tables[index];
         // Names/columns were matched against the newly migrated schema, never taken as arbitrary SQL.
         let sql = format!(

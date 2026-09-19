@@ -527,7 +527,7 @@ mod tests {
                         server.bucket(),
                     );
                     assert_eq!(
-                        s3_sync::get_remote_state(&prepared, &database)
+                        s3_sync::get_current_remote_state(&prepared, &database)
                             .await
                             .err()
                             .unwrap(),

@@ -1294,16 +1294,36 @@ pub async fn sync_now(
     asset_store: State<'_, NoteAssetStore>,
 ) -> Result<ManualSyncResult, String> {
     let _guard = runtime.acquire().map_err(crate::error_codes::sync)?;
-    let prepared = {
+    let mut prepared = {
         let connection = lock_database(&database)?;
         let prepared =
             s3_sync::prepare_manual_sync(&connection).map_err(crate::error_codes::sync)?;
         sync_runtime_state::begin_attempt(&connection)?;
         prepared
     };
-    let outcome = sync_now_inner(&database, &runtime, &asset_store, &prepared, || {
-        let _ = app.emit_to("main", "notes-changed", ());
-    })
+    let mut target_changed = false;
+    let outcome: Result<ManualSyncResult, String> = async {
+        if let Some(next) =
+            crate::sync_auto_join::follow(&database, &runtime, &asset_store, &prepared).await?
+        {
+            prepared = next;
+            target_changed = true;
+            let _ = app.emit_to("main", "sync-target-changed", ());
+        }
+        let mut result = sync_now_inner(&database, &runtime, &asset_store, &prepared, || {
+            let _ = app.emit_to("main", "notes-changed", ());
+        })
+        .await
+        .map_err(|error| {
+            if target_changed {
+                format!("SYNC_AUTO_JOIN_SYNC_PENDING:{error}")
+            } else {
+                error
+            }
+        })?;
+        result.target_changed = target_changed.then_some(true);
+        Ok(result)
+    }
     .await;
     // A partial merge is still visible locally and may have changed reminder scheduling.
     tray::update_task_badge(&app);
@@ -1520,7 +1540,9 @@ async fn sync_now_inner(
     }
 
     ensure_sync_target(&database, prepared)?;
-    let state = s3_sync::get_remote_state(&prepared, &database).await.ok();
+    let state = s3_sync::get_current_remote_state(&prepared, &database)
+        .await
+        .ok();
     ensure_sync_target(&database, prepared)?;
     let conflict_retried = entity_conflict_retried || attachment_conflict_retried;
     let sync_message = if conflict_retried {
@@ -1529,6 +1551,11 @@ async fn sync_now_inner(
         "任务、便签和附件同步完成".to_string()
     };
     Ok(ManualSyncResult {
+        target_changed: None,
+        plan_remote_token: crate::daily_plan_session::final_token(
+            database,
+            &entities.plan_receipt,
+        )?,
         checklist_remote_token: entities.checklist_token,
         template_remote_token: entities.template_token,
         link_remote_token: entities.link_token,

@@ -36,7 +36,20 @@ const TABLES: &[&str] = &[
     "task_template_sync_state",
     "sync_settings",
     "app_metadata",
+    "daily_plan_events",
+    "daily_plans",
+    "daily_plan_completions",
+    "daily_plan_operations",
+    "daily_plan_sync_state",
 ];
+
+fn tables_for_schema(schema: i64) -> &'static [&'static str] {
+    if schema < 24 {
+        &TABLES[..TABLES.len() - 5]
+    } else {
+        TABLES
+    }
+}
 
 #[path = "migration_recovery.rs"]
 mod recovery;
@@ -121,12 +134,12 @@ fn capture(c: &Connection) -> Result<Vec<u8>, String> {
             r.get(0)
         })
         .map_err(db)?;
-    if ![22, 23].contains(&schema) {
+    if ![22, 23, 24, 25].contains(&schema) {
         return Err("MIGRATION_BACKUP_INVALID".into());
     }
     let mut tables = Vec::new();
     let mut bytes_read = 0usize;
-    for table in TABLES {
+    for table in tables_for_schema(schema) {
         let sql = if *table == "app_metadata" {
             "SELECT * FROM app_metadata WHERE key NOT LIKE 'migration.backup.%' ORDER BY key".into()
         } else {
