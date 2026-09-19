@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import PanelToolButton from "./PanelToolButton.svelte";
-  import MigrationPreparation from './MigrationPreparation.svelte';
   import "./management-dialog.css";
   import { languageState, translator, type TranslationKey } from "$lib/i18n";
   import type { TrashItem } from "$lib/api/trashApi";
@@ -27,9 +26,7 @@
   let purge: PurgePlan | null = null;
   let unfinished: PurgePlan | null = null;
   let syncing = false;
-  let spaceTools = false;
   let stopRequested = false;
-  let migrationPreparation = false;
   const key = (item: PurgeTarget) => item.kind + ':' + item.uuid;
   function toggle(item: TrashItem) {
     selected = selected.includes(key(item)) ? selected.filter(id => id !== key(item)) : [...selected, key(item)];
@@ -87,13 +84,6 @@
     try { await syncPurgeProgress(purge.operation_uuid); await afterCommit(); await page(true); }
     catch { if (!disposed) message = 'space.syncFailed'; }
     finally { syncing = false; }
-  }
-
-  async function migrationActivated() {
-    items = []; pending = null; selected = []; selecting = false; message = null;
-    await afterCommit();
-    await page(true);
-    unfinished = await purgeApi.unfinished();
   }
 
   onMount(() => {
@@ -167,8 +157,7 @@
   }
   function back() {
     if (busy) return;
-    if (migrationPreparation) migrationPreparation = false;
-    else if (purge) { purge = null; }
+    if (purge) { purge = null; }
     else if (pending) pending = null;
     else if (selecting) { selecting = false; selected = []; }
     else onClose();
@@ -180,33 +169,27 @@
   if (event.key === "Escape") { event.preventDefault(); back(); }
 }}
   oncancel={event => { event.preventDefault(); back(); }}>
-  <header><h2 id="trash-heading">{$translator(migrationPreparation ? 'migrationBackup.title' : purge ? "purge.title" : pending ? "trash.preview" : "trash.title")}</h2>
+  <header><h2 id="trash-heading">{$translator(purge ? "purge.title" : pending ? "trash.preview" : "trash.title")}</h2>
     {#if !pending && !purge}
       <div class="header-tools">
-        {#if !migrationPreparation}<PanelToolButton icon="refresh" label={$translator("trash.refresh")} disabled={busy} onclick={() => load(true)} />{/if}
-        {#if !migrationPreparation}<button class="text-tool" disabled={busy} onclick={() => spaceTools = !spaceTools}>{$translator('purge.spaceTools')}</button>{/if}
+        <PanelToolButton icon="refresh" label={$translator("trash.refresh")} disabled={busy} onclick={() => load(true)} />
         <PanelToolButton icon="close" label={$translator("common.close")} disabled={busy} onclick={back} />
       </div>
     {/if}
   </header>
-  {#if !migrationPreparation && !pending && !purge && items.length}
+  {#if !pending && !purge && items.length}
     <div class="purge-toolbar">
       <button class="text-tool" disabled={busy || loadFailed} onclick={() => { selecting = !selecting; selected = []; }}>{$translator(selecting ? 'common.cancel' : 'purge.select')}</button>
       {#if selecting}<span>{$translator('purge.selected', {count:selected.length})}</span>{/if}
       <button class="text-tool" disabled={busy || loadFailed} onclick={() => preparePurge(null)}>{$translator('purge.all')}</button>
     </div>
   {/if}
-  {#if !migrationPreparation && unfinished && !purge}<button class="text-tool" disabled={busy} onclick={() => { purge = unfinished; }}>{$translator('purge.resume')}</button>{/if}
+  {#if unfinished && !purge}<button class="text-tool" disabled={busy} onclick={() => { purge = unfinished; }}>{$translator('purge.resume')}</button>{/if}
   <div class="content" bind:this={content} aria-busy={busy}>
-    {#if message && !migrationPreparation}<p role="status">{$translator(message)}</p>{/if}
-    {#if spaceTools && !migrationPreparation && !purge && !pending}
-      <button class="text-tool" disabled={busy} onclick={async () => { pending = null; selecting = false; migrationPreparation = true; await tick(); content.scrollTop = 0; }}>{$translator('migrationBackup.title')}</button>
-    {/if}
-    {#if busy && !migrationPreparation}<p role="status">{$translator("common.loading")}</p>{/if}
-    {#if loadFailed && !migrationPreparation}<p role="alert">{$translator("trash.loadFailed")}</p>{/if}
-    {#if migrationPreparation}
-      <MigrationPreparation onBusy={value => { busy = value; }} onActivated={migrationActivated} />
-    {:else if purge}
+    {#if message}<p role="status">{$translator(message)}</p>{/if}
+    {#if busy}<p role="status">{$translator("common.loading")}</p>{/if}
+    {#if loadFailed}<p role="alert">{$translator("trash.loadFailed")}</p>{/if}
+    {#if purge}
       <h3>{$translator('purge.count', {count:purge.total,attachments:purge.attachments})}</h3>
       {#if purge.state === 'prepared'}
         <p>{$translator('purge.warning')}</p>

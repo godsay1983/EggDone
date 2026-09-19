@@ -33,6 +33,7 @@
   export let settings: DesktopSettings;
   export let defaultListViewMode: DefaultListViewMode;
   export let onClose: () => void;
+  export let onSpaceActivated: () => Promise<void> = async () => {};
   export let onChange: (settings: DesktopSettings) => void;
   export let onDefaultListViewChange: (mode: DefaultListViewMode) => void | Promise<void>;
 
@@ -370,7 +371,7 @@
       </div>
     </section>
 
-    <SyncSettings />
+    <SyncSettings {onSpaceActivated} />
 
     {#if error}<p class="settings-error" role="alert">{error}</p>{/if}
   </section>

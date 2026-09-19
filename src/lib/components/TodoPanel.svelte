@@ -3617,6 +3617,7 @@
     onClose={() => (showSettings = false)}
     onChange={(settings) => (desktopSettings = settings)}
     onDefaultListViewChange={setDefaultListViewMode}
+    onSpaceActivated={refreshAfterTrash}
   />
 {/if}
 

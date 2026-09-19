@@ -14,9 +14,12 @@ const output = resolve(tmpdir(), 'eggdone-trash-ui-' + Date.now());
 mkdirSync(output, { recursive: true });
 const native = `export const isTauri=()=>false;
 export async function invoke(command,args){
+  if(command==='get_sync_settings')return {enabled:false,endpoint:'https://example.invalid',region:'test',bucket:'test',objectKey:window.activated?'migrated/todos.json':'todos.json',noteObjectKey:'notes.json',noteAttachmentObjectKey:'attachments.json',noteAssetPrefix:'assets',pathStyle:true,allowHttp:false,credentialsConfigured:true};
+  if(command==='get_note_attachment_cache_stats')return {totalBytes:0,reclaimableBytes:0,protectedBytes:0,pendingCount:0};
   if(command==='migration_space'){
     window.backupCalls=(window.backupCalls||[]).concat(args.action);
-    if(args.action==='status')return {state:'idle',mode:'',confirmation:null,objectKey:null};
+    if(args.action==='status')return {state:window.activated?'active':'idle',mode:'',confirmation:null,objectKey:null};
+    if(window.holdMigration)await new Promise(resolve=>window.releaseMigration=resolve);
     if(window.backupFail){window.backupFail=false;throw Error('MIGRATION_BACKUP_ASSET_NOT_FOUND:00000000-0000-4000-8000-000000000002:original');}
     if(window.backupChanged)throw Error('MIGRATION_BACKUP_CHANGED');
     if(args.action==='activate'){
@@ -24,6 +27,7 @@ export async function invoke(command,args){
       if(window.missingFiles&&!args.acceptMissing)throw Error('MIGRATION_MISSING_CONFIRMATION');
       if(window.publicationFail){window.publicationFail=false;throw Error('MIGRATION_PUBLICATION_NETWORK');}
       window.legacy=false;
+      window.activated=true;
       window.loadsBeforeActivation=window.listCalls||0;
       return {state:'active',mode:'',confirmation:null,objectKey:null};
     }
@@ -63,6 +67,7 @@ export async function invoke(command,args){
 const html = String.raw`<!doctype html><html><body><script type="module">
 import {mount,unmount} from 'svelte';
 import Dialog from '/src/lib/components/TrashDialog.svelte';
+import SyncSettings from '/src/lib/components/SyncSettings.svelte';
 import {setLanguageMode} from '/src/lib/i18n/index.ts';
 import '/src/app.css';
 const p=new URLSearchParams(location.search);setLanguageMode(p.get('lang'));
@@ -72,7 +77,8 @@ window.rows=Array.from({length:p.has('pages')?51:2},(_,i)=>({kind:i%2?'note':'to
 title:i===0?'Long task title '.repeat(7):'Note '+i,content:'Full body line\n'.repeat(35),
 deleted_at:1789190000000,updated_at:1789190000000,updated_by:'test',completed:true,repeating:true,
 attachments:i%2?[{uuid:'a',name:'Attachment-'.repeat(20)+'.md',updated_at:1,updated_by:'test',deleted_at:1}]:[]}));
-const instance=mount(Dialog,{target:document.body,props:{afterCommit:async()=>{if(window.failRefresh)throw Error('refresh');},
+const instance=p.has('settings')?mount(SyncSettings,{target:document.body,props:{onSpaceActivated:async()=>{window.refreshes=(window.refreshes||0)+1;}}}):
+mount(Dialog,{target:document.body,props:{afterCommit:async()=>{if(window.failRefresh)throw Error('refresh');},
 onClose:()=>{window.trashClosed=true;void unmount(instance);}}});
 </script></body></html>`;
 const server = await createServer({ root, configFile: false,
@@ -161,10 +167,24 @@ try {
     assert.equal(await page.evaluate(()=>(window.backupCalls||[]).length),0,'clearing original space never prepares migration');
     assert.equal(await page.evaluate(()=>window.purgeCalls.length),0);
     await page.keyboard.press('Escape');
-    await page.getByRole('button',{name:lang==='zh-CN'?'同步管理':'Sync tools',exact:true}).click();
-    await page.getByRole('button',{name:lang==='zh-CN'?'迁移准备':'Migration preparation',exact:true}).click();
+    assert.equal(await page.getByRole('button',{name:lang==='zh-CN'?'同步管理':'Sync tools',exact:true}).count(),0);
+    await page.goto(url+'?settings&lang='+lang+'&theme='+theme+'&scale=1.5');
+    await page.locator('details summary').click();
+    assert.equal(await page.evaluate(()=>(window.backupCalls||[]).length),0,'opening settings does not read or migrate a space');
+    const spaceButton=page.getByRole('button',{name:lang==='zh-CN'?'同步空间':'Sync space',exact:true});
+    await spaceButton.click();
     const prepareBackup=page.getByRole('button',{name:lang==='zh-CN'?'检查并准备':'Check and prepare',exact:true});
     await prepareBackup.waitFor();
+    await page.waitForFunction(()=>window.backupCalls?.length===1);
+    assert.deepEqual(await page.evaluate(()=>window.backupCalls),['status'],'entry only reads status');
+    await page.evaluate(()=>window.holdMigration=true);
+    await prepareBackup.click();
+    await page.getByRole('button',{name:lang==='zh-CN'?'关闭':'Close',exact:true}).waitFor();
+    assert.equal(await page.getByRole('button',{name:lang==='zh-CN'?'关闭':'Close',exact:true}).isDisabled(),true);
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('dialog[open]').count(),1,'busy dialog stays mounted');
+    await page.evaluate(()=>{window.holdMigration=false;window.releaseMigration();});
+    await page.waitForFunction(()=>!document.querySelector('dialog section').getAttribute('aria-busy') || document.querySelector('dialog section').getAttribute('aria-busy')==='false');
     await page.evaluate(()=>window.backupFail=true);await prepareBackup.click();
     await page.getByRole('alert').waitFor();
     assert.ok((await page.getByRole('alert').innerText()).includes('404'));
@@ -172,7 +192,7 @@ try {
     await prepareBackup.click();
     const publish=page.getByRole('button',{name:lang==='zh-CN'?'迁移并启用':'Migrate and activate',exact:true});
     assert.equal(await publish.isDisabled(),true);
-    await page.locator('section input[type=checkbox]').check();
+    await page.locator('dialog section input[type=checkbox]').check();
     await page.evaluate(()=>window.publicationFail=true);await publish.click();
     await page.getByRole('alert').waitFor();
     assert.equal(await page.evaluate(()=>window.purgeCalls.length),0,'preparation never purges');
@@ -188,7 +208,7 @@ try {
     await page.evaluate(()=>{window.backupChanged=false;window.missingFiles=true;});await prepareBackup.click();
     const missingButton=page.getByRole('button',{name:lang==='zh-CN'?'确认缺失后继续迁移':'Continue with missing files',exact:true});
     await missingButton.waitFor(); assert.equal(await missingButton.isDisabled(),true);
-    const confirmations=page.locator('section input[type=checkbox]');
+    const confirmations=page.locator('dialog section input[type=checkbox]');
     assert.equal(await confirmations.count(),2);
     await confirmations.last().check(); assert.equal(await missingButton.isDisabled(),true);
     await confirmations.first().check(); assert.equal(await missingButton.isDisabled(),false);
@@ -201,11 +221,18 @@ try {
     await page.evaluate(()=>{window.missingFiles=false;window.joinSpace=true;});await prepareBackup.click();
     const join=page.getByRole('button',{name:lang==='zh-CN'?'加入新空间':'Join new space',exact:true});
     assert.equal(await join.isDisabled(),true);
-    await page.locator('section input[type=checkbox]').check();await join.click();
+    await page.locator('dialog section input[type=checkbox]').check();await join.click();
     await page.getByRole('status').filter({hasText:lang==='zh-CN'?'新空间已启用':'New space activated'}).waitFor();
-    await page.waitForFunction(()=>window.listCalls>window.loadsBeforeActivation);
+    await page.waitForFunction(()=>window.refreshes===1);
+    await page.waitForFunction(()=>[...document.querySelectorAll('input')].some(el=>el.value==='migrated/todos.json'));
     assert.equal(await page.evaluate(()=>window.purgeCalls.length),0,'activation never purges');
     await page.keyboard.press('Escape');
+    await spaceButton.click();
+    await page.getByRole('status').filter({hasText:lang==='zh-CN'?'新空间已启用':'New space activated'}).waitFor();
+    assert.equal(await prepareBackup.count(),0,'active space has no migration action');
+    await page.keyboard.press('Escape');
+    await page.goto(url+'?lang='+lang+'&theme='+theme+'&scale=1.5');
+    await page.locator('.record').first().waitFor();
     await page.evaluate(()=>window.legacy=false);
     await page.getByRole('button',{name:all,exact:true}).click();
     const execute=page.locator('footer button').last();

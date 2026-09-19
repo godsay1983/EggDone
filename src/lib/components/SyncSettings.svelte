@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import SyncSpaceDialog from './SyncSpaceDialog.svelte';
   import {
     deleteSyncCredentials,
     getSyncRuntimeState,
@@ -26,6 +27,8 @@
   import { localizedErrorMessage } from "$lib/i18n/errors";
   import { formatFileSize, formatTime } from "$lib/i18n/formatters";
 
+  export let onSpaceActivated: () => Promise<void> = async () => {};
+  let spaceVisible = false;
   let settings: SyncSettings | null = null;
   let accessKey = "";
   let secretKey = "";
@@ -51,6 +54,15 @@
     } catch (reason) {
       cacheError = errorMessage(reason);
     }
+  }
+
+  async function spaceActivated() {
+    settings = await getSyncSettings();
+    accessKey = ''; secretKey = '';
+    configureAutoSync(settings);
+    await onSpaceActivated();
+    await load();
+    await loadAttachmentCacheStats();
   }
 
   async function clearAttachmentCache() {
@@ -469,6 +481,12 @@
     {/if}
   {/if}
 
+  <details class="sync-advanced">
+    <summary>{$translator('sync.advanced')}</summary>
+    <p>{$translator('sync.spaceHelp')}</p>
+    <button type="button" disabled={busy || !settings} onclick={() => spaceVisible = true}>{$translator('sync.space')}</button>
+  </details>
+
   <section class="attachment-cache" aria-labelledby="attachment-cache-title">
     <div class="attachment-cache-heading">
       <div>
@@ -504,7 +522,14 @@
   {#if error}<p class="settings-error" role="alert">{error}</p>{/if}
 </section>
 
+{#if spaceVisible}
+  <SyncSpaceDialog onClose={() => spaceVisible = false} onActivated={spaceActivated} />
+{/if}
+
 <style>
+  .sync-advanced { border-top: 1px solid var(--action-border); padding-top: 12px; }
+  .sync-advanced summary { cursor: pointer; font-size: 14px; }
+  .sync-advanced p { font-size: 12px; overflow-wrap: anywhere; }
   .sync-summary-copy {
     min-width: 0;
     flex: 1;
