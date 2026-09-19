@@ -18,6 +18,7 @@ export type SyncStatusKind =
   | "pending"
   | "syncing"
   | "synced"
+  | "cleanup_pending"
   | "offline"
   | "conflict"
   | "failed";
@@ -162,8 +163,8 @@ function applyRuntimeSnapshot(snapshot: SyncRuntimeSnapshot, syncEnabled: boolea
   }
   if (snapshot.lastResult === "success") {
     syncStatus.set({
-      kind: "synced",
-      message: "同步完成",
+      kind: snapshot.lastErrorCode?.startsWith("SYNC_CLEANUP_") ? "cleanup_pending" : "synced",
+      message: snapshot.lastErrorMessage ?? "同步完成",
       updatedAt: snapshot.lastSuccessAt,
       pendingAttachmentCount: snapshot.pendingAttachmentCount,
     });
@@ -242,7 +243,7 @@ async function performSyncWithRetry(): Promise<ManualSyncResult> {
       if (!pollState.isGenerationCurrent(generation)) throw new Error("RECURRENCE_CONFIG_CHANGED");
       const dirty = pendingAfterRun || (snapshot?.dirtyDomains.length ?? 0) > 0;
       syncStatus.set({
-        kind: dirty ? "pending" : "synced",
+        kind: dirty ? "pending" : result.cleanupWarning ? "cleanup_pending" : "synced",
         message: cleanupNotice
           ? result.message
           : result.conflictRetried

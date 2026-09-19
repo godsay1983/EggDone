@@ -3,6 +3,33 @@ use crate::recurrence_transport::tests::{Reply, Server};
 
 const ID: &str = "00000000-0000-4000-8000-000000000002";
 
+#[test]
+fn delete_errors_distinguish_signature_from_permissions_without_leaking_response() {
+    for (remote, expected) in [
+        ("SignatureDoesNotMatch", "SIGNATURE"),
+        ("AccessDenied", "DENIED"),
+        ("RequestTimeTooSkewed", "CLOCK"),
+        ("InvalidAccessKeyId", "CREDENTIALS"),
+        ("private-value", "FORBIDDEN"),
+    ] {
+        let body = format!(
+            "<Error><Code>{remote}</Code><Message>private bucket and secret</Message></Error>"
+        );
+        assert_eq!(
+            asset_delete_denial(body.as_bytes()),
+            format!("PURGE_ASSET_DELETE_{expected}")
+        );
+    }
+    assert_eq!(
+        asset_delete_denial(b"invalid"),
+        "PURGE_ASSET_DELETE_FORBIDDEN"
+    );
+    assert_eq!(
+        asset_delete_denial(&vec![b'x'; 16385]),
+        "PURGE_ASSET_DELETE_FORBIDDEN"
+    );
+}
+
 fn prepared(server: &Server) -> PreparedManualSync {
     PreparedManualSync {
         target_epoch: "test".into(),
@@ -43,6 +70,24 @@ fn asset_cleanup_sends_signed_cas_and_never_falls_back_after_conflict() {
                 .find(|s| s.starts_with("authorization:"))
                 .unwrap();
             assert!(signed.contains("if-match"));
+            assert!(!signed.contains("content-length"));
+            assert!(!signed.contains("content-type"));
+            assert!(!delete.lines().any(|line| line.starts_with("content-type:")));
+            let signed_names = signed
+                .split("signedheaders=")
+                .nth(1)
+                .unwrap()
+                .split(',')
+                .next()
+                .unwrap();
+            for name in signed_names.split(';') {
+                assert!(
+                    delete
+                        .lines()
+                        .any(|line| line.starts_with(&format!("{name}:"))),
+                    "signed header missing on wire: {name}"
+                );
+            }
             assert!(target.bucket.extra_headers.get("if-match").is_none());
         }
     });

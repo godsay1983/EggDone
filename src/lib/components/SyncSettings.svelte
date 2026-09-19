@@ -171,6 +171,10 @@
   }
 
   function runtimeErrorLabel(code: string, fallback: string | null) {
+    if (code === "SYNC_CLEANUP_SIGNATURE") return $translator("sync.cleanupSignature");
+    if (code === "SYNC_CLEANUP_CLOCK") return $translator("sync.cleanupClock");
+    if (code === "SYNC_CLEANUP_DENIED") return $translator("sync.cleanupDenied");
+    if (code === "SYNC_CLEANUP_PENDING") return $translator("sync.explain.cleanup_pending");
     if (code === "SYNC_OFFLINE") return $translator("sync.errorOffline");
     if (code === "SYNC_CONFLICT") return $translator("sync.errorConflict");
     if (code === "SYNC_CREDENTIALS") return $translator("sync.errorCredentials");

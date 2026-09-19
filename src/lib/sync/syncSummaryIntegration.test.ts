@@ -53,6 +53,8 @@ it.each([
   [{ dirtyDomains: ["notes"], pendingAttachmentCount: 2 }, "pending"],
   [{ lastResult: "offline", dirtyDomains: ["notes"] }, "offline"],
   [{ lastResult: "interrupted", dirtyDomains: [] }, "pending"],
+  [{ lastErrorCode: "SYNC_CLEANUP_DENIED" }, "cleanup_pending"],
+  [{ lastErrorCode: "SYNC_CLEANUP_PENDING" }, "cleanup_pending"],
 ])("restores pending or failed state from runtime %j", async (patch, expected) => {
   vi.mocked(api.getSyncRuntimeState).mockResolvedValue({ ...snapshot, ...patch } as SyncRuntimeSnapshot);
   await sync.initializeAutoSync();
@@ -86,6 +88,14 @@ it("successful retry clears the earlier failure", async () => {
   vi.mocked(api.syncNow).mockRejectedValueOnce(new Error("permission denied"));
   await expect(sync.runManualSync()).rejects.toThrow();
   expect(get(sync.syncSummary)).toBe("failed");
+  await sync.runManualSync();
+  expect(get(sync.syncSummary)).toBe("synced");
+});
+it("keeps cleanup warnings distinct from failed content sync and clears them on retry", async () => {
+  sync.configureAutoSync(settings);
+  vi.mocked(api.syncNow).mockResolvedValueOnce({ ...receipt, cleanupWarning: "SYNC_CLEANUP_DENIED" });
+  await sync.runManualSync();
+  expect(get(sync.syncSummary)).toBe("cleanup_pending");
   await sync.runManualSync();
   expect(get(sync.syncSummary)).toBe("synced");
 });

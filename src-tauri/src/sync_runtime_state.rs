@@ -237,6 +237,20 @@ pub fn record_success(connection: &Connection) -> Result<(), String> {
         .map_err(database_error)
 }
 
+pub fn record_cleanup_warning(connection: &Connection, code: &str) -> Result<(), String> {
+    let message = match code {
+        "SYNC_CLEANUP_SIGNATURE" => "数据已同步，云端拒绝删除请求签名；请更新客户端后重试",
+        "SYNC_CLEANUP_CLOCK" => "数据已同步，删除请求时间无效；请校准系统时间后重试",
+        "SYNC_CLEANUP_DENIED" => "数据已同步，云端附件清理被拒绝；请检查对象访问和删除权限",
+        "SYNC_CLEANUP_PENDING" => "数据已同步，云端附件清理未完成；可在回收站中重试",
+        _ => return Err("SYNC_STATE_INVALID".into()),
+    };
+    connection.execute(
+        "UPDATE sync_runtime_state SET last_error_code=?1,last_error_message=?2 WHERE id=?3 AND last_result='success'",
+        params![code, message, STATE_ID],
+    ).map(|_| ()).map_err(database_error)
+}
+
 pub fn record_failure(connection: &Connection, error: &str) -> Result<(), String> {
     let (result, code, message) = classify_error(error);
     let now = now_millis();
@@ -335,6 +349,24 @@ fn database_error(error: rusqlite::Error) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cleanup_warning_preserves_content_success_and_clears_after_retry() {
+        let mut c = Connection::open_in_memory().unwrap();
+        crate::db::migrate(&mut c).unwrap();
+        record_success(&c).unwrap();
+        record_cleanup_warning(&c, "SYNC_CLEANUP_DENIED").unwrap();
+        let state = get_snapshot(&c).unwrap();
+        assert_eq!(state.last_result, "success");
+        assert_eq!(
+            state.last_error_code.as_deref(),
+            Some("SYNC_CLEANUP_DENIED")
+        );
+        assert!(state.last_success_at.is_some());
+        assert!(record_cleanup_warning(&c, "raw secret").is_err());
+        record_success(&c).unwrap();
+        assert!(get_snapshot(&c).unwrap().last_error_code.is_none());
+    }
 
     #[test]
     fn pending_binary_cannot_be_confirmed_by_a_metadata_snapshot() {

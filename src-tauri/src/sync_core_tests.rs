@@ -13,6 +13,113 @@ const NOTE2: &str = "123e4567-e89b-42d3-a456-426614174011";
 const ASSET: &str = "123e4567-e89b-42d3-a456-426614174020";
 const BYTES: &[u8] = b"# Isolated sync fixture\nDo not use a user bucket.\n";
 
+#[test]
+fn only_file_cleanup_errors_can_be_deferred() {
+    let mut summary = RemoteAssetCleanupSummary::default();
+    assert!(summary.defer_asset_error("PURGE_ASSET_DELETE_DENIED"));
+    assert_eq!(summary.warning_code(), Some("SYNC_CLEANUP_DENIED"));
+    assert!(summary
+        .append_to("数据已同步".into())
+        .contains("清理未完成"));
+    assert!(summary.defer_asset_error("拒绝删除远端附件：对象大小或 SHA-256 与元数据不一致"));
+    assert_eq!(summary.warning_code(), Some("SYNC_CLEANUP_PENDING"));
+    for error in [
+        "PURGE_LEDGER_CHANGED_RETRY",
+        "PURGE_TARGET_CHANGED",
+        "PURGE_DATABASE_FAILED",
+        "PURGE_REMOTE_EVIDENCE_INVALID",
+        "SYNC_SPACE_HTTP:403",
+    ] {
+        assert!(!summary.defer_asset_error(error));
+    }
+}
+
+#[test]
+fn old_pending_purge_does_not_fail_content_sync_and_resumes_after_peer_cleanup() {
+    use sha2::Digest;
+    tauri::async_runtime::block_on(async {
+        let sha = format!("{:x}", sha2::Sha256::digest(b"data"));
+        let client = Client::new(TODO, NOTE);
+        client
+            .db
+            .connection
+            .lock()
+            .unwrap()
+            .execute(
+                "UPDATE sync_settings SET object_key='account/todos.json'",
+                [],
+            )
+            .unwrap();
+        let ledger = serde_json::json!({"format_version":1,"terminals":[{"kind":"note","uuid":NOTE,"operation_uuid":ASSET,"purged_at":200}]}).to_string();
+        let attachment = serde_json::json!({"uuid":ASSET,"note_uuid":NOTE,"kind":"file","display_name":"test.txt","mime_type":"text/plain","byte_size":4,"sha256":sha,"preview_mime_type":null,"preview_byte_size":null,"preview_sha256":null,"width":null,"height":null,"sort_order":0,"created_at":1,"updated_at":100,"deleted_at":null,"updated_by":NOTE});
+        let metadata = |attachments: Vec<serde_json::Value>| {
+            serde_json::json!({"format_version":1,"device_id":NOTE,"generated_at":200,"attachments":attachments}).to_string()
+        };
+        for denied in [true, false] {
+            let ledger_reply = || Reply::new(200, Some("\"ledger\""), ledger.as_bytes());
+            let empty = metadata(vec![]);
+            let remote = metadata(if denied {
+                vec![attachment.clone()]
+            } else {
+                vec![]
+            });
+            let mut replies = vec![ledger_reply(), Reply::new(200, None, b""), ledger_reply()];
+            let mut entity_replies = entities(200);
+            // Purging the note removed its only link, so an absent link document needs no PUT.
+            entity_replies.pop();
+            replies.extend(entity_replies);
+            replies.extend([
+                Reply::new(200, Some("\"metadata\""), remote.as_bytes()),
+                Reply::new(200, None, b""),
+                ledger_reply(),
+                ledger_reply(),
+                Reply::new(200, Some("\"metadata\""), empty.as_bytes()),
+            ]);
+            if denied {
+                replies.extend([
+                    Reply::new(200, Some("\"asset\""), b"data")
+                        .with_header("x-amz-meta-sha256", &sha),
+                    Reply::new(403, None, b"<Error><Code>AccessDenied</Code></Error>"),
+                ]);
+            } else {
+                // The other device removed the object between attempts.
+                replies.push(Reply::new(404, None, b""));
+            }
+            replies.extend(tail().into_iter().skip(3));
+            let server = Server::new(replies);
+            let result = client.sync(server.bucket()).await.unwrap();
+            assert_eq!(
+                result.cleanup_warning.as_deref(),
+                denied.then_some("SYNC_CLEANUP_DENIED")
+            );
+            let c = client.db.connection.lock().unwrap();
+            assert_eq!(
+                c.query_row(
+                    "SELECT remote_done FROM purge_cleanup WHERE attachment_uuid=?1",
+                    [ASSET],
+                    |r| r.get::<_, bool>(0)
+                )
+                .unwrap(),
+                !denied
+            );
+            assert_eq!(
+                c.query_row("SELECT COUNT(*) FROM notes WHERE uuid=?1", [NOTE], |r| r
+                    .get::<_, i64>(0))
+                    .unwrap(),
+                0
+            );
+            assert_eq!(
+                c.query_row("SELECT COUNT(*) FROM note_attachments", [], |r| r
+                    .get::<_, i64>(0))
+                    .unwrap(),
+                0
+            );
+            drop(c);
+            assert!(client.state().dirty_domains.is_empty());
+        }
+    });
+}
+
 struct Client {
     db: Database,
     runtime: SyncRuntime,

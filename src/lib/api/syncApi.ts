@@ -32,6 +32,7 @@ export interface ConnectionTestResult {
 }
 
 export interface ManualSyncResult {
+  cleanupWarning?: string | null;
   linkRemoteToken?: string;
   checklistRemoteToken?: string;
   templateRemoteToken?: string;

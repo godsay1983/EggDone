@@ -226,6 +226,7 @@ pub struct ManualSyncResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub recurrence_remote_token: Option<String>,
     pub message: String,
+    pub cleanup_warning: Option<String>,
     pub todo_count: usize,
     pub note_count: usize,
     pub note_attachment_count: usize,
@@ -1482,16 +1483,78 @@ pub(crate) async fn delete_asset_if_matches_guarded(
         .await?;
     }
     guard()?;
-    let response = bucket
-        .delete_object(&object_key)
+    // rust-s3 0.37.2 signs body headers on DELETE, rejected by strict S3-compatible servers.
+    // Reuse its signer with no body headers; If-Match remains signed and mandatory.
+    let request = ReqwestRequest::new(&bucket, &object_key, Command::DeleteObject)
         .await
-        .map_err(|error| format!("删除远端附件失败，请检查网络后重试：{error}"))?;
+        .map_err(|_| "PURGE_ASSET_DELETE_REQUEST")?;
+    let mut headers = request
+        .headers()
+        .await
+        .map_err(|_| "PURGE_ASSET_DELETE_REQUEST")?;
+    headers.remove(http::header::AUTHORIZATION);
+    headers.remove(http::header::CONTENT_LENGTH);
+    headers.remove(http::header::CONTENT_TYPE);
+    let authorization = request
+        .authorization(&headers)
+        .await
+        .map_err(|_| "PURGE_ASSET_DELETE_REQUEST")?;
+    headers.insert(
+        http::header::AUTHORIZATION,
+        HeaderValue::from_str(&authorization).map_err(|_| "PURGE_ASSET_DELETE_REQUEST")?,
+    );
+    let mut response = bucket
+        .http_client()
+        .delete(
+            request
+                .url()
+                .map_err(|_| "PURGE_ASSET_DELETE_REQUEST")?
+                .as_str(),
+        )
+        .headers(headers)
+        .send()
+        .await
+        .map_err(|_| "PURGE_ASSET_DELETE_NETWORK")?;
     guard()?;
-    match response.status_code() {
+    match response.status().as_u16() {
         200 | 204 | 404 => Ok(true),
         409 | 412 => Err("远端附件已变化，未删除；请重新同步后重试".into()),
-        401 | 403 => Err("删除远端附件失败：凭据无效或没有对象删除权限".to_string()),
+        401 | 403 => {
+            let mut body = Vec::new();
+            while let Ok(Some(chunk)) = response.chunk().await {
+                if body.len() + chunk.len() > 16 * 1024 {
+                    return Err("PURGE_ASSET_DELETE_FORBIDDEN".into());
+                }
+                body.extend_from_slice(&chunk);
+            }
+            Err(asset_delete_denial(&body).to_string())
+        }
         status => Err(format!("删除远端附件失败，S3 服务返回状态码 {status}")),
+    }
+}
+
+fn asset_delete_denial(body: &[u8]) -> &'static str {
+    #[derive(Deserialize)]
+    struct ErrorCode {
+        #[serde(rename = "Code")]
+        code: String,
+    }
+    // Never expose the response body: storage errors can include keys and canonical requests.
+    let parsed = if body.len() <= 16 * 1024 {
+        quick_xml::de::from_reader::<_, ErrorCode>(body).ok()
+    } else {
+        None
+    };
+    match parsed.as_ref().map(|error| error.code.as_str()) {
+        Some("SignatureDoesNotMatch" | "InvalidSignature" | "AuthorizationHeaderMalformed") => {
+            "PURGE_ASSET_DELETE_SIGNATURE"
+        }
+        Some("RequestTimeTooSkewed" | "RequestExpired") => "PURGE_ASSET_DELETE_CLOCK",
+        Some("InvalidAccessKeyId" | "ExpiredToken" | "InvalidToken") => {
+            "PURGE_ASSET_DELETE_CREDENTIALS"
+        }
+        Some("AccessDenied" | "AllAccessDisabled") => "PURGE_ASSET_DELETE_DENIED",
+        _ => "PURGE_ASSET_DELETE_FORBIDDEN",
     }
 }
 

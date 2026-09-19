@@ -1316,6 +1316,9 @@ pub async fn sync_now(
                 .require_current(&connection)
                 .map_err(crate::error_codes::sync)?;
             sync_runtime_state::record_success(&connection)?;
+            if let Some(code) = result.cleanup_warning.as_deref() {
+                sync_runtime_state::record_cleanup_warning(&connection, code)?;
+            }
             Ok(result)
         }
         Err(error) => {
@@ -1511,6 +1514,7 @@ async fn sync_now_inner(
     if let Some(token) = &lifecycle_token {
         match crate::purge_remote::run(database, runtime, prepared, token).await {
             Ok(count) => cleanup_summary.deleted_object_count += count,
+            Err(error) if cleanup_summary.defer_asset_error(&error) => {}
             Err(error) => return Err(format!("PURGE_REMOTE_PENDING:{error}")),
         }
     }
@@ -1530,6 +1534,7 @@ async fn sync_now_inner(
         link_remote_token: entities.link_token,
         recurrence_remote_token: todo.recurrence_token,
         message: cleanup_summary.append_to(sync_message),
+        cleanup_warning: cleanup_summary.warning_code().map(str::to_owned),
         todo_count,
         note_count,
         note_attachment_count,
@@ -1549,9 +1554,54 @@ mod sync_core_tests;
 struct RemoteAssetCleanupSummary {
     deleted_object_count: usize,
     error: Option<String>,
+    warning: Option<&'static str>,
 }
 
 impl RemoteAssetCleanupSummary {
+    fn defer_asset_error(&mut self, error: &str) -> bool {
+        // Only file cleanup may be deferred. Ledger, target and database failures still fail sync.
+        if !error.starts_with("PURGE_ASSET_") && !error.contains("附件") {
+            return false;
+        }
+        let (code, message) = match error {
+            "PURGE_ASSET_DELETE_SIGNATURE" => (
+                "SYNC_CLEANUP_SIGNATURE",
+                "云端拒绝删除请求签名，请更新客户端后重试",
+            ),
+            "PURGE_ASSET_DELETE_CLOCK" => (
+                "SYNC_CLEANUP_CLOCK",
+                "删除请求时间无效，请校准系统时间后重试",
+            ),
+            "PURGE_ASSET_DELETE_DENIED" | "PURGE_ASSET_DELETE_CREDENTIALS" => (
+                "SYNC_CLEANUP_DENIED",
+                "云端拒绝附件访问或删除，请检查对象存储凭据和权限后重试",
+            ),
+            _ if error.contains("凭据") => (
+                "SYNC_CLEANUP_DENIED",
+                "云端拒绝附件访问，请检查对象存储凭据和权限后重试",
+            ),
+            _ => (
+                "SYNC_CLEANUP_PENDING",
+                "文件仍待清理，请在回收站中重试；不会重新显示已删除内容",
+            ),
+        };
+        self.warning = Some(code);
+        self.error = Some(message.into());
+        true
+    }
+
+    fn warning_code(&self) -> Option<&'static str> {
+        self.warning.or_else(|| {
+            self.error.as_ref().map(|error| {
+                if error.contains("权限") || error.contains("凭据") {
+                    "SYNC_CLEANUP_DENIED"
+                } else {
+                    "SYNC_CLEANUP_PENDING"
+                }
+            })
+        })
+    }
+
     fn append_to(&self, message: String) -> String {
         if let Some(error) = &self.error {
             return format!("{message}；远端附件清理未完成：{error}");

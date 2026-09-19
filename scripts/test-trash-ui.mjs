@@ -33,8 +33,10 @@ export async function invoke(command,args){
     if(window.holdSync)await new Promise(resolve=>window.releaseSync=resolve);
     if(window.syncFail)throw Error('offline');
     window.purgePlan={...window.purgePlan,sync_pending:false,remote_pending:0};
-    return {};
+    return {message:'Content synced',pendingAttachmentCount:0,todoCount:0,noteCount:0,noteAttachmentCount:0,conflictRetried:false,
+      todoRemoteEtag:null,noteRemoteEtag:null,noteAttachmentRemoteEtag:null};
   }
+  if(command==='get_sync_runtime_state')return {dirtyDomains:[],pendingAttachmentCount:0,lastResult:'success',lastErrorCode:null};
   if(command==='trash_purge_status')return structuredClone(window.purgePlan);
   if(command==='unfinished_trash_purge')return null;
   if(command==='prepare_trash_purge'){
@@ -220,6 +222,7 @@ try {
     await execute.click();
     await page.waitForFunction(()=>window.rows.length===1);
     await page.getByRole('status').filter({hasText:lang==='zh-CN'?'已从本机删除':'Removed locally'}).first().waitFor();
+    await page.getByRole('status').filter({hasText:lang==='zh-CN'?'本机删除已保留，同步尚未完成':'Local deletion is saved, but synchronization is incomplete'}).waitFor();
     await page.evaluate(()=>window.syncFail=false);
     await page.getByRole('button',{name:lang==='zh-CN'?'同步并刷新进度':'Sync and refresh progress',exact:true}).click();
     await page.getByRole('status').filter({hasText:lang==='zh-CN'?'本次清理已完成':'This cleanup is complete'}).waitFor();

@@ -7,7 +7,7 @@
   import type { TrashItem } from "$lib/api/trashApi";
   import { createTrashStore } from "$lib/stores/trashStore";
   import { purgeApi, type PurgePlan, type PurgeTarget } from "$lib/api/purgeApi";
-  import { syncNow } from '$lib/api/syncApi';
+  import { runManualSync } from '$lib/sync/autoSync';
   export let onClose: () => void;
   export let afterCommit: () => Promise<void>;
   const store = createTrashStore();
@@ -71,7 +71,7 @@
 
   async function syncPurgeProgress(operation: string) {
     let failed = false;
-    try { await syncNow(); } catch { failed = true; }
+    try { await runManualSync(); } catch { failed = true; }
     let result = await purgeApi.status(operation);
     if (!result.pending && result.cleanup_pending) result = await purgeApi.run(operation);
     if (disposed) return;

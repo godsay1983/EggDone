@@ -1,6 +1,6 @@
 export type SyncSummaryState =
   | "local" | "unconfigured" | "idle" | "syncing" | "offline" | "conflict"
-  | "failed" | "upload_failed" | "upload_pending" | "pending" | "synced";
+  | "failed" | "upload_failed" | "upload_pending" | "pending" | "cleanup_pending" | "synced";
 
 export interface SyncSummaryInput {
   enabled: boolean;
@@ -25,6 +25,7 @@ export function syncSummaryState(input: SyncSummaryInput): SyncSummaryState {
   if (input.kind === "failed") return "failed";
   if (input.dirty || input.kind === "pending") return "pending";
   if (input.pendingUploads > 0) return "upload_pending";
+  if (input.kind === "cleanup_pending") return "cleanup_pending";
   if (input.kind === "synced") return "synced";
   return "idle";
 }
