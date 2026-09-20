@@ -5,6 +5,114 @@ use std::{future::Future, sync::Arc, task::Poll};
 const ACTIVE: &[u8] = include_bytes!("../../tests/fixtures/system-calendar-v1-active.json");
 const WITHDRAWN: &[u8] = include_bytes!("../../tests/fixtures/system-calendar-v1-withdrawn.json");
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AcceptanceStep {
+    name: String,
+    status: u16,
+    etag: Option<String>,
+    body: Option<serde_json::Value>,
+    expected: serde_json::Value,
+    error: String,
+    restart: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AcceptanceTrace {
+    version: u8,
+    main_key: String,
+    steps: Vec<AcceptanceStep>,
+}
+
+#[test]
+#[ignore = "Run Harmony scripts/test-calendar-cross-client.cjs to generate the synthetic trace"]
+fn system_calendar_cross_client_acceptance_trace() {
+    let path =
+        std::env::var("EGGDONE_CALENDAR_ACCEPTANCE_TRACE").expect("synthetic trace required");
+    assert!(fs::metadata(&path).unwrap().len() <= 2 * 1024 * 1024);
+    let trace: AcceptanceTrace = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+    assert_eq!(trace.version, 1);
+    assert_eq!(trace.main_key, "eggdone/todos.json");
+    assert!(!trace.steps.is_empty() && trace.steps.len() <= 30);
+    tauri::async_runtime::block_on(async {
+        let fixture = Fixture::new();
+        fixture
+            .db
+            .connection
+            .lock()
+            .unwrap()
+            .execute("UPDATE sync_settings SET object_key=?1", [&trace.main_key])
+            .unwrap();
+        let task_state = || {
+            serde_json::to_value(
+                crate::sync_runtime_state::get_snapshot(&fixture.db.connection.lock().unwrap())
+                    .unwrap(),
+            )
+            .unwrap()
+        };
+        let before = task_state();
+        let replies = trace
+            .steps
+            .iter()
+            .map(|step| {
+                assert!([200, 304, 503].contains(&step.status));
+                let body = step
+                    .body
+                    .as_ref()
+                    .map(|value| serde_json::to_vec(value).unwrap())
+                    .unwrap_or_default();
+                Reply::new(step.status, step.etag.as_deref(), &body)
+            })
+            .collect();
+        let server = Server::new(replies);
+        let mut runtime = fixture.restart();
+        let mut previous: Option<serde_json::Value> = None;
+        let mut previous_received = 0;
+        for step in &trace.steps {
+            if step.restart {
+                runtime = fixture.restart();
+                assert_eq!(
+                    serde_json::to_value(runtime.state(&fixture.db).document).unwrap(),
+                    previous.clone().unwrap(),
+                    "{}: disk rehydration",
+                    step.name
+                );
+            }
+            let state = runtime
+                .refresh_using(&fixture.db, |db| {
+                    s3_sync::prepare_with_fixture_credentials(db, server.bucket())
+                })
+                .await;
+            assert_eq!(state.error, step.error, "{}", step.name);
+            assert!(!state.loading && state.configured, "{}", step.name);
+            let received = serde_json::to_value(&state.document).unwrap();
+            assert_eq!(received, step.expected, "{}", step.name);
+            if step.status == 503 {
+                assert_eq!(state.last_received_at, previous_received);
+            }
+            let request = server.request();
+            assert!(request.head.starts_with(&format!(
+                "GET /rules-test/{} ",
+                system_calendar::object_key(&trace.main_key)
+            )));
+            assert!(request.body.is_empty());
+            let headers = request.head.to_lowercase();
+            assert!(headers.contains("authorization: aws4-hmac-sha256"));
+            assert_eq!(headers.contains("if-none-match:"), previous.is_some());
+            assert_eq!(
+                task_state(),
+                before,
+                "calendar cannot change task sync state"
+            );
+            previous = Some(received);
+            previous_received = state.last_received_at;
+            println!("PASS desktop: {}", step.name);
+        }
+        println!("CALENDAR_CROSS_CLIENT_STEPS={}", trace.steps.len());
+    });
+}
+
 struct Fixture {
     db: Arc<Database>,
     runtime: Arc<CalendarRuntime>,
