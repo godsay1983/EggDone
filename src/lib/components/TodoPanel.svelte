@@ -1840,25 +1840,26 @@
     }
   }
 
-  function isUrgentTodo(todo: Todo) {
-    return isDueTodayOrOverdue(todo);
+  function isUrgentTodo(todo: Todo, now: Date) {
+    return isDueTodayOrOverdue(todo, now);
   }
 
-  function quadrantKey(todo: Todo): QuadrantKey {
+  function quadrantKey(todo: Todo, now: Date): QuadrantKey {
     const important = todo.priority === 1;
-    const urgent = isUrgentTodo(todo);
+    const urgent = isUrgentTodo(todo, now);
     if (important && urgent) return "importantUrgent";
     if (important) return "importantNotUrgent";
     if (urgent) return "normalUrgent";
     return "normalNotUrgent";
   }
 
-  function quadrantTodos(key: QuadrantKey) {
-    return renderedTodos.filter((todo) => quadrantKey(todo) === key);
+  // Pass changing inputs explicitly so legacy Svelte templates track dependencies.
+  function quadrantTodos(items: Todo[], key: QuadrantKey, now: Date) {
+    return items.filter((todo) => quadrantKey(todo, now) === key);
   }
 
-  function quadrantCount(key: QuadrantKey) {
-    return filteredTodos.filter((todo) => quadrantKey(todo) === key).length;
+  function quadrantCount(items: Todo[], key: QuadrantKey, now: Date) {
+    return quadrantTodos(items, key, now).length;
   }
 
   function agendaKey(todo: Todo, now = new Date()): AgendaKey {
@@ -1878,12 +1879,12 @@
     return "later";
   }
 
-  function agendaTodos(key: AgendaKey) {
-    return renderedTodos.filter((todo) => agendaKey(todo) === key);
+  function agendaTodos(items: Todo[], key: AgendaKey, now: Date) {
+    return items.filter((todo) => agendaKey(todo, now) === key);
   }
 
-  function agendaDateTodos(date: string) {
-    return renderedTodos.filter((todo) => todoAgendaDate(todo) === date);
+  function agendaDateTodos(items: Todo[], date: string) {
+    return items.filter((todo) => todoAgendaDate(todo) === date);
   }
 
   function startOfAgendaWeek(value = Date.now()) {
@@ -1893,7 +1894,8 @@
     return date.getTime();
   }
 
-  function agendaWeekDays(now = new Date(agendaWeekStartAt)) {
+  function agendaWeekDays(items: Todo[], weekStartAt: number) {
+    const now = new Date(weekStartAt);
     return Array.from({ length: 7 }, (_, index) => {
       const date = new Date(now);
       date.setDate(now.getDate() + index);
@@ -1902,7 +1904,7 @@
         dateKey,
         day: String(date.getDate()),
         label: agendaDayLabel(dateKey, date),
-        count: renderedTodos.filter((todo) => todoAgendaDate(todo) === dateKey)
+        count: items.filter((todo) => todoAgendaDate(todo) === dateKey)
           .length,
       };
     });
@@ -3341,7 +3343,7 @@
                   selectedQuadrant === quadrant.key ? "all" : quadrant.key)}
             >
               <span>{quadrant.title}</span>
-              <strong>{quadrantCount(quadrant.key)}</strong>
+              <strong>{quadrantCount(filteredTodos, quadrant.key, filterNow)}</strong>
               <small>{quadrant.subtitle}</small>
             </button>
           {/each}
@@ -3357,7 +3359,7 @@
         {/if}
         <div class="quadrant-sections">
           {#each quadrantDefinitions.filter((quadrant) => selectedQuadrant === "all" || selectedQuadrant === quadrant.key) as quadrant (quadrant.key)}
-            {@const sectionTodos = quadrantTodos(quadrant.key)}
+            {@const sectionTodos = quadrantTodos(renderedTodos, quadrant.key, filterNow)}
             <section class={`quadrant-section ${quadrant.tone}`}>
               <header>
                 <span class="quadrant-dot" aria-hidden="true"></span>
@@ -3427,7 +3429,7 @@
           </div>
           {#key `${agendaWeekStartAt}-${agendaWeekVersion}`}
             <div class="agenda-week-strip">
-              {#each agendaWeekDays() as day (day.dateKey)}
+              {#each agendaWeekDays(renderedTodos, agendaWeekStartAt) as day (day.dateKey)}
                 {@const eventCount = calendarOccurrencesOnDate($systemCalendar.document, day.dateKey).length}
                 <button
                   class:active={selectedAgendaDate === day.dateKey}
@@ -3482,10 +3484,10 @@
           {/if}
         </section>
         <div class="agenda-sections">
-          <SystemCalendar dates={selectedAgendaDate ? [selectedAgendaDate] : agendaWeekDays().map(day => day.dateKey)} now={filterNow.getTime()} />
+          <SystemCalendar dates={selectedAgendaDate ? [selectedAgendaDate] : agendaWeekDays(renderedTodos, agendaWeekStartAt).map(day => day.dateKey)} now={filterNow.getTime()} />
           {#if selectedAgendaDate}
             {#key selectedAgendaDate}
-              {@const sectionTodos = agendaDateTodos(selectedAgendaDate)}
+              {@const sectionTodos = agendaDateTodos(renderedTodos, selectedAgendaDate)}
               <section class="agenda-section selected-date">
                 <header>
                   <div>
@@ -3542,7 +3544,7 @@
             {/key}
           {:else}
             {#each agendaDefinitions as section (section.key)}
-            {@const sectionTodos = agendaTodos(section.key)}
+            {@const sectionTodos = agendaTodos(renderedTodos, section.key, filterNow)}
             {#if sectionTodos.length > 0}
               <section class={`agenda-section ${section.key}`}>
                 <header>
