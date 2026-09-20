@@ -94,7 +94,7 @@ Windows 窗口缩放修复（2026-09-16，未发布）：拖动主窗口边缘�
 
 任务效率功能开发（2026-09-15）：P1d-2c 已接“新建任务与清单”，两端任务设置及子项一次保存，取消不创建、重试不重复。桌面从输入框右侧清单图标进入，鸿蒙从新增任务“选项”进入，见[入口与验收](docs/TASK_CHECKLIST_CREATION_UI.md)。下一步为详情独立即时勾选；模板与批量创建尚未开放。详见[实现方案](docs/TASK_PRODUCTIVITY_IMPLEMENTATION_PLAN.md)、[共享契约](docs/TASK_PRODUCTIVITY_CONTRACT.md)与[roadmap](docs/TASK_PRODUCTIVITY_ROADMAP.md)。软件版本不变。
 
-最新交接：[桌面 1.3.0 任务生命周期发布准备](.claude/handoffs/2026-09-19-201946-desktop-1-3-0-lifecycle-release.md)。当前分支 `main`，本地提交后不推送或发布；保留未逐项确认的原生平台验收范围。
+最新交接：[桌面 1.3.1 同步修复](.claude/handoffs/2026-09-20-122651-desktop-1-3-1-sync-fix.md)。当前分支 `main`，本地提交后不推送或发布；保留未逐项确认的原生平台验收范围。
 
 此前候选版本：**1.2.0**（2026-09-16），配套鸿蒙 1.3.0 / 1000030。当时的检查清单、模板、批量创建及验证记录见[发布前检查](docs/TASK_PRODUCTIVITY_RELEASE_REVIEW.md)；该记录的 schema 21、备份 v5 和旧 handoff 是历史状态，当前版本以上方 1.3.1 记录为准。
 
