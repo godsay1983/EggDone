@@ -1540,7 +1540,9 @@ async fn sync_now_inner(
     }
 
     ensure_sync_target(&database, prepared)?;
-    let state = s3_sync::get_current_remote_state(&prepared, &database)
+    // Other domains already return their own upload receipts. Re-probing them
+    // here adds seven serial network requests whose results are discarded.
+    let state = s3_sync::get_entity_remote_state(&prepared, &database)
         .await
         .ok();
     ensure_sync_target(&database, prepared)?;

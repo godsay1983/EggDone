@@ -10,6 +10,7 @@ import {
   syncStatus,
   savedSyncSettings,
   runSettingsUpdate,
+  syncOnPanelShown,
 } from "./autoSync";
 
 vi.mock("$lib/api/syncApi", () => ({
@@ -40,6 +41,106 @@ afterEach(() => {
 });
 
 describe("auto sync", () => {
+  it("does not queue another sync when focus or polling occurs during an active sync", async () => {
+    vi.useFakeTimers();
+    configureAutoSync(enabledSettings);
+    const active = deferred<syncApi.ManualSyncResult>();
+    vi.mocked(syncApi.syncNow).mockReturnValueOnce(active.promise).mockResolvedValue(syncResult());
+    const first = runManualSync();
+    setAutoSyncForeground(true);
+    await vi.advanceTimersByTimeAsync(60_000);
+    const joined = runManualSync();
+    active.resolve(syncResult());
+    await Promise.all([first, joined]);
+    expect(get(syncStatus).kind).toBe('synced');
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves local changes made during an active sync", async () => {
+    vi.useFakeTimers();
+    configureAutoSync(enabledSettings);
+    const active = deferred<syncApi.ManualSyncResult>();
+    vi.mocked(syncApi.syncNow).mockReturnValueOnce(active.promise).mockResolvedValue(syncResult());
+    const first = runManualSync();
+    scheduleAutoSync();
+    const joined = runManualSync();
+    active.resolve(syncResult());
+    await Promise.all([first, joined]);
+    expect(get(syncStatus).kind).toBe('pending');
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(2);
+    expect(get(syncStatus).kind).toBe('synced');
+  });
+
+  it("syncs immediately on native panel show and coalesces focus and repeated show events", async () => {
+    vi.useFakeTimers();
+    configureAutoSync(enabledSettings);
+    const active = deferred<syncApi.ManualSyncResult>();
+    vi.mocked(syncApi.syncNow).mockReturnValueOnce(active.promise).mockResolvedValue(syncResult());
+    scheduleAutoSync();
+    syncOnPanelShown();
+    setAutoSyncForeground(true);
+    syncOnPanelShown();
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(1);
+    expect(syncApi.getRemoteSyncState).not.toHaveBeenCalled();
+    expect(get(syncStatus).kind).toBe('syncing');
+    active.resolve(syncResult());
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(1);
+    expect(get(syncStatus).kind).toBe('synced');
+    setAutoSyncForeground(false);
+    syncOnPanelShown();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not sync on panel show when synchronization is disabled", () => {
+    configureAutoSync({ ...enabledSettings, enabled: false });
+    syncOnPanelShown();
+    expect(syncApi.syncNow).not.toHaveBeenCalled();
+    expect(get(syncStatus).kind).toBe('idle');
+  });
+
+  it("consumes the local debounce when a foreground probe starts synchronization", async () => {
+    vi.useFakeTimers();
+    configureAutoSync(enabledSettings);
+    vi.mocked(syncApi.getRemoteSyncState).mockResolvedValue(remoteProbe());
+    vi.mocked(syncApi.syncNow).mockResolvedValue(syncResult());
+    scheduleAutoSync();
+    setAutoSyncForeground(true);
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not discard a probe on duplicate foreground notifications", async () => {
+    vi.useFakeTimers();
+    configureAutoSync(enabledSettings);
+    const probe = deferred<syncApi.RemoteSyncState>();
+    vi.mocked(syncApi.getRemoteSyncState).mockReturnValueOnce(probe.promise);
+    vi.mocked(syncApi.syncNow).mockResolvedValue(syncResult());
+    setAutoSyncForeground(true);
+    setAutoSyncForeground(true);
+    probe.resolve(remoteProbe());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(1);
+  });
+
+  it("rechecks immediately when the panel reopens before an old probe finishes", async () => {
+    vi.useFakeTimers();
+    configureAutoSync(enabledSettings);
+    const probe = deferred<syncApi.RemoteSyncState>();
+    vi.mocked(syncApi.getRemoteSyncState).mockReturnValueOnce(probe.promise).mockResolvedValue(remoteProbe());
+    vi.mocked(syncApi.syncNow).mockResolvedValue(syncResult());
+    setAutoSyncForeground(true);
+    setAutoSyncForeground(false);
+    setAutoSyncForeground(true);
+    probe.resolve(remoteProbe());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(syncApi.getRemoteSyncState).toHaveBeenCalledTimes(2);
+    expect(syncApi.syncNow).toHaveBeenCalledTimes(1);
+  });
+
   it("serializes form saves after the current sync and queues later syncs until settings are saved", async () => {
     configureAutoSync(enabledSettings);
     vi.mocked(syncApi.getSyncSettings).mockResolvedValue(enabledSettings);

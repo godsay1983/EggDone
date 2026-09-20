@@ -1089,6 +1089,42 @@ pub async fn get_remote_state(
     get_current_remote_state(prepared, database).await
 }
 
+pub(crate) struct EntityRemoteState {
+    pub todo_etag: Option<String>,
+    pub note_etag: Option<String>,
+    pub note_attachment_etag: Option<String>,
+}
+
+pub(crate) async fn get_entity_remote_state(
+    prepared: &PreparedManualSync,
+    database: &crate::db::Database,
+) -> Result<EntityRemoteState, String> {
+    let guard = || {
+        let connection = database
+            .connection
+            .lock()
+            .map_err(|_| "RECURRENCE_DATABASE_LOCK")?;
+        prepared.require_current(&connection)
+    };
+    guard()?;
+    let result = async {
+        let (_, todo_etag) = get_object_state(prepared, &prepared.object_key).await?;
+        guard()?;
+        let (_, note_etag) = get_object_state(prepared, &prepared.note_object_key).await?;
+        guard()?;
+        let (_, note_attachment_etag) =
+            get_object_state(prepared, &prepared.note_attachment_object_key).await?;
+        Ok(EntityRemoteState {
+            todo_etag,
+            note_etag,
+            note_attachment_etag,
+        })
+    }
+    .await;
+    guard()?;
+    result
+}
+
 pub(crate) async fn get_current_remote_state(
     prepared: &PreparedManualSync,
     database: &crate::db::Database,
@@ -1102,14 +1138,7 @@ pub(crate) async fn get_current_remote_state(
     };
     guard()?;
     let result = async {
-        let (todo_object_exists, todo_etag) =
-            get_object_state(prepared, &prepared.object_key).await?;
-        guard()?;
-        let (note_object_exists, note_etag) =
-            get_object_state(prepared, &prepared.note_object_key).await?;
-        guard()?;
-        let (note_attachment_object_exists, note_attachment_etag) =
-            get_object_state(prepared, &prepared.note_attachment_object_key).await?;
+        let entities = get_entity_remote_state(prepared, database).await?;
         guard()?;
         let recurrence_token = prepared.recurrence_transport()?.probe().await?;
         guard()?;
@@ -1140,12 +1169,12 @@ pub(crate) async fn get_current_remote_state(
                 .map_err(|_| "CHECKLIST_TOKEN_INVALID")?,
             link_token,
             recurrence_token,
-            todo_object_exists,
-            todo_etag,
-            note_object_exists,
-            note_etag,
-            note_attachment_object_exists,
-            note_attachment_etag,
+            todo_object_exists: entities.todo_etag.is_some(),
+            todo_etag: entities.todo_etag,
+            note_object_exists: entities.note_etag.is_some(),
+            note_etag: entities.note_etag,
+            note_attachment_object_exists: entities.note_attachment_etag.is_some(),
+            note_attachment_etag: entities.note_attachment_etag,
         })
     }
     .await;

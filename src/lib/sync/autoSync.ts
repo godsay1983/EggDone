@@ -89,6 +89,7 @@ let running: Promise<ManualSyncResult> | null = null;
 let pendingAfterRun = false;
 let initialized = false;
 let foreground = false;
+let foregroundVersion = 0;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let remoteCheckRunning = false;
 let remoteStateInitialized = false;
@@ -141,7 +142,10 @@ export function configureAutoSync(settings: SyncSettings) {
 }
 
 export function setAutoSyncForeground(value: boolean) {
-  pollState.invalidateProbe();
+  if (foreground !== value) {
+    foregroundVersion += 1;
+    pollState.invalidateProbe();
+  }
   foreground = value;
   if (!foreground) {
     stopForegroundPolling();
@@ -151,6 +155,16 @@ export function setAutoSyncForeground(value: boolean) {
     startForegroundPolling();
     void checkRemoteAndSync();
   }
+}
+
+export function syncOnPanelShown() {
+  // Native tray activation is explicit; it must not depend on a WebView focus event
+  // or wait for a full remote HEAD sweep before starting synchronization.
+  if (!foreground) foregroundVersion += 1;
+  foreground = true;
+  if (!enabled) return;
+  startForegroundPolling();
+  void runAutomaticSync();
 }
 
 export function scheduleAutoSync() {
@@ -219,7 +233,7 @@ function applyRuntimeSnapshot(snapshot: SyncRuntimeSnapshot, syncEnabled: boolea
 
 export async function runManualSync(): Promise<ManualSyncResult> {
   clearDebounce();
-  pendingAfterRun = false;
+  if (!running) pendingAfterRun = false;
   return runSyncWithRetry();
 }
 
@@ -233,10 +247,8 @@ async function runAutomaticSync() {
 
 function runSyncWithRetry(): Promise<ManualSyncResult> {
   if (settingsUpdate) return settingsUpdate.then(() => runSyncWithRetry());
-  if (running) {
-    pendingAfterRun = true;
-    return running;
-  }
+  clearDebounce();
+  if (running) return running;
 
   running = performSyncWithRetry().finally(() => {
     running = null;
@@ -318,13 +330,11 @@ async function performSyncWithRetry(): Promise<ManualSyncResult> {
 
 async function checkRemoteAndSync() {
   if (!enabled || !foreground || remoteCheckRunning || settingsUpdate) return;
-  if (running) {
-    pendingAfterRun = true;
-    return;
-  }
+  if (running) return;
 
   remoteCheckRunning = true;
   const ticket = pollState.capture();
+  const visibilityVersion = foregroundVersion;
   let startedSync = false;
   try {
     const remote = await getRemoteStateWithRetry(() => pollState.isCurrent(ticket) && enabled && foreground);
@@ -357,7 +367,10 @@ async function checkRemoteAndSync() {
       enabled && foreground) setFailureStatus(reason);
   } finally {
     remoteCheckRunning = false;
-    if (!pollState.isGenerationCurrent(ticket.generation) && enabled && foreground) void checkRemoteAndSync();
+    if ((!pollState.isGenerationCurrent(ticket.generation) ||
+      (!startedSync && visibilityVersion !== foregroundVersion)) && enabled && foreground && !running) {
+      void checkRemoteAndSync();
+    }
   }
 }
 

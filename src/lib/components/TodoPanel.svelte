@@ -54,11 +54,11 @@
   import { noteAttachmentApi } from "$lib/api/noteAttachmentApi";
   import { attachmentRetry } from "$lib/utils/attachmentPresentation";
   import {
-    initializeAutoSync,
     scheduleAutoSync,
     setAutoSyncForeground,
     syncSummary,
   } from "$lib/sync/autoSync";
+  import { bindAutoSyncWindow } from "$lib/sync/autoSyncWindow";
   import { syncSummaryTone } from "$lib/sync/syncSummary";
   import type {
     RepeatDeleteScope,
@@ -821,18 +821,7 @@
         unlisteners.push(unlisten);
         void readCapture();
       });
-      void initializeAutoSync().then(async () => {
-        const appWindow = getCurrentWindow();
-        setAutoSyncForeground(await appWindow.isFocused());
-        const unlistenFocus = await appWindow.onFocusChanged(({ payload }) => {
-          setAutoSyncForeground(payload);
-        });
-        if (mounted) {
-          unlisteners.push(unlistenFocus);
-        } else {
-          unlistenFocus();
-        }
-      });
+      unlisteners.push(bindAutoSyncWindow((reason) => todos.reportError(reason)));
       void initializeDesktopSettings()
         .then((settings) => (desktopSettings = settings))
         .catch((error) => todos.reportError(error));

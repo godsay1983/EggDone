@@ -250,13 +250,6 @@ fn tail() -> Vec<Reply> {
         Reply::new(200, Some("\"todos\""), b""),
         Reply::new(200, Some("\"notes\""), b""),
         Reply::new(200, Some("\"attachments\""), b""),
-        Reply::new(404, None, b""),
-        Reply::new(200, Some("\"link\""), b""),
-        Reply::new(404, None, b""), // checklist definitions HEAD
-        Reply::new(404, None, b""), // checklist items HEAD
-        Reply::new(404, None, b""), // templates HEAD
-        Reply::new(404, None, b""), // planning HEAD
-        Reply::new(404, None, b""), // workflow HEAD
     ]
 }
 
@@ -355,27 +348,12 @@ fn core_orders_entities_links_attachments_and_final_probes() {
             ("HEAD", "todos.json"),
             ("HEAD", "notes.json"),
             ("HEAD", "note-attachments.json"),
-            ("HEAD", "recurrence-rules.json"),
-            ("HEAD", "task-note-links.json"),
-            ("HEAD", "task-checklist-definitions.json"),
-            ("HEAD", "task-checklist-items.json"),
-            ("HEAD", "task-templates.json"),
         ] {
             assert!(server
                 .request()
                 .head
                 .starts_with(&format!("{method} /rules-test/account/{key} ")));
         }
-        let planning = crate::daily_plan_sync::object_key("account/todos.json", &[]).unwrap();
-        assert!(server
-            .request()
-            .head
-            .starts_with(&format!("HEAD /rules-test/{planning} ")));
-        let workflow = crate::task_workflow_sync::object_key("account/todos.json", &[]).unwrap();
-        assert!(server
-            .request()
-            .head
-            .starts_with(&format!("HEAD /rules-test/{workflow} ")));
     });
 }
 

@@ -731,7 +731,9 @@ pub(crate) fn show_panel(app: &AppHandle, anchor: Option<Rect>) {
         place_at_screen_corner(&window);
     }
 
-    let _ = window.show();
+    if window.show().is_ok() {
+        let _ = app.emit_to("main", "panel-shown", ());
+    }
     let _ = window.set_focus();
 }
 
