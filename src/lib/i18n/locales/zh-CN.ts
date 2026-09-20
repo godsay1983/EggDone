@@ -2,6 +2,7 @@ export const zhCN = {
   "systemCalendar.title": "系统日历",
   "systemCalendar.readOnly": "只读",
   "systemCalendar.refresh": "刷新系统日历",
+  "systemCalendar.details": "日历同步详情",
   "systemCalendar.changingTarget": "正在修改同步配置，已隐藏原目标日程。",
   "systemCalendar.unconfigured": "配置任务同步后可接收系统日历。",
   "systemCalendar.loading": "正在刷新日程...",

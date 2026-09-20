@@ -105,11 +105,27 @@ try {
     await page.setViewportSize({ width, height: 800 });
     await go('lang=' + lang + '&theme=' + theme);
     assert.equal(await page.locator('.system-calendar input,.system-calendar [role="checkbox"]').count(), 0);
-    assert.equal(await page.locator('.system-calendar button').count(), 1, 'only calendar refresh is actionable');
+    assert.equal(await page.locator('.system-calendar button').count(), 2, 'only info disclosure and calendar refresh are actionable');
     assert.equal(await page.locator('.system-calendar li').count(), 2, 'all-day dates stay fixed in viewer timezone');
     assert.equal(await page.locator('.agenda-week-strip .has-events').count(), 2);
     assert(!(await page.locator('.system-calendar').innerText()).includes(active.owner_id), 'no UUID wall');
-    assert((await page.locator('.system-calendar').innerText()).includes('11111111'));
+    assert(!(await page.locator('.system-calendar').innerText()).includes('11111111'), 'source metadata does not occupy the daily view');
+    assert.equal(await page.locator('.metadata-details').isVisible(), false);
+    assert.equal(await page.locator('.freshness').isVisible(), false, 'routine cache details are not a permanent notice');
+    assert(await page.locator('.system-calendar').evaluate(e =>
+      e.querySelector('.calendar-days').getBoundingClientRect().top - e.querySelector('header').getBoundingClientRect().bottom <= 16),
+      'no blank metadata space between toolbar and events');
+    const callsBeforeDetails = await page.evaluate(() => window.calls.length);
+    await page.locator('.metadata-toggle').focus();
+    await page.keyboard.press('Enter');
+    assert.equal(await page.locator('.metadata-toggle').getAttribute('aria-expanded'), 'true');
+    assert.equal(await page.locator('.metadata-details').isVisible(), true);
+    assert((await page.locator('.metadata').innerText()).includes('11111111'));
+    assert((await page.locator('.metadata').innerText()).includes('Asia/Shanghai'));
+    assert(await page.locator('.metadata-details').evaluate(e => e.scrollWidth <= e.clientWidth));
+    assert.equal(await page.evaluate(() => window.calls.length), callsBeforeDetails, 'viewing metadata does not request sync');
+    await page.keyboard.press('Space');
+    assert.equal(await page.locator('.metadata-details').isVisible(), false);
     assert.equal(await page.locator('[data-todo-id="1"]').count(), 1);
     const sunday = page.locator('.agenda-week-strip button').first();
     await sunday.focus(); await page.keyboard.press('Space');
@@ -119,7 +135,7 @@ try {
     assert((await page.locator('.all-day-span').innerText()).includes('2026-09-21'), 'all-day end is inclusive');
     assert(!(await page.locator('.all-day-span').innerText()).includes('2026-09-22'));
     assert((await page.locator('.event-zone').innerText()).includes('UTC'), 'different occurrence zone stays accessible');
-    assert.equal(await page.locator('.metadata-details').getAttribute('open'), null, 'compact metadata starts collapsed');
+    assert.equal(await page.locator('.metadata-toggle').getAttribute('aria-expanded'), 'false', 'metadata stays collapsed');
     assert.equal(await page.locator('[data-todo-id="1"]').count(), 1, 'system events do not become tasks');
     assert(await page.locator('.system-calendar').evaluate(e => e.scrollWidth <= e.clientWidth), 'calendar overflow');
     assert(await page.locator('.panel-shell').evaluate(e => e.scrollWidth <= e.clientWidth), 'panel overflow');
@@ -133,13 +149,13 @@ try {
     const [start,end]=window.calendarDayBounds(d); return (end-start)/3600000;
   }));
   assert.deepEqual(dst, [23,25], 'production day helper handles viewer DST');
-  await page.locator('.metadata-details summary').focus();
+  await page.locator('.metadata-toggle').focus();
   await page.keyboard.press('Space');
-  assert.notEqual(await page.locator('.metadata-details').getAttribute('open'), null);
+  assert.equal(await page.locator('.metadata-toggle').getAttribute('aria-expanded'), 'true');
   await page.getByText('Source zone: Asia/Shanghai', {exact:true}).waitFor();
   await page.getByText('Received:', {exact:false}).waitFor();
   await page.screenshot({path:resolve(output,'expanded-source-metadata.png'),fullPage:true});
-  await page.locator('.metadata-details summary').click();
+  await page.locator('.metadata-toggle').click();
 
   await page.evaluate(() => {
     window.calendarReply.document.occurrences[0].title='<img src=x onerror=alert(1)>Plain event';
@@ -152,7 +168,10 @@ try {
   await refresh();
   assert.equal(await page.locator('.system-calendar img,.system-calendar script,.system-calendar b').count(), 0);
   await page.getByText('Source snapshot is over 24 hours old.', {exact:false}).waitFor();
+  assert.equal(await page.locator('.freshness').isVisible(), false);
+  await page.locator('.metadata-toggle').click();
   await page.getByText('Cache received over 5 minutes ago', {exact:false}).waitFor();
+  await page.locator('.metadata-toggle').click();
   assert(await page.locator('.system-calendar').evaluate(e => e.scrollWidth <= e.clientWidth));
   await page.screenshot({path:resolve(output,'long-plain-stale.png'),fullPage:true});
 
@@ -178,6 +197,7 @@ try {
   await page.evaluate(() => { window.calendarReply.document=window.withdrawn; }); await refresh();
   await page.getByText('The source device has stopped calendar sharing.', {exact:true}).waitFor();
   assert.equal(await page.locator('.system-calendar li').count(), 0);
+  assert.equal(await page.locator('.metadata-toggle').count(), 0);
   assert.equal(await page.locator('.agenda-week-strip .has-events').count(), 0);
 
   await page.evaluate(() => { window.calendarReply.document=structuredClone(window.active); }); await refresh();
@@ -187,6 +207,7 @@ try {
   assert.equal(await page.getByText('No shared events in this snapshot for this date.',{exact:true}).count(),0);
 
   // Saving hides old content immediately; even a delayed prior IPC cannot rehydrate it.
+  await page.locator('.metadata-toggle').click();
   await page.evaluate(() => { window.holdCalendar=true; void window.systemCalendar.refresh(); });
   await page.waitForFunction(() => !!window.releaseCalendar);
   await page.evaluate(() => {
@@ -215,7 +236,7 @@ try {
   await page.getByText('Calendar refresh failed.',{exact:false}).waitFor();
   assert.equal(await page.evaluate(() => window.calls.filter(c=>c.command==='sync_now').length),1);
   assert.deepEqual(errors,[]);
-  console.log(JSON.stringify({cases, screenshots:output, checks:'calendar week/day, no tasks, plain text, freshness, coverage, target epochs, independent sync, DST'},null,2));
+  console.log(JSON.stringify({cases, screenshots:output, checks:'compact metadata disclosure, keyboard, no extra IPC, calendar week/day, no tasks, plain text, freshness, coverage, target epochs, independent sync, DST'},null,2));
 } finally {
   if(browser)await browser.close();
   await server.close();

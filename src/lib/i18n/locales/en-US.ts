@@ -5,6 +5,7 @@ export const enUS = {
   "systemCalendar.title": "System calendar",
   "systemCalendar.readOnly": "Read-only",
   "systemCalendar.refresh": "Refresh system calendar",
+  "systemCalendar.details": "Calendar sync details",
   "systemCalendar.changingTarget": "Sync settings are changing. Previous calendar hidden.",
   "systemCalendar.unconfigured": "System calendar requires configured task sync.",
   "systemCalendar.loading": "Refreshing calendar...",

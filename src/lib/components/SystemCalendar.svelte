@@ -9,8 +9,10 @@
 
   export let dates: string[];
   export let now: number;
+  let detailsOpen = false;
 
   $: document = $systemCalendar.document;
+  $: if (document?.state !== 'active' || $systemCalendar.changingTarget) detailsOpen = false;
   $: freshness = calendarFreshness(document, $systemCalendar.last_received_at, now);
   $: days = dates.map(date => ({ date, coverage: calendarCoverageOnDate(document?.coverage ?? null, date),
     items: calendarOccurrencesOnDate(document, date) }));
@@ -32,6 +34,16 @@
 <section class="system-calendar" aria-label={$translator('systemCalendar.title')} aria-busy={$systemCalendar.loading}>
   <header>
     <div><h2>{$translator('systemCalendar.title')}</h2><span>{$translator('systemCalendar.readOnly')}</span></div>
+    <div class="calendar-tools">
+    {#if document?.state === 'active'}
+      <button type="button" class="metadata-toggle" title={$translator('systemCalendar.details')}
+        aria-label={$translator('systemCalendar.details')} aria-expanded={detailsOpen}
+        aria-controls="system-calendar-metadata" onclick={() => detailsOpen = !detailsOpen}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7v2" />
+        </svg>
+      </button>
+    {/if}
     <button type="button" class="refresh" title={$translator('systemCalendar.refresh')}
       aria-label={$translator('systemCalendar.refresh')}
       disabled={$systemCalendar.loading || $systemCalendar.changingTarget || !$systemCalendar.configured}
@@ -40,6 +52,7 @@
         <path d="M20 7v5h-5M4 17v-5h5M6.1 7a7 7 0 0 1 11.6-2L20 8M4 16l2.3 3A7 7 0 0 0 18 17" />
       </svg>
     </button>
+    </div>
   </header>
   <div class="calendar-status" role="status">
     {#if $systemCalendar.changingTarget}
@@ -62,12 +75,10 @@
     {/if}
   </div>
   {#if document?.state === 'active'}
-    <details class="metadata-details">
-      <summary>
+    <div id="system-calendar-metadata" class="metadata-details" hidden={!detailsOpen}>
+      <div class="metadata">
         <span>{$translator('systemCalendar.source', { owner: calendarOwnerLabel(document.owner_id) })}</span>
         <span>{$translator('systemCalendar.captured', { time: formatDateTime(document.captured_at, locale) })}</span>
-      </summary>
-      <div class="metadata">
         <span>{$translator('systemCalendar.timezone', { zone: document.source_timezone })}</span>
         {#if $systemCalendar.last_received_at > 0}
           <span>{$translator('systemCalendar.received', { time: formatDateTime($systemCalendar.last_received_at, locale) })}</span>
@@ -76,11 +87,11 @@
           <span>{$translator('systemCalendar.coverage', { start: document.coverage.start, end: document.coverage.end })}</span>
         {/if}
       </div>
-    </details>
+      <p class:warning={freshness.cacheStale} class="freshness">
+        {$translator(freshness.cacheStale ? 'systemCalendar.cacheStale' : 'systemCalendar.cacheFresh')}
+      </p>
+    </div>
     {#if freshness.sourceStale}<p class="warning">{$translator('systemCalendar.sourceStale')}</p>{/if}
-    <p class:warning={freshness.cacheStale} class="freshness">
-      {$translator(freshness.cacheStale ? 'systemCalendar.cacheStale' : 'systemCalendar.cacheFresh')}
-    </p>
     <div class="calendar-days">
       {#each days as day (day.date)}
         <section class="calendar-day" data-calendar-date={day.date}>
@@ -122,18 +133,18 @@
   header, header > div { display: flex; align-items: center; gap: 8px; }
   header { justify-content: space-between; }
   header > div { flex-wrap: wrap; min-width: 0; }
+  header .calendar-tools { flex-wrap: nowrap; flex-shrink: 0; gap: 6px; }
   h2 { font-size: 13px; margin: 0; }
   header span, .metadata-details, .freshness, .event-content > span { color: var(--calendar-muted); }
-  .refresh { flex: 0 0 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--calendar-line);
+  .calendar-tools button { flex: 0 0 30px; width: 30px; height: 30px; padding: 0; display: grid; place-items: center; border: 1px solid var(--calendar-line);
     border-radius: 6px; background: transparent; cursor: pointer; }
+  .metadata-toggle[aria-expanded='true'] { color: var(--calendar-accent); border-color: var(--calendar-accent); }
   .refresh:disabled { opacity: .5; cursor: default; }
-  .refresh:focus-visible, summary:focus-visible { outline: 2px solid var(--calendar-accent); outline-offset: 2px; }
+  .calendar-tools button:focus-visible { outline: 2px solid var(--calendar-accent); outline-offset: 2px; }
   p { margin: 5px 0; overflow-wrap: anywhere; }
-  .metadata { display: flex; flex-wrap: wrap; gap: 3px 12px; font-size: 11px; }
+  .metadata { display: grid; gap: 4px; font-size: 11px; }
   .metadata span { overflow-wrap: anywhere; }
-  .metadata-details { font-size: 11px; margin-top: 4px; }
-  summary { cursor: pointer; overflow-wrap: anywhere; }
-  summary span:last-child { display: block; margin-top: 3px; }
+  .metadata-details { font-size: 11px; margin: 8px 0; padding: 8px 10px; border-left: 2px solid var(--calendar-line); }
   .warning { color: #9c432b; }
   .freshness { font-size: 11px; }
   .calendar-days { max-height: 280px; overflow: auto; scrollbar-gutter: stable; }
