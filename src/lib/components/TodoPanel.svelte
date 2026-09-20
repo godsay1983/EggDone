@@ -107,6 +107,9 @@
   import DailyPlanList from './DailyPlanList.svelte';
   import DailyPlanStatus from './DailyPlanStatus.svelte';
   import { dailyPlans } from '$lib/stores/dailyPlanStore';
+  import SystemCalendar from './SystemCalendar.svelte';
+  import { systemCalendar } from '$lib/stores/systemCalendarStore';
+  import { calendarOccurrencesOnDate } from '$lib/utils/systemCalendarDates';
   import { taskWorkflow } from '$lib/stores/taskWorkflowStore';
   import WaitingList from './WaitingList.svelte';
   let waitingListOpen = false;
@@ -3278,20 +3281,20 @@
   {:else}
   <section class="todo-list" aria-live="polite"
     use:preserveScroll={{ positions: listScrollPositions, key: 'tasks', ready: !$todos.loading }}>
-    {#if $todos.loading}
+    {#if $todos.loading && listView !== 'calendar'}
       <div class="status">{$translator("empty.loading")}</div>
-    {:else if $todos.error && $todos.items.length === 0}
+    {:else if $todos.error && $todos.items.length === 0 && listView !== 'calendar'}
       <div class="status error">
         <span>{$todos.error}</span>
         <button type="button" onclick={() => todos.load()}>{$translator("common.retry")}</button>
       </div>
-    {:else if $todos.items.length === 0}
+    {:else if $todos.items.length === 0 && listView !== 'calendar'}
       <div class="empty-state">
         <img class="empty-mascot" src="/eggdone-icon.png" alt="" aria-hidden="true" />
         <strong>{$translator("empty.title")}</strong>
         <span>{$translator("empty.subtitle")}</span>
       </div>
-    {:else if renderedTodos.length === 0}
+    {:else if renderedTodos.length === 0 && listView !== 'calendar'}
       <div class="empty-state filtered-empty">
         <strong>
           {smartView
@@ -3302,8 +3305,6 @@
               ? $translator("empty.todayTitle")
               : listView === "quadrants"
                 ? $translator("empty.matrixTitle")
-                : listView === "calendar"
-                  ? $translator("empty.calendarTitle")
               : $translator("empty.completedHidden")}
         </strong>
         <span>
@@ -3315,14 +3316,17 @@
               ? $translator("empty.todayHint")
               : listView === "quadrants"
                 ? $translator("empty.matrixHint")
-                : listView === "calendar"
-                  ? $translator("empty.calendarHint")
               : $translator("empty.completedHint")}
         </span>
       </div>
     {:else}
       {#if $todos.error}
-        <div class="inline-error" role="alert">{$todos.error}</div>
+        <div class="inline-error" role="alert">
+          {$todos.error}
+          {#if listView === 'calendar' && $todos.items.length === 0}
+            <button type="button" onclick={() => void todos.load()}>{$translator('common.retry')}</button>
+          {/if}
+        </div>
       {/if}
       {#if listView === "quadrants"}
         <div class="quadrant-overview" aria-label={$translator("matrix.fullName")}>
@@ -3424,6 +3428,7 @@
           {#key `${agendaWeekStartAt}-${agendaWeekVersion}`}
             <div class="agenda-week-strip">
               {#each agendaWeekDays() as day (day.dateKey)}
+                {@const eventCount = calendarOccurrencesOnDate($systemCalendar.document, day.dateKey).length}
                 <button
                   class:active={selectedAgendaDate === day.dateKey}
                   class:today={day.dateKey === localDateString(0)}
@@ -3433,7 +3438,16 @@
                 >
                   <span>{day.label}</span>
                   <strong>{day.day}</strong>
-                  <small class:visible={day.count > 0}>{day.count}</small>
+                  <small class:visible={day.count > 0} aria-label={$translator('systemCalendar.taskCount', { count: day.count })}>{day.count}</small>
+                  <span class="system-calendar-indicator"
+                    class:has-events={eventCount > 0}
+                    title={$translator('systemCalendar.eventCount', { count: eventCount })}
+                    aria-label={$translator('systemCalendar.eventCount', { count: eventCount })}>
+                    <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" aria-hidden="true">
+                      <rect x="1.5" y="2.5" width="9" height="8" rx="1" /><path d="M4 1v3M8 1v3M2 5h8" />
+                    </svg>
+                    {eventCount || ''}
+                  </span>
                 </button>
               {/each}
             </div>
@@ -3459,6 +3473,7 @@
             <input
               class="agenda-date-picker"
               type="date"
+              aria-label={$translator('calendar.jumpDate')}
               value={selectedAgendaDate ?? localDateString(0)}
               onchange={(event) => {
                 setAgendaDateFromPicker(event.currentTarget.value);
@@ -3467,6 +3482,7 @@
           {/if}
         </section>
         <div class="agenda-sections">
+          <SystemCalendar dates={selectedAgendaDate ? [selectedAgendaDate] : agendaWeekDays().map(day => day.dateKey)} now={filterNow.getTime()} />
           {#if selectedAgendaDate}
             {#key selectedAgendaDate}
               {@const sectionTodos = agendaDateTodos(selectedAgendaDate)}

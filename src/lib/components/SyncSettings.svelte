@@ -238,9 +238,12 @@
     error = "";
     message = "";
     try {
-      await deleteSyncCredentials();
-      settings = { ...settings, enabled: false, credentialsConfigured: false };
-      configureAutoSync(settings);
+      await runSettingsUpdate(async () => {
+        await deleteSyncCredentials();
+        if (!settings) return;
+        settings = { ...settings, enabled: false, credentialsConfigured: false };
+        configureAutoSync(settings);
+      });
       message = $translator("sync.credentialsDeleted");
     } catch (reason) {
       error = errorMessage(reason);

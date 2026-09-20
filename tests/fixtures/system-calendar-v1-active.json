@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "owner_id": "11111111-1111-4111-8111-111111111111",
+  "owner_generation": "22222222-2222-4222-8222-222222222222",
+  "revision": 1,
+  "operation_id": "33333333-3333-4333-8333-333333333333",
+  "state": "active",
+  "captured_at": 1789876800000,
+  "source_timezone": "Asia/Shanghai",
+  "coverage": {
+    "start": "2026-08-21",
+    "end": "2027-03-20",
+    "start_time": 1787241600000,
+    "end_time": 1805472000000
+  },
+  "calendars": [
+    {
+      "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "title": "Example calendar"
+    }
+  ],
+  "occurrences": [
+    {
+      "id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "calendarId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "title": "Read-only meeting",
+      "startTime": 1789869600000,
+      "endTime": 1789873200000,
+      "isAllDay": false,
+      "startDate": "",
+      "endDateExclusive": "",
+      "timeZone": "Asia/Shanghai",
+      "location": "Room 1"
+    },
+    {
+      "id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "calendarId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "title": "All-day example",
+      "startTime": 1789862400000,
+      "endTime": 1790035200000,
+      "isAllDay": true,
+      "startDate": "2026-09-20",
+      "endDateExclusive": "2026-09-22",
+      "timeZone": "UTC",
+      "location": ""
+    }
+  ]
+}

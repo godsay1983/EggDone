@@ -1117,6 +1117,7 @@ dependencies = [
  "keyring",
  "ksni",
  "quick-xml 0.38.4",
+ "reqwest 0.12.28",
  "rusqlite",
  "rust-s3",
  "serde",

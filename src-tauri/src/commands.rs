@@ -1157,18 +1157,51 @@ pub fn get_sync_runtime_state(
 }
 
 #[tauri::command]
-pub fn save_sync_settings(
-    settings: SaveSyncSettings,
+pub fn get_system_calendar_state(
     database: State<'_, Database>,
-) -> Result<SyncSettings, String> {
-    let connection = lock_database(&database)?;
-    s3_sync::save_settings(&connection, settings)
+    calendar: State<'_, crate::system_calendar_sync::CalendarRuntime>,
+) -> crate::system_calendar_sync::CalendarState {
+    calendar.state(&database)
 }
 
 #[tauri::command]
-pub fn delete_sync_credentials(database: State<'_, Database>) -> Result<(), String> {
+pub async fn refresh_system_calendar(
+    database: State<'_, Database>,
+    calendar: State<'_, crate::system_calendar_sync::CalendarRuntime>,
+) -> Result<crate::system_calendar_sync::CalendarState, String> {
+    let state = calendar.refresh(&database).await;
+    Ok(state)
+}
+
+#[tauri::command]
+pub fn save_sync_settings(
+    settings: SaveSyncSettings,
+    database: State<'_, Database>,
+    app: AppHandle,
+    calendar: State<'_, crate::system_calendar_sync::CalendarRuntime>,
+) -> Result<SyncSettings, String> {
     let connection = lock_database(&database)?;
-    s3_sync::delete_credentials(&connection)
+    let result = s3_sync::save_settings(&connection, settings);
+    let _ = app.emit(
+        "system-calendar-state-changed",
+        calendar.state_for_connection(&connection),
+    );
+    result
+}
+
+#[tauri::command]
+pub fn delete_sync_credentials(
+    database: State<'_, Database>,
+    app: AppHandle,
+    calendar: State<'_, crate::system_calendar_sync::CalendarRuntime>,
+) -> Result<(), String> {
+    let connection = lock_database(&database)?;
+    let result = s3_sync::delete_credentials(&connection);
+    let _ = app.emit(
+        "system-calendar-state-changed",
+        calendar.state_for_connection(&connection),
+    );
+    result
 }
 
 #[tauri::command]

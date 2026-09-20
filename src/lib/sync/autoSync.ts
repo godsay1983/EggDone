@@ -1,6 +1,7 @@
 import { derived, writable } from "svelte/store";
 import { RemotePollState } from "./remotePollState";
 import { syncSummaryState } from "./syncSummary";
+import { systemCalendar } from '$lib/stores/systemCalendarStore';
 
 import {
   getRemoteSyncState,
@@ -46,13 +47,17 @@ export const savedSyncSettings = writable<SyncSettings | null>(null);
 
 export async function refreshSavedSyncSettings(current: () => boolean = () => true): Promise<SyncSettings> {
   const settings = await getSyncSettings();
-  if (current()) savedSyncSettings.set(settings);
+  if (current()) {
+    savedSyncSettings.set(settings);
+    if (settings) systemCalendar.configure(settings);
+  }
   return settings;
 }
 
 let settingsUpdate: Promise<unknown> | null = null;
 
 export function runSettingsUpdate<T>(action: () => Promise<T>): Promise<T> {
+  systemCalendar.beginSettingsUpdate();
   const previous = settingsUpdate;
   const update = (async () => {
     if (previous) { try { await previous; } catch { /* A failed settings form must not block the next one. */ } }
@@ -62,6 +67,7 @@ export function runSettingsUpdate<T>(action: () => Promise<T>): Promise<T> {
   })();
   settingsUpdate = update;
   const release = () => {
+    systemCalendar.endSettingsUpdate();
     if (settingsUpdate === update) {
       settingsUpdate = null;
       if (pendingAfterRun && enabled) { pendingAfterRun = false; scheduleAutoSync(); }
@@ -114,6 +120,7 @@ export async function initializeAutoSync() {
 }
 
 export function configureAutoSync(settings: SyncSettings) {
+  systemCalendar.configure(settings);
   savedSyncSettings.set(settings);
   pollState.reset();
   clearDebounce();
@@ -142,6 +149,7 @@ export function configureAutoSync(settings: SyncSettings) {
 }
 
 export function setAutoSyncForeground(value: boolean) {
+  systemCalendar.setForeground(value);
   if (foreground !== value) {
     foregroundVersion += 1;
     pollState.invalidateProbe();
@@ -158,6 +166,7 @@ export function setAutoSyncForeground(value: boolean) {
 }
 
 export function syncOnPanelShown() {
+  systemCalendar.panelShown();
   // Native tray activation is explicit; it must not depend on a WebView focus event
   // or wait for a full remote HEAD sweep before starting synchronization.
   if (!foreground) foregroundVersion += 1;
@@ -250,8 +259,10 @@ function runSyncWithRetry(): Promise<ManualSyncResult> {
   clearDebounce();
   if (running) return running;
 
+  systemCalendar.setTaskSyncing(true);
   running = performSyncWithRetry().finally(() => {
     running = null;
+    systemCalendar.setTaskSyncing(false);
     if (pendingAfterRun && enabled) {
       pendingAfterRun = false;
       scheduleAutoSync();
@@ -306,6 +317,7 @@ async function performSyncWithRetry(): Promise<ManualSyncResult> {
       knownNoteRemoteEtag = result.noteRemoteEtag;
       knownNoteAttachmentRemoteEtag = result.noteAttachmentRemoteEtag;
       remoteStateInitialized = true;
+      systemCalendar.afterTaskSync();
       return result;
     } catch (reason) {
       if (!pollState.isGenerationCurrent(generation)) throw reason;

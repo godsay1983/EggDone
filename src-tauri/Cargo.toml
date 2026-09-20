@@ -34,6 +34,7 @@ tauri-plugin-autostart = "2"
 tauri-plugin-notification = "2"
 rust-s3 = { version = "0.37.2", default-features = false, features = ["tokio-rustls-tls"] }
 http = "1"
+reqwest = { version = "0.12", default-features = false }
 url = "2"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 sha2 = "0.10"

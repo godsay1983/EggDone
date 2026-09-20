@@ -1,0 +1,13 @@
+{
+  "format_version": 1,
+  "owner_id": "11111111-1111-4111-8111-111111111111",
+  "owner_generation": "22222222-2222-4222-8222-222222222222",
+  "revision": 2,
+  "operation_id": "44444444-4444-4444-8444-444444444444",
+  "state": "withdrawn",
+  "captured_at": 0,
+  "source_timezone": "",
+  "coverage": null,
+  "calendars": [],
+  "occurrences": []
+}

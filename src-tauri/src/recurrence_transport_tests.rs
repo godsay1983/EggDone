@@ -52,6 +52,11 @@ pub(crate) struct Reply {
 }
 
 impl Reply {
+    pub(crate) fn with_chunked_body(mut self) -> Self {
+        self.chunked = true;
+        self
+    }
+
     pub(crate) fn with_header(mut self, name: &str, value: &str) -> Self {
         assert!(!name.contains(['\r', '\n']));
         assert!(!value.contains(['\r', '\n']));

@@ -1959,6 +1959,20 @@ html[data-theme="dark"] .summary-menu hr { border-color: #665742; }
   background: rgb(255 255 255 / 72%);
 }
 
+.agenda-week-strip .system-calendar-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 13px;
+  font-size: 10px;
+  color: #316457;
+  visibility: hidden;
+}
+.agenda-week-strip .system-calendar-indicator.has-events { visibility: visible; }
+html[data-theme="dark"] .agenda-week-strip .system-calendar-indicator { color: #a4d4bd; }
+html[data-theme="dark"] .agenda-week-strip button.active .system-calendar-indicator { color: #234738; }
+
 .agenda-jump {
   display: flex;
   justify-content: flex-end;

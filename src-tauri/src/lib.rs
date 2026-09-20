@@ -68,6 +68,8 @@ mod sync_auto_join;
 mod sync_runtime_state;
 mod sync_space;
 mod sync_target;
+mod system_calendar;
+mod system_calendar_sync;
 mod task_batch;
 mod task_batch_commands;
 #[cfg(test)]
@@ -177,6 +179,9 @@ pub fn run() {
         .manage(window_preferences::WindowPreferencesReady::default())
         .manage(s3_sync::SyncRuntime::default())
         .setup(|app| {
+            app.manage(system_calendar_sync::CalendarRuntime::new(
+                app.path().app_cache_dir().ok(),
+            ));
             let database = db::Database::open(app.handle())?;
             app.manage(database);
             let note_asset_store = note_asset_store::NoteAssetStore::from_app(app.handle())?;
@@ -320,6 +325,8 @@ pub fn run() {
             commands::prepare_sync_document,
             commands::apply_remote_sync_document,
             commands::get_sync_settings,
+            commands::get_system_calendar_state,
+            commands::refresh_system_calendar,
             commands::get_sync_runtime_state,
             commands::save_sync_settings,
             commands::delete_sync_credentials,

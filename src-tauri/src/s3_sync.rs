@@ -79,6 +79,10 @@ pub struct PreparedManualSync {
 }
 
 impl PreparedManualSync {
+    pub(crate) fn calendar_bucket(&self) -> &Bucket {
+        &self.bucket
+    }
+
     pub(crate) fn main_key(&self) -> &str {
         &self.object_key
     }
@@ -536,6 +540,31 @@ pub fn prepare_manual_sync(connection: &Connection) -> Result<PreparedManualSync
             .ok_or_else(|| "请先填写并保存 Access Key 和 Secret Key".to_string())?;
         build_bucket(settings, credentials)
     })
+}
+
+// No credentials, endpoint or user object key are written to the calendar cache.
+pub(crate) fn calendar_target_identity(connection: &Connection) -> Result<Option<String>, String> {
+    let settings = read_settings(connection).map_err(|_| "CALENDAR_CONFIGURATION")?;
+    if !settings.enabled {
+        return Ok(None);
+    }
+    settings
+        .validate_connection()
+        .map_err(|_| "CALENDAR_CONFIGURATION")?;
+    crate::space_activation::admit(connection, &settings.object_key)
+        .map_err(|_| "CALENDAR_TARGET_CHANGED")?;
+    let epoch = crate::sync_target::capture(connection).map_err(|_| "CALENDAR_TARGET_CHANGED")?;
+    let binding = serde_json::to_vec(&(
+        &settings.endpoint,
+        &settings.bucket,
+        &settings.region,
+        settings.path_style,
+        settings.allow_http,
+        &settings.object_key,
+        epoch,
+    ))
+    .map_err(|_| "CALENDAR_CONFIGURATION")?;
+    Ok(Some(sha256_hex(&binding)))
 }
 #[cfg(test)]
 pub(crate) fn prepare_with_fixture_credentials(
