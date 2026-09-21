@@ -43,9 +43,9 @@ import {todos} from '/src/lib/stores/todoStore.ts';
 import '/src/app.css';
 const p = new URLSearchParams(location.search);
 localStorage.clear();
-localStorage.setItem('eggdone-theme', 'dark');
+localStorage.setItem('eggdone-theme', p.get('theme') || 'dark');
 localStorage.setItem('eggdone-show-completed', p.has('hidden') ? 'false' : 'true');
-await setLanguageMode('en-US');
+await setLanguageMode(p.get('language') || 'en-US');
 window.calls = []; window.todos = todos;
 const make = (id, extra={}) => ({id,uuid:'task-'+id,title:'Task '+id,note:null,group_uuid:null,
   completed:false,pinned:false,priority:0,sort_order:id,created_at:1,updated_at:1,completed_at:null,
@@ -79,12 +79,15 @@ try {
   const errors = [];
   page.on('pageerror',error=>errors.push(error.message));
   const card = id => page.locator('[data-todo-id="'+id+'"]');
-  async function go(view, hidden=false) {
-    await page.goto(server.resolvedUrls.local[0]+'__task-views?'+(hidden?'hidden':''));
+  async function go(view, hidden=false, options={}) {
+    const query = new URLSearchParams(options);
+    if(hidden) query.set('hidden','');
+    await page.goto(server.resolvedUrls.local[0]+'__task-views?'+query);
     await page.waitForFunction(()=>window.ready);
     await card(2).waitFor();
     if(view!=='all') await page.locator('.view-switch button').nth(view==='quadrants'?2:3).click();
-    if(view==='date') await page.locator('.agenda-week-strip button').first().click();
+    if(view.startsWith('month')) await page.locator('.agenda-mode-switch button').nth(1).click();
+    if(view==='date'||view==='monthdate') await page.locator('.agenda-week-strip button[data-date="2026-09-20"]').click();
     await card(2).waitFor();
   }
   async function assertCompleted(id, completed) {
@@ -94,7 +97,7 @@ try {
         e.querySelector('.checkbox').classList.contains('checked')===completed;
     },{id,completed},{timeout:1500});
   }
-  for(const view of ['all','quadrants','calendar','date']) for(const hidden of [false,true]) {
+  for(const view of ['all','quadrants','calendar','date','month','monthdate']) for(const hidden of [false,true]) {
     await go(view,hidden);
     await page.evaluate(()=>{window.failComplete=true;});
     await card(2).locator('.checkbox').click();
@@ -105,8 +108,8 @@ try {
     await page.waitForFunction(()=>window.rows.find(t=>t.id===2).completed);
     if(hidden) {
       await card(2).waitFor({state:'detached',timeout:1500});
-      if(view==='date') assert.equal(await page.locator('.selected-date header small').innerText(),'0');
-      if(view==='calendar'||view==='date') assert.equal(await page.locator('.agenda-week-strip button').first().locator('small').innerText(),'0');
+      if(view==='date'||view==='monthdate') assert.equal(await page.locator('.selected-date header small').innerText(),'0');
+      if(view!=='all'&&view!=='quadrants') assert.equal(await page.locator('.agenda-week-strip button[data-date="2026-09-20"] small').innerText(),'0');
     } else {
       await assertCompleted(2,true);
       await card(2).locator('.checkbox').click();
@@ -129,7 +132,38 @@ try {
   await page.evaluate(()=>{window.rows[1].title='Refreshed task';return window.todos.refresh();});
   await card(2).getByText('Refreshed task',{exact:true}).waitFor({timeout:1500});
   await page.screenshot({path:resolve(output,'calendar.png')});
+  await go('monthdate');
+  assert.equal(await page.locator('.agenda-week-strip button').count(),42);
+  await page.locator('.agenda-mode-switch button').first().click();
+  assert.equal(await page.locator('.agenda-week-strip button').count(),7);
+  assert.equal(await page.locator('.agenda-week-strip button.active').getAttribute('data-date'),'2026-09-20');
+  await page.locator('.agenda-mode-switch button').nth(1).click();
+  await page.getByRole('button',{name:'Jump to date',exact:true}).click();
+  await page.locator('.agenda-date-picker').fill('2024-01-31');
+  await page.locator('.agenda-week-actions button').nth(2).click();
+  assert.equal(await page.locator('.agenda-week-strip button.active').getAttribute('data-date'),'2024-02-29');
+  await page.locator('.agenda-week-actions button').first().click();
+  assert.equal(await page.locator('.agenda-week-strip button.active').getAttribute('data-date'),'2024-01-29');
+  await page.locator('.agenda-week-actions button').nth(1).click();
+  assert.equal(await page.locator('.agenda-week-strip button.active').getAttribute('data-date'),'2026-09-20');
+  await page.locator('.agenda-week-strip button[data-date="2026-10-01"]').click();
+  assert.equal(await page.locator('.agenda-week-strip button.active').getAttribute('data-date'),'2026-10-01');
+  assert.equal(await page.locator('.agenda-week-strip button:not(.outside-month)').count(),31);
+  for(const width of [320,480,1000]) for(const language of ['en-US','zh-CN']) for(const theme of ['light','dark']) {
+    await page.setViewportSize({width,height:900});
+    await go('month',false,{language,theme});
+    for(const mode of ['month','week']) {
+      await page.locator('.agenda-mode-switch button').nth(mode==='month'?1:0).click();
+      assert.equal(await page.locator('.agenda-week-strip button').count(),mode==='month'?42:7);
+      const box=await page.locator('.agenda-nav').boundingBox();
+      assert.ok(box && box.x>=0 && box.x+box.width<=width+1,'calendar fits window');
+      const clipped=await page.locator('.agenda-nav button').evaluateAll(buttons=>buttons.filter(b=>b.scrollWidth>b.clientWidth+1).length);
+      assert.equal(clipped,0,'calendar buttons are not clipped');
+      await page.locator('.agenda-nav').screenshot({path:resolve(output,`${mode}-${width}-${language}-${theme}.png`)});
+    }
+  }
   assert.deepEqual(errors,[]);
+  console.log('PASS month/week switching, selected date, navigation, leap year, adjacent dates and 24 layout cases');
   console.log('PASS updated grouping, selected-date rows and week counts without view switching');
   console.log('Screenshots: '+output);
 } finally {

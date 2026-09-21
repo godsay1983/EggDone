@@ -72,6 +72,7 @@
   import { movePreviewByPointer } from "$lib/utils/reorderPreview";
   import { reorderNoteAttachmentWithinKind } from "$lib/utils/noteAttachmentOrder";
   import { isDueTodayOrOverdue, localDateString } from "$lib/utils/todoDates";
+  import { calendarPeriodCells, shiftCalendarPeriod, type CalendarViewMode } from "$lib/utils/calendarView";
   import {
     filterTodos,
     type TodoListView,
@@ -585,7 +586,8 @@
   let noteAttachmentUndoTimer: ReturnType<typeof setTimeout> | null = null;
   let selectedQuadrant: QuadrantKey | "all" = "all";
   let selectedAgendaDate: string | null = null;
-  let agendaWeekStartAt = startOfAgendaWeek();
+  let agendaWeekStartAt = Date.now();
+  let calendarViewMode: CalendarViewMode = 'week';
   let agendaWeekVersion = 0;
   let agendaDatePickerOpen = false;
   let defaultListViewMode: DefaultListViewMode = "remember";
@@ -968,7 +970,7 @@
     }
     if (view !== "calendar" && view !== 'notes') {
       selectedAgendaDate = null;
-      agendaWeekStartAt = startOfAgendaWeek();
+      agendaWeekStartAt = Date.now();
       agendaWeekVersion += 1;
       agendaDatePickerOpen = false;
     }
@@ -1887,24 +1889,12 @@
     return items.filter((todo) => todoAgendaDate(todo) === date);
   }
 
-  function startOfAgendaWeek(value = Date.now()) {
-    const date = new Date(value);
-    date.setHours(0, 0, 0, 0);
-    date.setDate(date.getDate() - date.getDay());
-    return date.getTime();
-  }
-
-  function agendaWeekDays(items: Todo[], weekStartAt: number) {
-    const now = new Date(weekStartAt);
-    return Array.from({ length: 7 }, (_, index) => {
-      const date = new Date(now);
-      date.setDate(now.getDate() + index);
-      const dateKey = localDateString(0, date);
+  function agendaWeekDays(items: Todo[], anchorAt: number, mode: CalendarViewMode) {
+    return calendarPeriodCells(anchorAt, mode).map((cell) => {
       return {
-        dateKey,
-        day: String(date.getDate()),
-        label: agendaDayLabel(dateKey, date),
-        count: items.filter((todo) => todoAgendaDate(todo) === dateKey)
+        ...cell,
+        label: agendaDayLabel(cell.dateKey, new Date(cell.dateAt)),
+        count: items.filter((todo) => todoAgendaDate(todo) === cell.dateKey)
           .length,
       };
     });
@@ -1925,12 +1915,18 @@
 
   function selectAgendaDate(dateKey: string) {
     selectedAgendaDate = dateKey;
+    agendaWeekStartAt = new Date(`${dateKey}T00:00:00`).getTime();
     agendaDatePickerOpen = false;
   }
 
-  function shiftAgendaWeek(offsetDays: number) {
-    const date = new Date(startOfAgendaWeek(agendaWeekStartAt));
-    date.setDate(date.getDate() + offsetDays);
+  function setCalendarViewMode(mode: CalendarViewMode) {
+    if (selectedAgendaDate) agendaWeekStartAt = new Date(`${selectedAgendaDate}T00:00:00`).getTime();
+    calendarViewMode = mode;
+    agendaDatePickerOpen = false;
+  }
+
+  function shiftAgendaWeek(offset: number) {
+    const date = new Date(shiftCalendarPeriod(agendaWeekStartAt, calendarViewMode, offset));
     agendaWeekStartAt = date.getTime();
     selectedAgendaDate = localDateString(0, date);
     agendaWeekVersion += 1;
@@ -1938,7 +1934,7 @@
   }
 
   function jumpAgendaToday() {
-    agendaWeekStartAt = startOfAgendaWeek();
+    agendaWeekStartAt = Date.now();
     selectedAgendaDate = localDateString(0);
     agendaWeekVersion += 1;
     agendaDatePickerOpen = false;
@@ -1947,9 +1943,7 @@
   function setAgendaDateFromPicker(dateKey: string) {
     if (!dateKey) return;
     selectedAgendaDate = dateKey;
-    agendaWeekStartAt = startOfAgendaWeek(
-      new Date(`${dateKey}T00:00:00`).getTime(),
-    );
+    agendaWeekStartAt = new Date(`${dateKey}T00:00:00`).getTime();
     agendaWeekVersion += 1;
     agendaDatePickerOpen = false;
   }
@@ -3418,28 +3412,46 @@
         </div>
       {:else if listView === "calendar"}
         <section class="agenda-nav" aria-label={$translator("nav.calendar")}>
+          <div class="agenda-heading">
+            <strong>{new Intl.DateTimeFormat($languageState.resolvedLocale, { year: 'numeric', month: 'long' }).format(new Date(agendaWeekStartAt))}</strong>
+            <div class="agenda-mode-switch" role="group" aria-label={$translator('calendar.viewMode')}>
+              <button type="button" class:active={calendarViewMode === 'week'} aria-pressed={calendarViewMode === 'week'} onclick={() => setCalendarViewMode('week')}>{$translator('calendar.weekView')}</button>
+              <button type="button" class:active={calendarViewMode === 'month'} aria-pressed={calendarViewMode === 'month'} onclick={() => setCalendarViewMode('month')}>{$translator('calendar.monthView')}</button>
+            </div>
+          </div>
           <div class="agenda-week-actions">
-            <button type="button" onclick={() => shiftAgendaWeek(-7)}>
-              {$translator("calendar.previousWeek")}
+            <button type="button" onclick={() => shiftAgendaWeek(-1)}>
+              {$translator(calendarViewMode === 'week' ? "calendar.previousWeek" : "calendar.previousMonth")}
             </button>
             <button type="button" onclick={jumpAgendaToday}>{$translator("calendar.today")}</button>
-            <button type="button" onclick={() => shiftAgendaWeek(7)}>
-              {$translator("calendar.nextWeek")}
+            <button type="button" onclick={() => shiftAgendaWeek(1)}>
+              {$translator(calendarViewMode === 'week' ? "calendar.nextWeek" : "calendar.nextMonth")}
             </button>
           </div>
-          {#key `${agendaWeekStartAt}-${agendaWeekVersion}`}
-            <div class="agenda-week-strip">
-              {#each agendaWeekDays(renderedTodos, agendaWeekStartAt) as day (day.dateKey)}
+          {#if calendarViewMode === 'month'}
+            <div class="agenda-weekday-labels" aria-hidden="true">
+              {#each [0, 1, 2, 3, 4, 5, 6] as weekday}
+                <span>{new Intl.DateTimeFormat($languageState.resolvedLocale, { weekday: 'narrow' }).format(new Date(2024, 0, 7 + weekday))}</span>
+              {/each}
+            </div>
+          {/if}
+          {#key `${calendarViewMode}-${agendaWeekVersion}`}
+            <div class="agenda-week-strip" class:month={calendarViewMode === 'month'}>
+              {#each agendaWeekDays(renderedTodos, agendaWeekStartAt, calendarViewMode) as day (day.dateKey)}
                 {@const eventCount = calendarOccurrencesOnDate($systemCalendar.document, day.dateKey).length}
                 <button
                   class:active={selectedAgendaDate === day.dateKey}
                   class:today={day.dateKey === localDateString(0)}
+                  class:outside-month={!day.inMonth}
                   type="button"
+                  data-date={day.dateKey}
+                  aria-label={day.dateKey}
                   aria-pressed={selectedAgendaDate === day.dateKey}
                   onclick={() => selectAgendaDate(day.dateKey)}
                 >
-                  <span>{day.label}</span>
+                  {#if calendarViewMode === 'week'}<span>{day.label}</span>{/if}
                   <strong>{day.day}</strong>
+                  <div class="agenda-day-markers">
                   <small class:visible={day.count > 0} aria-label={$translator('systemCalendar.taskCount', { count: day.count })}>{day.count}</small>
                   <span class="system-calendar-indicator"
                     class:has-events={eventCount > 0}
@@ -3450,6 +3462,7 @@
                     </svg>
                     {eventCount || ''}
                   </span>
+                  </div>
                 </button>
               {/each}
             </div>
@@ -3484,7 +3497,7 @@
           {/if}
         </section>
         <div class="agenda-sections">
-          <SystemCalendar dates={selectedAgendaDate ? [selectedAgendaDate] : agendaWeekDays(renderedTodos, agendaWeekStartAt).map(day => day.dateKey)} now={filterNow.getTime()} />
+          <SystemCalendar dates={selectedAgendaDate ? [selectedAgendaDate] : calendarPeriodCells(agendaWeekStartAt, calendarViewMode).filter(day => day.inMonth).map(day => day.dateKey)} now={filterNow.getTime()} />
           {#if selectedAgendaDate}
             {#key selectedAgendaDate}
               {@const sectionTodos = agendaDateTodos(renderedTodos, selectedAgendaDate)}

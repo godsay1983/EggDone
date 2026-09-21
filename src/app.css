@@ -1895,6 +1895,64 @@ html[data-theme="dark"] .summary-menu hr { border-color: #665742; }
   gap: 5px;
 }
 
+.agenda-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.agenda-mode-switch {
+  display: flex;
+  padding: 3px;
+  border-radius: 8px;
+  background: rgb(128 128 128 / 12%);
+}
+
+.agenda-mode-switch button {
+  border: 0;
+  border-radius: 6px;
+  padding: 5px 12px;
+  min-height: 28px;
+  color: inherit;
+  background: transparent;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.agenda-mode-switch button.active {
+  color: #3d3528;
+  background: #f6c94c;
+}
+
+.agenda-weekday-labels {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 5px;
+  text-align: center;
+  font-size: 11px;
+}
+
+.agenda-day-markers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 14px;
+}
+
+.agenda-week-strip.month button {
+  min-height: 46px;
+  border-radius: 8px;
+}
+
+.agenda-week-strip button.outside-month:not(.active) {
+  opacity: 0.5;
+}
+
 .agenda-week-actions {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
