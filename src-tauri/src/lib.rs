@@ -105,6 +105,7 @@ pub mod task_note_link_sync;
 mod task_note_link_tests;
 mod task_note_link_transport;
 mod task_note_link_views;
+pub mod task_progress_protocol;
 mod task_template_backup;
 mod task_template_commands;
 pub mod task_template_protocol;

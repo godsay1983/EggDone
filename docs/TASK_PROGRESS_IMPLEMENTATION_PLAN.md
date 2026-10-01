@@ -1,10 +1,11 @@
 # 任务进展记录实现方案
 
 - 日期：2026-10-01
-- 状态：设计稿，尚未实现；本轮仅新增文档。
+- 状态：TP-0 契约和双端协议代码已完成；TP-1 用户功能尚未接入。
 - 范围：EggDone 桌面端与 HarmonyOS 端。
 - 代码基线：桌面 1.4.2、鸿蒙 1.5.3；双端数据库 schema 26，数据导出文档最高版本 8。
 - 执行顺序：[TASK_PROGRESS_ROADMAP.md](TASK_PROGRESS_ROADMAP.md)。
+- 固定协议：[TASK_PROGRESS_PROTOCOL.md](TASK_PROGRESS_PROTOCOL.md)。
 - 两个仓库保存相同正文；后续修改须同步，不以旧阶段计划覆盖本方案。
 
 ## 1. 目标与边界

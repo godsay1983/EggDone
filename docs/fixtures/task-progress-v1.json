@@ -1,0 +1,1857 @@
+{
+  "format_version": 1,
+  "valid": [
+    {
+      "format_version": 1,
+      "entries": []
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "完成字段映射，还需要测试中文路径。",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "步骤一\n步骤二\t结束",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400001,
+          "updated_by": "phone",
+          "clock": 2,
+          "deleted_at": 1790810400001
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "𐀀",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "安全整数边界",
+          "created_at": 0,
+          "created_by": "desktop",
+          "updated_at": 9007199254740991,
+          "updated_by": "desktop",
+          "clock": 9007199254740991,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "完成字段映射，还需要测试中文路径。",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": null
+        },
+        {
+          "uuid": "11111111-1111-4111-8111-000000000002",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "排查兼容性",
+          "created_at": 1790810400000,
+          "created_by": "phone",
+          "updated_at": 1790810400000,
+          "updated_by": "phone",
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    }
+  ],
+  "invalid": [
+    {
+      "format_version": 2,
+      "entries": []
+    },
+    {
+      "format_version": "1",
+      "entries": []
+    },
+    {
+      "format_version": 1
+    },
+    {
+      "format_version": 1,
+      "entries": {
+        "foo": 1
+      }
+    },
+    {
+      "format_version": 1,
+      "entries": [],
+      "extra": true
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "完成字段映射，还需要测试中文路径。",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": null
+        },
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "完成字段映射，还需要测试中文路径。",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "完成字段映射，还需要测试中文路径。",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "body": "完成字段映射，还需要测试中文路径。",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "完成字段映射，还需要测试中文路径。",
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "完成字段映射，还需要测试中文路径。",
+          "created_at": 1790810400000,
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "完成字段映射，还需要测试中文路径。",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "完成字段映射，还需要测试中文路径。",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "完成字段映射，还需要测试中文路径。",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "完成字段映射，还需要测试中文路径。",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "ABCDEFAB-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "完成字段映射，还需要测试中文路径。",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "00000000-0000-0000-0000-000000000000",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "完成字段映射，还需要测试中文路径。",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "bad",
+          "body": "完成字段映射，还需要测试中文路径。",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "完成字段映射，还需要测试中文路径。",
+          "created_at": 1790810400000,
+          "created_by": "",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "完成字段映射，还需要测试中文路径。",
+          "created_at": 1790810400000,
+          "created_by": "华为",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "完成字段映射，还需要测试中文路径。",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "a b",
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "完成字段映射，还需要测试中文路径。",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "a\n",
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": " ",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "﻿",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": " text",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "text ",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "a\u0000b",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "ab",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "ab",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "a‮b",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "a⁦b",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "完成字段映射，还需要测试中文路径。",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 0,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "完成字段映射，还需要测试中文路径。",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": -1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "完成字段映射，还需要测试中文路径。",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1.25,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "完成字段映射，还需要测试中文路径。",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": "1",
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "完成字段映射，还需要测试中文路径。",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": true,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "完成字段映射，还需要测试中文路径。",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 9007199254740992,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "完成字段映射，还需要测试中文路径。",
+          "created_at": -1,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "完成字段映射，还需要测试中文路径。",
+          "created_at": "1",
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "完成字段映射，还需要测试中文路径。",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "完成字段映射，还需要测试中文路径。",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000.5,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "完成字段映射，还需要测试中文路径。",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 9007199254740992,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "完成字段映射，还需要测试中文路径。",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": 1790810400001
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": null
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": 1790810399999
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": 1790810400001
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": 0
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": "0"
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "entries": [
+        {
+          "uuid": "11111111-1111-4111-8111-000000000001",
+          "task_uuid": "11111111-1111-4111-8111-000000000010",
+          "body": "完成字段映射，还需要测试中文路径。",
+          "created_at": 1790810400000,
+          "created_by": "desktop",
+          "updated_at": 1790810400000,
+          "updated_by": "desktop",
+          "clock": 1,
+          "deleted_at": null,
+          "extra": "unexpected"
+        }
+      ]
+    }
+  ],
+  "valid_raw": [
+    {
+      "raw": "{\"format_version\":1,\"entries\":[{\"uuid\":\"11111111-1111-4111-8111-000000000001\",\"task_uuid\":\"11111111-1111-4111-8111-000000000010\",\"body\":\"完成字段映射，还需要测试中文路径。\",\"created_at\":1790810400000,\"created_by\":\"desktop\",\"updated_at\":1790810400000,\"updated_by\":\"desktop\",\"clock\":1.0,\"deleted_at\":null}]}",
+      "expected": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "完成字段映射，还需要测试中文路径。",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400000,
+            "updated_by": "desktop",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "raw": "{\"format_version\":1,\"entries\":[{\"uuid\":\"11111111-1111-4111-8111-000000000001\",\"task_uuid\":\"11111111-1111-4111-8111-000000000010\",\"body\":\"完成字段映射，还需要测试中文路径。\",\"created_at\":1790810400000,\"created_by\":\"desktop\",\"updated_at\":1790810400000,\"updated_by\":\"desktop\",\"clock\":1e0,\"deleted_at\":null}]}",
+      "expected": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "完成字段映射，还需要测试中文路径。",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400000,
+            "updated_by": "desktop",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "raw": "{\"entries\":[],\"format_version\":1.0}",
+      "expected": {
+        "format_version": 1,
+        "entries": []
+      }
+    }
+  ],
+  "invalid_raw": [
+    "null",
+    "[]",
+    "true",
+    "{\"format_version\":1,\"entries\":[null]}",
+    "{\"format_version\":1,\"entries\":[1]}",
+    "{\"format_version\":1,\"entries\":[{\"uuid\":\"11111111-1111-4111-8111-000000000001\",\"task_uuid\":\"11111111-1111-4111-8111-000000000010\",\"body\":\"完成字段映射，还需要测试中文路径。\",\"created_at\":1790810400000,\"created_by\":\"desktop\",\"updated_at\":1790810400000,\"updated_by\":\"desktop\",\"clock\":1e400,\"deleted_at\":null}]}",
+    "{\"format_version\":1,\"entries\":[{\"uuid\":\"11111111-1111-4111-8111-000000000001\",\"task_uuid\":\"11111111-1111-4111-8111-000000000010\",\"body\":\"完成字段映射，还需要测试中文路径。\",\"created_at\":1790810400000,\"created_by\":\"desktop\",\"updated_at\":1790810400000,\"updated_by\":\"desktop\",\"clock\":-0,\"deleted_at\":null}]}",
+    "{\"format_version\":1,\"entries\":[{\"uuid\":\"11111111-1111-4111-8111-000000000001\",\"task_uuid\":\"11111111-1111-4111-8111-000000000010\",\"body\":\"\\uD800\",\"created_at\":1790810400000,\"created_by\":\"desktop\",\"updated_at\":1790810400000,\"updated_by\":\"desktop\",\"clock\":1,\"deleted_at\":null}]}",
+    "{\"format_version\":1,\"entries\":[{\"uuid\":\"11111111-1111-4111-8111-000000000001\",\"task_uuid\":\"11111111-1111-4111-8111-000000000010\",\"body\":\"\\ud800\",\"created_at\":1790810400000,\"created_by\":\"desktop\",\"updated_at\":1790810400000,\"updated_by\":\"desktop\",\"clock\":1,\"deleted_at\":null}]}",
+    "{\"format_version\":1,\"entries\":[{\"uuid\":\"11111111-1111-4111-8111-000000000001\",\"task_uuid\":\"11111111-1111-4111-8111-000000000010\",\"body\":\"\\udfff\",\"created_at\":1790810400000,\"created_by\":\"desktop\",\"updated_at\":1790810400000,\"updated_by\":\"desktop\",\"clock\":1,\"deleted_at\":null}]}",
+    "{\"format_version\":1,\"entries\":[{\"uuid\":\"11111111-1111-4111-8111-000000000001\",\"task_uuid\":\"11111111-1111-4111-8111-000000000010\",\"body\":\"完成字段映射，还需要测试中文路径。\",\"created_at\":1790810400000,\"created_by\":\"desktop\",\"updated_at\":1790810400000,\"updated_by\":\"desktop\",\"clock\":1.00000000000000000001,\"deleted_at\":null}]}",
+    "{\"format_version\":1,\"entries\":[{\"uuid\":\"11111111-1111-4111-8111-000000000001\",\"task_uuid\":\"11111111-1111-4111-8111-000000000010\",\"body\":\"完成字段映射，还需要测试中文路径。\",\"created_at\":1790810400000,\"created_by\":\"desktop\",\"updated_at\":1790810400000,\"updated_by\":\"desktop\",\"clock\":9007199254740991.1,\"deleted_at\":null}]}",
+    "{\"format_version\":1,\"entries\":[{\"uuid\":\"11111111-1111-4111-8111-000000000001\",\"task_uuid\":\"11111111-1111-4111-8111-000000000010\",\"body\":\"完成字段映射，还需要测试中文路径。\",\"created_at\":1790810400000,\"created_by\":\"desktop\",\"updated_at\":1790810400000,\"updated_by\":\"desktop\",\"clock\":9.0071992547409911e15,\"deleted_at\":null}]}",
+    "{\"format_version\":1,\"entries\":[{\"uuid\":\"11111111-1111-4111-8111-000000000001\",\"task_uuid\":\"11111111-1111-4111-8111-000000000010\",\"body\":\"完成字段映射，还需要测试中文路径。\",\"created_at\":1790810400000,\"created_by\":\"desktop\",\"updated_at\":1790810400000,\"updated_by\":\"desktop\",\"clock\":-1e-999,\"deleted_at\":null}]}",
+    "{\"format_version\":2,\"format_version\":1,\"entries\":[]}",
+    "{\"format_version\":1,\"entries\":[{\"uuid\":\"11111111-1111-4111-8111-000000000001\",\"task_uuid\":\"11111111-1111-4111-8111-000000000010\",\"body\":\"完成字段映射，还需要测试中文路径。\",\"created_at\":1790810400000,\"created_by\":\"desktop\",\"updated_at\":1790810400000,\"updated_by\":\"desktop\",\"clock\":2,\"clock\":1,\"deleted_at\":null}]}"
+  ],
+  "merges": [
+    {
+      "name": "independent offline appends",
+      "left": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "完成字段映射，还需要测试中文路径。",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400000,
+            "updated_by": "desktop",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000002",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "排查兼容性",
+            "created_at": 1790810400000,
+            "created_by": "phone",
+            "updated_at": 1790810400000,
+            "updated_by": "phone",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      },
+      "expected": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "完成字段映射，还需要测试中文路径。",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400000,
+            "updated_by": "desktop",
+            "clock": 1,
+            "deleted_at": null
+          },
+          {
+            "uuid": "11111111-1111-4111-8111-000000000002",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "排查兼容性",
+            "created_at": 1790810400000,
+            "created_by": "phone",
+            "updated_at": 1790810400000,
+            "updated_by": "phone",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "larger logical clock",
+      "left": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "完成字段映射，还需要测试中文路径。",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400000,
+            "updated_by": "desktop",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "完成了测试",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400002,
+            "updated_by": "desktop",
+            "clock": 100,
+            "deleted_at": null
+          }
+        ]
+      },
+      "expected": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "完成了测试",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400002,
+            "updated_by": "desktop",
+            "clock": 100,
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "writer ASCII decides",
+      "left": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "完成字段映射，还需要测试中文路径。",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400000,
+            "updated_by": "desktop",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "phone edit",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400000,
+            "updated_by": "phone",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      },
+      "expected": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "phone edit",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400000,
+            "updated_by": "phone",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "UTF16 differs from scalar ordering",
+      "left": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400000,
+            "updated_by": "desktop",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "𐀀",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400000,
+            "updated_by": "desktop",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      },
+      "expected": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400000,
+            "updated_by": "desktop",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "updated time final tie",
+      "left": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "完成字段映射，还需要测试中文路径。",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400000,
+            "updated_by": "desktop",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "完成字段映射，还需要测试中文路径。",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400001,
+            "updated_by": "desktop",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      },
+      "expected": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "完成字段映射，还需要测试中文路径。",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400001,
+            "updated_by": "desktop",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "terminal delete beats later edit",
+      "left": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400001,
+            "updated_by": "phone",
+            "clock": 2,
+            "deleted_at": 1790810400001
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "完成了测试",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400002,
+            "updated_by": "desktop",
+            "clock": 100,
+            "deleted_at": null
+          }
+        ]
+      },
+      "expected": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400001,
+            "updated_by": "phone",
+            "clock": 2,
+            "deleted_at": 1790810400001
+          }
+        ]
+      }
+    },
+    {
+      "name": "two deletes converge",
+      "left": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400001,
+            "updated_by": "phone",
+            "clock": 2,
+            "deleted_at": 1790810400001
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400003,
+            "updated_by": "desktop",
+            "clock": 3,
+            "deleted_at": 1790810400003
+          }
+        ]
+      },
+      "expected": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400003,
+            "updated_by": "desktop",
+            "clock": 3,
+            "deleted_at": 1790810400003
+          }
+        ]
+      }
+    },
+    {
+      "name": "wire UUID order is independent of created time",
+      "left": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000002",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "排查兼容性",
+            "created_at": 1790810400000,
+            "created_by": "phone",
+            "updated_at": 1790810400000,
+            "updated_by": "phone",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "完成字段映射，还需要测试中文路径。",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400000,
+            "updated_by": "desktop",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      },
+      "expected": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "完成字段映射，还需要测试中文路径。",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400000,
+            "updated_by": "desktop",
+            "clock": 1,
+            "deleted_at": null
+          },
+          {
+            "uuid": "11111111-1111-4111-8111-000000000002",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "排查兼容性",
+            "created_at": 1790810400000,
+            "created_by": "phone",
+            "updated_at": 1790810400000,
+            "updated_by": "phone",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      }
+    }
+  ],
+  "conflicts": [
+    {
+      "left": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "完成字段映射，还需要测试中文路径。",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400000,
+            "updated_by": "desktop",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000011",
+            "body": "完成字段映射，还需要测试中文路径。",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400000,
+            "updated_by": "desktop",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "left": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "完成字段映射，还需要测试中文路径。",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400000,
+            "updated_by": "desktop",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "完成字段映射，还需要测试中文路径。",
+            "created_at": 1790810399999,
+            "created_by": "desktop",
+            "updated_at": 1790810400000,
+            "updated_by": "desktop",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "left": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "完成字段映射，还需要测试中文路径。",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400000,
+            "updated_by": "desktop",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "完成字段映射，还需要测试中文路径。",
+            "created_at": 1790810400000,
+            "created_by": "phone",
+            "updated_at": 1790810400000,
+            "updated_by": "desktop",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "left": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400001,
+            "updated_by": "phone",
+            "clock": 2,
+            "deleted_at": 1790810400001
+          }
+        ]
+      },
+      "right": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "完成字段映射，还需要测试中文路径。",
+            "created_at": 1790810400000,
+            "created_by": "phone",
+            "updated_at": 1790810400000,
+            "updated_by": "desktop",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      }
+    }
+  ],
+  "laws": [
+    {
+      "a": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "完成字段映射，还需要测试中文路径。",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400000,
+            "updated_by": "desktop",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      },
+      "b": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "完成了测试",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400002,
+            "updated_by": "desktop",
+            "clock": 100,
+            "deleted_at": null
+          },
+          {
+            "uuid": "11111111-1111-4111-8111-000000000002",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "排查兼容性",
+            "created_at": 1790810400000,
+            "created_by": "phone",
+            "updated_at": 1790810400000,
+            "updated_by": "phone",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      },
+      "c": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400001,
+            "updated_by": "phone",
+            "clock": 2,
+            "deleted_at": 1790810400001
+          }
+        ]
+      }
+    },
+    {
+      "a": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "a",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400000,
+            "updated_by": "desktop",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      },
+      "b": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400000,
+            "updated_by": "desktop",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      },
+      "c": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "𐀀",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400000,
+            "updated_by": "desktop",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "a": {
+        "format_version": 1,
+        "entries": []
+      },
+      "b": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "完成字段映射，还需要测试中文路径。",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400000,
+            "updated_by": "desktop",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      },
+      "c": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000002",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "排查兼容性",
+            "created_at": 1790810400000,
+            "created_by": "phone",
+            "updated_at": 1790810400000,
+            "updated_by": "phone",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      }
+    }
+  ],
+  "purges": [
+    {
+      "document": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "完成字段映射，还需要测试中文路径。",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400000,
+            "updated_by": "desktop",
+            "clock": 1,
+            "deleted_at": null
+          },
+          {
+            "uuid": "11111111-1111-4111-8111-000000000002",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "排查兼容性",
+            "created_at": 1790810400000,
+            "created_by": "phone",
+            "updated_at": 1790810400000,
+            "updated_by": "phone",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      },
+      "tasks": [
+        "11111111-1111-4111-8111-000000000010"
+      ],
+      "expected": {
+        "format_version": 1,
+        "entries": []
+      }
+    },
+    {
+      "document": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "完成字段映射，还需要测试中文路径。",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400000,
+            "updated_by": "desktop",
+            "clock": 1,
+            "deleted_at": null
+          },
+          {
+            "uuid": "11111111-1111-4111-8111-000000000002",
+            "task_uuid": "11111111-1111-4111-8111-000000000011",
+            "body": "完成字段映射，还需要测试中文路径。",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400000,
+            "updated_by": "desktop",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      },
+      "tasks": [
+        "11111111-1111-4111-8111-000000000010"
+      ],
+      "expected": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000002",
+            "task_uuid": "11111111-1111-4111-8111-000000000011",
+            "body": "完成字段映射，还需要测试中文路径。",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400000,
+            "updated_by": "desktop",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      }
+    },
+    {
+      "document": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400001,
+            "updated_by": "phone",
+            "clock": 2,
+            "deleted_at": 1790810400001
+          }
+        ]
+      },
+      "tasks": [
+        "11111111-1111-4111-8111-000000000010"
+      ],
+      "expected": {
+        "format_version": 1,
+        "entries": []
+      }
+    },
+    {
+      "document": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "完成字段映射，还需要测试中文路径。",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400000,
+            "updated_by": "desktop",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      },
+      "tasks": [],
+      "expected": {
+        "format_version": 1,
+        "entries": [
+          {
+            "uuid": "11111111-1111-4111-8111-000000000001",
+            "task_uuid": "11111111-1111-4111-8111-000000000010",
+            "body": "完成字段映射，还需要测试中文路径。",
+            "created_at": 1790810400000,
+            "created_by": "desktop",
+            "updated_at": 1790810400000,
+            "updated_by": "desktop",
+            "clock": 1,
+            "deleted_at": null
+          }
+        ]
+      }
+    }
+  ],
+  "keys": [
+    {
+      "todo": "eggdone/todos.json",
+      "expected": "eggdone-progress/v1/847efe17e35b350cbc846b56b909a7e428ea63a2253217e9f3be5f9681e2cff5/entries.json"
+    },
+    {
+      "todo": "eggdone-spaces/v2/11111111-1111-4111-8111-000000000010/todos.json",
+      "expected": "eggdone-progress/v1/c4c6c391a8d3642024cad92bf71c8c632242438d59ae3e7b14099878e207c336/entries.json"
+    },
+    {
+      "todo": "calendar/team tasks.json",
+      "expected": "eggdone-progress/v1/92cb6e8b5c7dd10069e62fbfa105e8e025f0ec31f57184230bf37f9bcbf54f12/entries.json"
+    },
+    {
+      "todo": "中文/todos.json",
+      "expected": "eggdone-progress/v1/fe0d7fd168aad7d712d478f64a8e75041cfb362fd8f0fd19ec2347734f817680/entries.json"
+    },
+    {
+      "todo": "task-note-links.json",
+      "expected": "eggdone-progress/v1/b19fbf1ba73e6b39f967fb5a3a0379b00d5dc003c79a97ce632fa13caa18aaa6/entries.json"
+    }
+  ],
+  "bad_keys": [
+    "",
+    " eggdone/todos.json",
+    "eggdone/todos.json ",
+    "/todos.json",
+    "eggdone//todos.json",
+    "eggdone/../todos.json",
+    "eggdone/./todos.json",
+    "eggdone\\todos.json",
+    "eggdone/todos.json\n",
+    "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "﻿eggdone/todos.json",
+    "eggdone/todos.json﻿",
+    "eggdone/todos.json",
+    "eggdone/todos.json"
+  ],
+  "key_collisions": [
+    {
+      "todo": "eggdone/todos.json",
+      "occupied": [
+        "eggdone-progress/v1/847efe17e35b350cbc846b56b909a7e428ea63a2253217e9f3be5f9681e2cff5/entries.json"
+      ]
+    }
+  ]
+}
