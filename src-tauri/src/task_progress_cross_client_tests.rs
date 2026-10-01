@@ -204,3 +204,119 @@ fn task_progress_cross_client_exchange() {
     );
     std::fs::write(output, protocol::encode(&returned).unwrap()).unwrap();
 }
+
+// Explicit host benchmark, never run against an application database or cloud target.
+#[test]
+#[ignore = "requires a temporary performance output path"]
+fn task_progress_performance() {
+    use crate::recurrence_transport::tests::{Reply, Server};
+    use std::{collections::HashSet, sync::Mutex, time::Instant};
+    let mut results = Vec::new();
+    for rows in [1_000, 10_000, 20_000] {
+        let task = Uuid::new_v4().to_string();
+        let document = protocol::Document {
+            format_version: 1,
+            entries: (0..rows)
+                .map(|i| protocol::Entry {
+                    uuid: Uuid::new_v4().to_string(),
+                    task_uuid: task.clone(),
+                    body: format!("Synthetic progress {i}"),
+                    created_at: i as i64 + 1,
+                    created_by: "fixture".into(),
+                    updated_at: i as i64 + 1,
+                    updated_by: "fixture".into(),
+                    clock: 1,
+                    deleted_at: None,
+                })
+                .collect(),
+        };
+        let raw = protocol::encode(&document).unwrap();
+        let mut connection = Connection::open_in_memory().unwrap();
+        crate::db::configure_connection(&connection).unwrap();
+        crate::db::migrate(&mut connection).unwrap();
+        parent(&connection, &task);
+        let start = Instant::now();
+        store::restore(&mut connection, &document).unwrap();
+        let merge_ms = start.elapsed().as_secs_f64() * 1000.0;
+        let mut page_ms = Vec::new();
+        let mut counts_ms = Vec::new();
+        for _ in 0..5 {
+            let start = Instant::now();
+            assert_eq!(
+                store::list(&mut connection, &task, None)
+                    .unwrap()
+                    .entries
+                    .len(),
+                30
+            );
+            page_ms.push(start.elapsed().as_secs_f64() * 1000.0);
+            let start = Instant::now();
+            assert_eq!(
+                store::counts(&connection, std::slice::from_ref(&task)).unwrap()[0].count,
+                rows
+            );
+            counts_ms.push(start.elapsed().as_secs_f64() * 1000.0);
+        }
+        let start = Instant::now();
+        let mut cursor = None;
+        let mut seen = HashSet::new();
+        let mut pages = 0;
+        loop {
+            let page = store::list(&mut connection, &task, cursor.as_ref()).unwrap();
+            assert_eq!(page.total, rows);
+            assert!(page.entries.len() <= 30);
+            for entry in page.entries {
+                assert!(seen.insert(entry.record.uuid));
+            }
+            pages += 1;
+            cursor = page.next_cursor;
+            if cursor.is_none() {
+                break;
+            }
+        }
+        assert_eq!(seen.len(), rows as usize);
+        let pagination_ms = start.elapsed().as_secs_f64() * 1000.0;
+        let db = crate::db::Database {
+            connection: Mutex::new(connection),
+        };
+        let mut sync_ms = Vec::new();
+        tauri::async_runtime::block_on(async {
+            for _ in 0..3 {
+                // Exclude previous CPU work from the fixture's next-request deadline.
+                let server =
+                    Server::new(vec![Reply::new(200, Some("\"unchanged\""), raw.as_bytes())]);
+                let prepared = crate::s3_sync::PreparedManualSync::from_test_bucket(
+                    &db.connection.lock().unwrap(),
+                    server.bucket(),
+                );
+                let start = Instant::now();
+                let receipt = crate::task_progress_session::attempt(&db, &prepared)
+                    .await
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(
+                    crate::task_progress_session::final_token(&db, &receipt)
+                        .unwrap()
+                        .as_deref(),
+                    Some("etag:\"unchanged\"")
+                );
+                sync_ms.push(start.elapsed().as_secs_f64() * 1000.0);
+                assert!(server.request().head.starts_with("GET "));
+            }
+        });
+        page_ms.sort_by(f64::total_cmp);
+        counts_ms.sort_by(f64::total_cmp);
+        sync_ms.sort_by(f64::total_cmp);
+        results.push(
+            serde_json::json!({"rows":rows,"bytes":raw.len(),"merge_ms":merge_ms,
+            "first_page_median_ms":page_ms[2],"counts_median_ms":counts_ms[2],"pages":pages,
+            "pagination_ms":pagination_ms,"unchanged_sync_median_ms":sync_ms[1],"get":3,"put":0}),
+        );
+        println!("PASS synthetic Rust performance dataset: {rows} rows");
+    }
+    std::fs::write(
+        std::env::var("EGGDONE_PROGRESS_PERF_OUTPUT").unwrap(),
+        serde_json::to_vec_pretty(&results).unwrap(),
+    )
+    .unwrap();
+}
