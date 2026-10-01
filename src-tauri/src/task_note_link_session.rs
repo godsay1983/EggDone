@@ -13,6 +13,7 @@ use crate::{
 pub(crate) struct EntityLinkResult {
     pub plan_receipt: crate::daily_plan_session::Receipt,
     pub workflow_receipt: crate::task_workflow_session::Receipt,
+    pub progress_receipt: crate::task_progress_session::Receipt,
     pub template_token: Option<String>,
     pub todo: TodoRunResult,
     pub note_count: usize,
@@ -95,6 +96,7 @@ pub(crate) async fn run(
     prepared.template_transport()?;
     prepared.plan_transport()?;
     prepared.workflow_transport()?;
+    prepared.progress_transport()?;
     prepared.checklist_transport(crate::task_checklist_sync::Domain::Items)?;
     prepared.checklist_transport(crate::task_checklist_sync::Domain::Definitions)?;
     for attempt in 0..2 {
@@ -124,6 +126,11 @@ pub(crate) async fn run(
             conflict_retried = true;
             continue;
         }
+        let Some(progress_receipt) = crate::task_progress_session::attempt(db, prepared).await?
+        else {
+            conflict_retried = true;
+            continue;
+        };
         let (notes, note_retry) = sync_notes(db, prepared)
             .await
             .map_err(|e| format!("便签同步失败：{e}"))?;
@@ -187,6 +194,7 @@ pub(crate) async fn run(
         return Ok(EntityLinkResult {
             plan_receipt,
             workflow_receipt,
+            progress_receipt,
             template_token: Some(template_token),
             checklist_token: Some(checklist_token),
             todo,

@@ -16,7 +16,7 @@ fn template_backup_v5_preview_roundtrip_legacy_and_invalid_input() {
     let mut db = empty();
     merge_import(&mut db, fixture()).unwrap();
     let exported = capture_export(&mut db, false, 4000).unwrap();
-    assert_eq!(exported.format_version, 5);
+    assert_eq!(exported.format_version, 9);
     assert_eq!(exported.task_templates, fixture().task_templates);
     let preview = build_preview(&db, Path::new("v5.json"), &exported).unwrap();
     assert_eq!(

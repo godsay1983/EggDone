@@ -103,6 +103,7 @@ const native=`export const isTauri=()=>false;
    const row=window.results[args.scope].find(r=>r.uuid===args.uuid);
    return {...row,content:row.archived?'Archived full body\\n<img src=x onerror=alert(1)>':row.excerpt};
  }
+ if(command==='count_task_progress')return [];
  throw Error('Unexpected IPC '+command);
  }`;
 const html=String.raw`<!doctype html><html><body><script type="module">

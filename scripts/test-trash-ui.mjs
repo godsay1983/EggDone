@@ -14,6 +14,7 @@ const output = resolve(tmpdir(), 'eggdone-trash-ui-' + Date.now());
 mkdirSync(output, { recursive: true });
 const native = `export const isTauri=()=>false;
 export async function invoke(command,args){
+  if(command==='count_task_progress')return [];
   if(command==='get_sync_settings')return {enabled:false,endpoint:'https://example.invalid',region:'test',bucket:'test',objectKey:window.activated?'migrated/todos.json':'todos.json',noteObjectKey:'notes.json',noteAttachmentObjectKey:'attachments.json',noteAssetPrefix:'assets',pathStyle:true,allowHttp:false,credentialsConfigured:true};
   if(command==='get_note_attachment_cache_stats')return {totalBytes:0,reclaimableBytes:0,protectedBytes:0,pendingCount:0};
   if(command==='migration_space'){
@@ -68,6 +69,8 @@ const html = String.raw`<!doctype html><html><body><script type="module">
 import {mount,unmount} from 'svelte';
 import Dialog from '/src/lib/components/TrashDialog.svelte';
 import SyncSettings from '/src/lib/components/SyncSettings.svelte';
+import SyncSpaceDialog from '/src/lib/components/SyncSpaceDialog.svelte';
+import {refreshSavedSyncSettings} from '/src/lib/sync/autoSync.ts';
 import {setLanguageMode} from '/src/lib/i18n/index.ts';
 import '/src/app.css';
 const p=new URLSearchParams(location.search);setLanguageMode(p.get('lang'));
@@ -77,9 +80,20 @@ window.rows=Array.from({length:p.has('pages')?51:2},(_,i)=>({kind:i%2?'note':'to
 title:i===0?'Long task title '.repeat(7):'Note '+i,content:'Full body line\n'.repeat(35),
 deleted_at:1789190000000,updated_at:1789190000000,updated_by:'test',completed:true,repeating:true,
 attachments:i%2?[{uuid:'a',name:'Attachment-'.repeat(20)+'.md',updated_at:1,updated_by:'test',deleted_at:1}]:[]}));
-const instance=p.has('settings')?mount(SyncSettings,{target:document.body,props:{onSpaceActivated:async()=>{window.refreshes=(window.refreshes||0)+1;}}}):
+const instance=p.has('settings')?mount(SyncSettings,{target:document.body}):
 mount(Dialog,{target:document.body,props:{afterCommit:async()=>{if(window.failRefresh)throw Error('refresh');},
 onClose:()=>{window.trashClosed=true;void unmount(instance);}}});
+// The settings entry was removed by automatic migration. Exercise the retained
+// migration component explicitly without inventing a production entry point.
+if(p.has('settings')){
+  const launch=document.createElement('button');
+  launch.dataset.testid='retained-migration-fixture';launch.textContent='Open retained migration fixture';
+  launch.onclick=()=>{
+    const migration=mount(SyncSpaceDialog,{target:document.body,props:{onClose:()=>void unmount(migration),
+      onActivated:async()=>{await refreshSavedSyncSettings();window.refreshes=(window.refreshes||0)+1;}}});
+  };
+  document.body.append(launch);
+}
 </script></body></html>`;
 const server = await createServer({ root, configFile: false,
   cacheDir: resolve(output, 'vite-cache'),
@@ -171,7 +185,8 @@ try {
     await page.goto(url+'?settings&lang='+lang+'&theme='+theme+'&scale=1.5');
     await page.locator('details summary').click();
     assert.equal(await page.evaluate(()=>(window.backupCalls||[]).length),0,'opening settings does not read or migrate a space');
-    const spaceButton=page.getByRole('button',{name:lang==='zh-CN'?'同步空间':'Sync space',exact:true});
+    assert.equal(await page.getByRole('button',{name:lang==='zh-CN'?'同步空间':'Sync space',exact:true}).count(),0,'automatic migration has no manual settings entry');
+    const spaceButton=page.getByTestId('retained-migration-fixture');
     await spaceButton.click();
     const prepareBackup=page.getByRole('button',{name:lang==='zh-CN'?'检查并准备':'Check and prepare',exact:true});
     await prepareBackup.waitFor();
@@ -274,13 +289,16 @@ try {
     await page.evaluate(()=>window.releaseSync());
   }
   assert.deepEqual(errors, []);
-  console.log('Trash UI: ' + count + ' locale/theme/window/zoom combinations plus 4 purge and migration preparation/missing-file/stale-preview scenarios passed. Screenshots: ' + output);
+  console.log('Trash UI: ' + count + ' locale/theme/window/zoom combinations plus 4 purge and retained migration-component preparation/missing-file/stale-preview scenarios passed. Screenshots: ' + output);
 } catch (error) {
+  console.error('Original test failure:', error);
   if (page) {
-    await page.screenshot({ path: resolve(output, 'failure.png') });
-    console.error(await page.locator('dialog').evaluate(el => ({ open: el.open, text: el.innerText,
-      height: el.getBoundingClientRect().height, content: el.querySelector('.content').getBoundingClientRect().height })));
-    console.error('Failure screenshot:', resolve(output, 'failure.png'));
+    try {
+      await page.screenshot({ path: resolve(output, 'failure.png') });
+      console.error(await page.locator('dialog').evaluateAll(dialogs => dialogs.map(el => ({ open: el.open, text: el.innerText,
+        height: el.getBoundingClientRect().height, content: el.querySelector('.content')?.getBoundingClientRect().height ?? null }))));
+      console.error('Failure screenshot:', resolve(output, 'failure.png'));
+    } catch (diagnosticError) { console.error('Failure diagnostics unavailable:', diagnosticError); }
   }
   throw error;
 } finally { await browser?.close(); await server.close(); }

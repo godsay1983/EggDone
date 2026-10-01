@@ -295,6 +295,7 @@ fn planning_conflict_restarts_full_entities_with_a_two_attempt_bound() {
             if conflicts == 1 {
                 replies.extend([
                     Reply::new(404, None, b""), // workflow
+                    Reply::new(404, None, b""), // progress
                     Reply::new(404, None, b""),
                     Reply::new(200, None, b""),
                     Reply::new(404, None, b""),

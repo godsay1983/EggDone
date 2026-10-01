@@ -13,6 +13,7 @@ const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const output=resolve(tmpdir(),'eggdone-archive-ui-'+Date.now());mkdirSync(output,{recursive:true});
 const native=`export const isTauri=()=>false;
 export async function invoke(command,args){
+ if(command==='count_task_progress')return [];
  if(command==='list_task_note_links')return window.noteLinks||[];
  if(command==='resolve_search_target'){
    if(window.noteUnavailable)throw Error('SEARCH_UNAVAILABLE');

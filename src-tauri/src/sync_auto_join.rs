@@ -202,6 +202,8 @@ struct Bundle {
     plans_present: bool,
     workflow: crate::task_workflow_protocol::Document,
     workflow_present: bool,
+    progress: crate::task_progress_protocol::Document,
+    progress_present: bool,
     terminals_present: bool,
 }
 async fn bundle(
@@ -252,7 +254,10 @@ async fn bundle(
             terminals: vec![],
         },
     };
-    let key = crate::daily_plan_sync::object_key(main, &keys).map_err(fail)?;
+    let progress_key = crate::task_progress_protocol::object_key(main, &keys).map_err(fail)?;
+    let mut occupied = keys;
+    occupied.push(progress_key.clone());
+    let key = crate::daily_plan_sync::object_key(main, &occupied).map_err(fail)?;
     let raw = read(io, db, source, &key, 4 * 1024 * 1024).await?;
     let plans_present = raw.is_some();
     let plans = raw
@@ -261,7 +266,6 @@ async fn bundle(
         })
         .transpose()?
         .unwrap_or_default();
-    let mut occupied = keys;
     occupied.push(key);
     occupied.push(terminal_key);
     let key = crate::task_workflow_sync::object_key(main, &occupied).map_err(fail)?;
@@ -274,6 +278,65 @@ async fn bundle(
         })
         .transpose()?
         .unwrap_or_default();
+    occupied.push(key);
+    crate::task_progress_protocol::object_key(
+        main,
+        &occupied
+            .iter()
+            .filter(|key| **key != progress_key)
+            .cloned()
+            .collect::<Vec<_>>(),
+    )
+    .map_err(fail)?;
+    let raw = read(
+        io,
+        db,
+        source,
+        &progress_key,
+        crate::task_progress_protocol::MAX_BYTES,
+    )
+    .await?;
+    let progress_present = raw.is_some();
+    let progress = raw
+        .map(|bytes| {
+            crate::task_progress_protocol::parse(std::str::from_utf8(&bytes).map_err(fail)?)
+                .map_err(fail)
+        })
+        .transpose()?
+        .unwrap_or_default();
+    {
+        let c = lock_database(db)?;
+        source.require_current(&c)?;
+        // Preserve existence across failed projections/transfers without ACKing either target.
+        let evidence = format!(
+            "sync.auto-join.progress.seen.v1:{}:{}",
+            source.epoch(),
+            space::hash(main.as_bytes())
+        );
+        if progress_present {
+            c.execute(
+                "INSERT OR IGNORE INTO app_metadata(key,value) VALUES(?1,'1')",
+                [&evidence],
+            )
+            .map_err(db_error)?;
+            if main == source.main_key() {
+                c.execute(
+                    "INSERT OR IGNORE INTO app_metadata(key,value) VALUES(?1,'1')",
+                    [format!("task.progress.remote.seen.v1:{}", source.epoch())],
+                )
+                .map_err(db_error)?;
+            }
+        } else if c
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM app_metadata WHERE key=?1)",
+                [&evidence],
+                |r| r.get::<_, bool>(0),
+            )
+            .map_err(db_error)?
+        {
+            return Err("SYNC_AUTO_JOIN_SOURCE_MISSING".into());
+        }
+    }
     Ok(Bundle {
         documents,
         terminals,
@@ -281,6 +344,8 @@ async fn bundle(
         plans_present,
         workflow,
         workflow_present,
+        progress,
+        progress_present,
         terminals_present,
     })
 }
@@ -336,6 +401,7 @@ fn merge(tx: &Transaction<'_>, b: &Bundle, target_evidence: bool) -> Result<(), 
     }
     crate::daily_plan_store::merge_in_transaction(tx, &b.plans)?;
     crate::task_workflow_store::merge_in_transaction(tx, &b.workflow)?;
+    crate::task_progress_store::merge_in_transaction(tx, &b.progress)?;
     Ok(())
 }
 
@@ -426,6 +492,14 @@ fn stage(
     {
         return Err("SYNC_AUTO_JOIN_SOURCE_MISSING".into());
     }
+    if !source.progress_present
+        && (crate::task_progress_store::read_in_transaction(tx)?
+            .etag
+            .is_some()
+            || crate::task_progress_sync::remote_seen(tx, p.epoch())?)
+    {
+        return Err("SYNC_AUTO_JOIN_SOURCE_MISSING".into());
+    }
     crate::sync_target::invalidate_in_transaction(tx)?;
     tx.execute(
         "UPDATE sync_settings SET object_key=?1 WHERE id=1",
@@ -435,6 +509,13 @@ fn stage(
     crate::sync_target::activate(tx)?;
     space::record_auto_join_proof(tx, claim)?;
     let epoch = crate::sync_target::capture(tx)?;
+    if target.progress_present {
+        tx.execute(
+            "INSERT OR IGNORE INTO app_metadata(key,value) VALUES(?1,'1')",
+            [format!("task.progress.remote.seen.v1:{epoch}")],
+        )
+        .map_err(db_error)?;
+    }
     // Old-target upload flags are not evidence of any object in the new target.
     tx.execute("UPDATE note_attachments SET remote_uploaded=0", [])
         .map_err(db_error)?;
@@ -514,6 +595,9 @@ async fn follow_with(
     // Re-read the target after transfers; a concurrent purge must win before committing.
     let refreshed_target = bundle(io, db, p, &main, true).await?;
     if target.workflow_present && !refreshed_target.workflow_present {
+        return Err("SYNC_AUTO_JOIN_SOURCE_MISSING".into());
+    }
+    if target.progress_present && !refreshed_target.progress_present {
         return Err("SYNC_AUTO_JOIN_SOURCE_MISSING".into());
     }
     let target = refreshed_target;

@@ -3,6 +3,7 @@
   import { translator, type TranslationKey } from "$lib/i18n";
   import type { SearchItem, SearchTarget, SearchScope } from "$lib/api/contentSearchApi";
   import { createContentSearchStore, SEARCH_PAGE_SIZE } from "$lib/stores/contentSearchStore";
+  import TaskProgressLauncher from './TaskProgressLauncher.svelte';
   export let active = true;
   export let onOpen: (item: SearchItem) => Promise<SearchTarget | null>;
   export let onClose: () => void;
@@ -21,7 +22,7 @@
   onMount(() => {
     input.focus();
     const escape = (event: KeyboardEvent) => {
-      if (active && event.key === "Escape") { event.preventDefault(); event.stopImmediatePropagation(); void back(); }
+      if (active && event.key === "Escape" && !document.querySelector('dialog.progress-dialog[open]')) { event.preventDefault(); event.stopImmediatePropagation(); void back(); }
     };
     window.addEventListener("keydown", escape, true);
     return () => { disposed = true; search.dispose(); window.removeEventListener("keydown", escape, true); dialog.close(); };
@@ -78,6 +79,7 @@
     {#if preview}
       <p class="state">{$translator("contentSearch.archivedReadonly")}</p>
       <h3>{preview.title || $translator("trash.untitled")}</h3>
+      {#if preview.kind === 'todo'}<TaskProgressLauncher uuid={preview.uuid} title={preview.title} readOnly={preview.archived} always />{/if}
       <p>{$translator(preview.completed ? "contentSearch.completed" : "contentSearch.incomplete")}</p>
       <p class="body">{preview.content}</p>
     {:else if $search.invalid}
@@ -106,7 +108,9 @@
                   {#if item.kind === "todo"}<span class="state">{$translator(item.archived ? "contentSearch.archived" : item.completed ? "contentSearch.completed" : "contentSearch.incomplete")}</span>{/if}
                   {#if item.parent_uuid}<span>{$translator("contentSearch.inNote")}: {item.parent_title || $translator("trash.untitled")}</span>{/if}
                   <span class="excerpt">{item.excerpt}</span>
-                </button></li>
+                </button>
+                  {#if item.kind === 'todo'}<TaskProgressLauncher uuid={item.uuid} title={item.title} readOnly={item.archived} />{/if}
+                </li>
               {/each}
             </ul>
             {#if group.offset > 0 || group.total > SEARCH_PAGE_SIZE}

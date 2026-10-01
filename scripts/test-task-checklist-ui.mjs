@@ -13,6 +13,7 @@ const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const output=resolve(tmpdir(),'eggdone-checklist-ui-'+Date.now());mkdirSync(output,{recursive:true});
 const native=`export const isTauri=()=>false;
 export async function invoke(command,args){
+  if(command==='count_task_progress')return [];
   window.calls.push({command,args});
   if(window.detailsMode||command==='read_task_checklist'){
     window.detail??={todo_uuid:'123e4567-e89b-42d3-a456-000000000001',title:'Task with checklist',note:'Keep note',updated_at:1,read_only:window.readOnly,

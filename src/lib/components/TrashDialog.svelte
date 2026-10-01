@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import PanelToolButton from "./PanelToolButton.svelte";
+  import TaskProgressLauncher from './TaskProgressLauncher.svelte';
   import "./management-dialog.css";
   import { languageState, translator, type TranslationKey } from "$lib/i18n";
   import type { TrashItem } from "$lib/api/trashApi";
@@ -89,7 +90,7 @@
   onMount(() => {
     // Disabling the focused restore button can move focus outside the dialog.
     const escape = (event: KeyboardEvent) => {
-      if (dialog.open && event.key === "Escape") {
+      if (dialog.open && event.key === "Escape" && !document.querySelector('dialog.progress-dialog[open]')) {
         event.preventDefault(); event.stopImmediatePropagation(); back();
       }
     };
@@ -207,6 +208,7 @@
       <h3>{pending.title || $translator("trash.untitled")}</h3>
       <p class="meta">{$translator(pending.kind === "todo" ? "trash.todo" : "trash.note")} · {$translator("trash.deleted")}: {date(pending.deleted_at)}</p>
       {#if pending.kind === "todo"}
+        <TaskProgressLauncher uuid={pending.uuid} title={pending.title} readOnly always disabled={busy} />
         <p>{$translator(pending.completed ? "trash.completed" : "trash.incomplete")}</p>
         <p>{$translator("trash.taskHint")}</p>
       {/if}
@@ -226,7 +228,9 @@
             <strong>{item.title || $translator("trash.untitled")}</strong>
             <span class="meta">{$translator(item.kind === "todo" ? "trash.todo" : "trash.note")} · {listDate(item.deleted_at)}</span>
             {#if item.content}<span class="excerpt">{item.content}</span>{/if}
-          </button></li>
+          </button>
+            {#if item.kind === 'todo'}<TaskProgressLauncher uuid={item.uuid} title={item.title} readOnly disabled={busy || selecting} />{/if}
+          </li>
         {/each}
       </ul>
       {#if more}<button class="action-button" disabled={busy || loadFailed} onclick={() => load(false)}>{$translator("trash.more")}</button>{/if}

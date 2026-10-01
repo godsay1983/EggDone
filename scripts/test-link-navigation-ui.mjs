@@ -72,6 +72,7 @@ export async function invoke(command,args){
   return ids.map(id=>({link:{uuid:'link-'+id,todo_uuid:'target-task',note_uuid:id,deleted_at:null},todo_title:'Linked task',note_title:id==='source'?'Source note':'Target note',todo_state:window.linkState||'active',note_state:'active',is_repeating:false}));
  }
  if(command==='list_notes')return [];
+ if(command==='count_task_progress')return [];
  throw Error('Unexpected IPC '+command);
 }`;
 const fixtureId = resolve(root, 'src/LinkNavigationFixture.svelte').replaceAll('\\', '/');

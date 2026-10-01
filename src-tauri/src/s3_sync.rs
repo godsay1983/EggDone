@@ -153,7 +153,28 @@ impl PreparedManualSync {
         occupied.push(self.note_attachment_object_key.clone());
         occupied.push(crate::daily_plan_sync::object_key(&self.object_key, &[])?);
         occupied.push(lifecycle_key(self)?);
+        occupied.push(crate::task_progress_protocol::object_key(
+            &self.object_key,
+            &[],
+        )?);
         crate::task_checklist_transport::TaskChecklistTransport::workflow(
+            &self.bucket,
+            &self.object_key,
+            &occupied,
+        )
+    }
+    pub(crate) fn progress_transport(
+        &self,
+    ) -> Result<crate::task_checklist_transport::TaskChecklistTransport, String> {
+        let mut occupied = crate::migration_backup::cloud::object_keys(&self.object_key)?;
+        occupied.extend([
+            self.note_object_key.clone(),
+            self.note_attachment_object_key.clone(),
+            crate::daily_plan_sync::object_key(&self.object_key, &[])?,
+            crate::task_workflow_sync::object_key(&self.object_key, &[])?,
+            lifecycle_key(self)?,
+        ]);
+        crate::task_checklist_transport::TaskChecklistTransport::progress(
             &self.bucket,
             &self.object_key,
             &occupied,
@@ -166,6 +187,7 @@ impl PreparedManualSync {
             &self.bucket,
             &self.object_key,
             &[
+                crate::task_progress_protocol::object_key(&self.object_key, &[])?,
                 self.note_object_key.clone(),
                 self.note_attachment_object_key.clone(),
                 crate::recurrence_protocol::recurrence_object_key(&self.object_key, &[])?,
@@ -187,6 +209,7 @@ impl PreparedManualSync {
             &self.bucket,
             &self.object_key,
             &[
+                crate::task_progress_protocol::object_key(&self.object_key, &[])?,
                 self.note_object_key.clone(),
                 self.note_attachment_object_key.clone(),
                 crate::recurrence_protocol::recurrence_object_key(&self.object_key, &[])?,
@@ -205,6 +228,7 @@ impl PreparedManualSync {
             &self.bucket,
             &self.object_key,
             &[
+                crate::task_progress_protocol::object_key(&self.object_key, &[])?,
                 self.note_object_key.clone(),
                 self.note_attachment_object_key.clone(),
                 crate::recurrence_protocol::recurrence_object_key(&self.object_key, &[])?,
@@ -225,6 +249,7 @@ impl PreparedManualSync {
             &self.bucket,
             &self.object_key,
             &[
+                crate::task_progress_protocol::object_key(&self.object_key, &[])?,
                 self.note_object_key.clone(),
                 self.note_attachment_object_key.clone(),
                 rule_key,
@@ -275,6 +300,7 @@ impl PreparedManualSync {
             &self.bucket,
             &self.object_key,
             &[
+                crate::task_progress_protocol::object_key(&self.object_key, &[])?,
                 self.note_object_key.clone(),
                 self.note_attachment_object_key.clone(),
             ],
@@ -304,6 +330,7 @@ pub struct RemoteSyncState {
     pub target_changed: Option<bool>,
     pub plan_token: String,
     pub workflow_token: String,
+    pub progress_token: String,
     pub template_token: String,
     pub checklist_token: String,
     pub link_token: String,
@@ -325,6 +352,8 @@ pub struct ManualSyncResult {
     pub plan_remote_token: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub workflow_remote_token: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub progress_remote_token: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub template_remote_token: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -865,6 +894,17 @@ impl MigrationAssetSource {
         use crate::migration_backup::cloud::{
             object_keys, valid_etag, validate_document, RemoteObject, MAX_OBJECT,
         };
+        // Fixed legacy manifests cannot carry independent progress, including tombstones.
+        let progress = self.0.progress_transport()?.download().await?;
+        if progress
+            .document
+            .as_deref()
+            .map(crate::task_progress_protocol::parse)
+            .transpose()?
+            .is_some_and(|d| !d.entries.is_empty())
+        {
+            return Err("MIGRATION_PROGRESS_ACTIVE".into());
+        }
         let mut result = Vec::new();
         let mut total = 0;
         for (index, key) in object_keys(self.main_key())?.iter().enumerate() {
@@ -1103,6 +1143,7 @@ pub async fn get_remote_state(
             target_changed: Some(true),
             plan_token: String::new(),
             workflow_token: String::new(),
+            progress_token: String::new(),
             template_token: String::new(),
             checklist_token: String::new(),
             link_token: String::new(),
@@ -1189,10 +1230,25 @@ pub(crate) async fn get_current_remote_state(
         guard()?;
         let workflow_token = prepared.workflow_transport()?.probe().await?;
         guard()?;
+        let progress_token = prepared.progress_transport()?.probe().await?;
+        guard()?;
+        {
+            let connection = database
+                .connection
+                .lock()
+                .map_err(|_| "PROGRESS_DATABASE")?;
+            prepared.require_current(&connection)?;
+            crate::sync_runtime_state::record_progress_probe(
+                &connection,
+                prepared.epoch(),
+                &progress_token,
+            )?;
+        }
         Ok(RemoteSyncState {
             target_changed: None,
             plan_token,
             workflow_token,
+            progress_token,
             template_token,
             checklist_token: serde_json::to_string(&[definitions, items])
                 .map_err(|_| "CHECKLIST_TOKEN_INVALID")?,

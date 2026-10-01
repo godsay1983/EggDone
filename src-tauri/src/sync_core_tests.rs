@@ -235,6 +235,7 @@ fn entities(link_status: u16) -> Vec<Reply> {
         Reply::new(404, None, b""), // templates
         Reply::new(404, None, b""), // planning
         Reply::new(404, None, b""), // workflow
+        Reply::new(404, None, b""), // progress
         Reply::new(404, None, b""),
         Reply::new(200, None, b""),
         Reply::new(404, None, b""),
@@ -309,6 +310,12 @@ fn assert_entity_order(server: &Server) {
                 .request()
                 .head
                 .starts_with(&format!("GET /rules-test/{workflow} ")));
+            let progress =
+                crate::task_progress_protocol::object_key("account/todos.json", &[]).unwrap();
+            assert!(server
+                .request()
+                .head
+                .starts_with(&format!("GET /rules-test/{progress} ")));
         }
     }
 }
@@ -332,6 +339,7 @@ fn core_orders_entities_links_attachments_and_final_probes() {
         assert_eq!(result.link_remote_token.as_deref(), Some("etag:\"link\""));
         assert_eq!(result.plan_remote_token.as_deref(), Some("missing"));
         assert_eq!(result.workflow_remote_token.as_deref(), Some("missing"));
+        assert_eq!(result.progress_remote_token.as_deref(), Some("missing"));
         assert_eq!(result.todo_remote_etag.as_deref(), Some("\"todos\""));
         assert_eq!(result.note_remote_etag.as_deref(), Some("\"notes\""));
         assert_eq!(
@@ -533,6 +541,160 @@ fn core_late_workflow_edit_stays_dirty_and_does_not_return_stale_receipt() {
         let result = client.sync(server.bucket()).await.unwrap();
         assert!(result.workflow_remote_token.is_none());
         assert!(client.state().dirty_domains.contains(&"workflow".into()));
+    });
+}
+
+fn progress_document() -> String {
+    crate::task_progress_protocol::encode(&crate::task_progress_protocol::Document {
+        format_version: 1,
+        entries: vec![crate::task_progress_protocol::Entry {
+            uuid: ASSET.into(),
+            task_uuid: TODO.into(),
+            body: "remote-only progress".into(),
+            created_at: 1,
+            created_by: "fixture".into(),
+            updated_at: 1,
+            updated_by: "fixture".into(),
+            clock: 1,
+            deleted_at: None,
+        }],
+    })
+    .unwrap()
+}
+
+fn write_progress(client: &Client, record: &str) {
+    crate::task_progress_store::write(
+        &mut client.db.connection.lock().unwrap(),
+        &crate::task_progress_store::ProgressWrite {
+            operation_uuid: uuid::Uuid::new_v4().to_string(),
+            task_uuid: TODO.into(),
+            record_uuid: record.into(),
+            action: "create".into(),
+            body: "local pending progress".into(),
+            expected_record: None,
+        },
+        200,
+        "fixture",
+    )
+    .unwrap();
+}
+
+#[test]
+fn core_remote_only_progress_is_discovered_without_put_and_late_final_write_stays_dirty() {
+    tauri::async_runtime::block_on(async {
+        for late in [false, true] {
+            let client = Arc::new(Client::new(TODO, NOTE));
+            let mut replies = entities(200);
+            replies[8] = Reply::new(
+                200,
+                Some("\"remote-progress\""),
+                progress_document().as_bytes(),
+            );
+            let mut final_replies = tail();
+            if late {
+                let captured = client.clone();
+                final_replies[1] =
+                    Reply::new(200, None, b"").with_hook(move || write_progress(&captured, TODO2));
+            }
+            replies.extend(final_replies);
+            let server = core_server(replies);
+            let result = client.sync(server.bucket()).await.unwrap();
+            assert_eq!(
+                result.progress_remote_token.as_deref(),
+                (!late).then_some("etag:\"remote-progress\"")
+            );
+            assert_eq!(
+                client.state().dirty_domains.contains(&"progress".into()),
+                late
+            );
+            let snapshot =
+                crate::task_progress_store::snapshot(&mut client.db.connection.lock().unwrap())
+                    .unwrap();
+            assert_eq!(snapshot.document.entries.len(), if late { 2 } else { 1 });
+            assert_eq!(snapshot.revision == snapshot.synced_revision, !late);
+            // Strict parent-to-notes order also proves there was no progress PUT.
+            assert_entity_order(&server);
+        }
+    });
+}
+
+#[test]
+fn core_writes_during_progress_put_exhaust_the_bound_and_leave_pending_edits_dirty() {
+    tauri::async_runtime::block_on(async {
+        let client = Arc::new(Client::new(TODO, NOTE));
+        write_progress(&client, ASSET);
+        let first_document = crate::task_progress_protocol::encode(
+            &crate::task_progress_store::snapshot(&mut client.db.connection.lock().unwrap())
+                .unwrap()
+                .document,
+        )
+        .unwrap();
+        let mut replies = Vec::new();
+        for (attempt, record) in [TODO2, NOTE2].into_iter().enumerate() {
+            let mut prefix = entities(200);
+            prefix.truncate(9);
+            if attempt > 0 {
+                prefix[8] = Reply::new(200, Some("\"first-progress\""), first_document.as_bytes());
+            }
+            replies.extend(prefix);
+            let captured = client.clone();
+            replies.push(
+                Reply::new(200, Some("\"uploaded-progress\""), b"")
+                    .with_hook(move || write_progress(&captured, record)),
+            );
+        }
+        let server = core_server(replies);
+        assert_eq!(
+            client.sync(server.bucket()).await.unwrap_err(),
+            "TASK_NOTE_LINK_SYNC_CONFLICT"
+        );
+        let snapshot =
+            crate::task_progress_store::snapshot(&mut client.db.connection.lock().unwrap())
+                .unwrap();
+        assert_eq!(snapshot.document.entries.len(), 3);
+        assert!(snapshot.revision > snapshot.synced_revision);
+        assert!(client.state().dirty_domains.contains(&"progress".into()));
+        assert_eq!(client.notifications.load(Ordering::SeqCst), 0);
+    });
+}
+
+#[test]
+fn core_configuration_change_during_progress_get_or_put_never_acks_the_new_target() {
+    tauri::async_runtime::block_on(async {
+        for put in [false, true] {
+            let client = Arc::new(Client::new(TODO, NOTE));
+            write_progress(&client, ASSET);
+            let before =
+                crate::task_progress_store::snapshot(&mut client.db.connection.lock().unwrap())
+                    .unwrap();
+            let captured = client.clone();
+            let changed = move || {
+                let c = captured.db.connection.lock().unwrap();
+                crate::sync_target::invalidate(&c).unwrap();
+                crate::sync_target::activate(&c).unwrap();
+            };
+            let mut replies = entities(200);
+            replies.truncate(9);
+            if put {
+                replies.push(Reply::new(200, Some("\"old-target\""), b"").with_hook(changed));
+            } else {
+                replies[8] = Reply::new(404, None, b"").with_hook(changed);
+            }
+            let server = core_server(replies);
+            assert_eq!(
+                client.sync(server.bucket()).await.unwrap_err(),
+                "PROGRESS_CONFIG_CHANGED"
+            );
+            let after =
+                crate::task_progress_store::snapshot(&mut client.db.connection.lock().unwrap())
+                    .unwrap();
+            assert!(after.generation > before.generation);
+            assert_eq!(after.synced_revision, 0);
+            assert!(after.etag.is_none());
+            assert_eq!(after.document, before.document);
+            assert!(client.state().dirty_domains.contains(&"progress".into()));
+            assert_eq!(client.notifications.load(Ordering::SeqCst), 0);
+        }
     });
 }
 

@@ -254,7 +254,7 @@
     {
       "id": "local_terminal_not_covered_by_legacy_migration",
       "sql": "INSERT INTO lifecycle_terminals(kind,uuid,operation_uuid,purged_at) VALUES('todo','123e4567-e89b-42d3-a456-426614174000','123e4567-e89b-42d3-a456-426614174001',1);",
-      "blockers": ["local_purge_terminals"],
+      "blockers": ["local_purge_terminals", "pending_progress"],
       "invalid": false
     },
     {

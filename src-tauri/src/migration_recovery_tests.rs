@@ -124,7 +124,7 @@ fn legacy_v22_without_retry_counter_recovers_then_upgrades_without_data_loss() {
         c.query_row("SELECT MAX(version) FROM schema_migrations", [], |r| r
             .get::<_, i64>(0))
             .unwrap(),
-        26
+        27
     );
     assert_eq!(
         c.query_row("SELECT local_attempts FROM purge_cleanup", [], |r| r

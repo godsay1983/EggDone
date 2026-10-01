@@ -391,6 +391,130 @@ fn workflow_autojoin_source_disappearance_and_corruption_preserve_target() {
         }
     });
 }
+
+fn progress_raw(record: &str, task: &str, body: &str, clock: i64) -> Vec<u8> {
+    crate::task_progress_protocol::encode(&crate::task_progress_protocol::Document {
+        format_version: 1,
+        entries: vec![crate::task_progress_protocol::Entry {
+            uuid: record.into(),
+            task_uuid: task.into(),
+            body: body.into(),
+            created_at: 1,
+            created_by: "fixture".into(),
+            updated_at: clock,
+            updated_by: "fixture".into(),
+            clock,
+            deleted_at: None,
+        }],
+    })
+    .unwrap()
+    .into_bytes()
+}
+
+#[test]
+fn progress_autojoin_merges_both_targets_preserves_operations_and_rejects_old_ack() {
+    tauri::async_runtime::block_on(async {
+        let (db, p, claim, cloud) = fixture();
+        let old_snapshot;
+        {
+            let mut c = db.connection.lock().unwrap();
+            todo(&c, ID);
+            todo(&c, PEER);
+            crate::task_progress_store::write(
+                &mut c,
+                &crate::task_progress_store::ProgressWrite {
+                    operation_uuid: uuid::Uuid::new_v4().to_string(),
+                    task_uuid: ID.into(),
+                    record_uuid: ASSET.into(),
+                    action: "create".into(),
+                    body: "offline progress".into(),
+                    expected_record: None,
+                },
+                10,
+                "fixture",
+            )
+            .unwrap();
+            old_snapshot =
+                crate::task_progress_sync::prepare(&mut c, p.epoch(), None, None).unwrap();
+        }
+        for (main, body, clock) in [
+            (MAIN.to_string(), "source progress", 20),
+            (claim.main().unwrap(), "target progress", 30),
+        ] {
+            cloud.0.lock().unwrap().objects.insert(
+                crate::task_progress_protocol::object_key(&main, &[]).unwrap(),
+                progress_raw(PEER, PEER, body, clock),
+            );
+        }
+        let next = follow_with(&cloud, &db, &p).await.unwrap().unwrap();
+        let mut c = db.connection.lock().unwrap();
+        let snapshot = crate::task_progress_store::snapshot(&mut c).unwrap();
+        assert_eq!(snapshot.document.entries.len(), 2);
+        assert!(snapshot
+            .document
+            .entries
+            .iter()
+            .any(|e| e.body == "target progress"));
+        assert!(snapshot.revision > snapshot.synced_revision);
+        assert!(snapshot.generation > 0);
+        assert!(snapshot.etag.is_none());
+        assert!(
+            !crate::task_progress_sync::acknowledge(&mut c, &old_snapshot, Some("\"old\""))
+                .unwrap()
+        );
+        assert_eq!(
+            c.query_row("SELECT COUNT(*) FROM task_progress_operations", [], |r| r
+                .get::<_, i64>(
+                0
+            ))
+            .unwrap(),
+            1
+        );
+        assert_eq!(
+            crate::task_progress_sync::prepare(&mut c, next.epoch(), None, None).unwrap_err(),
+            "PROGRESS_REMOTE_MISSING"
+        );
+        assert_eq!(cloud.0.lock().unwrap().uploads, 0);
+    });
+}
+
+#[test]
+fn progress_autojoin_durable_read_evidence_rejects_disappearance_after_interruption() {
+    tauri::async_runtime::block_on(async {
+        for target in [false, true] {
+            let (db, p, claim, cloud) = fixture();
+            let main = if target {
+                claim.main().unwrap()
+            } else {
+                MAIN.to_string()
+            };
+            let key = crate::task_progress_protocol::object_key(&main, &[]).unwrap();
+            cloud
+                .0
+                .lock()
+                .unwrap()
+                .objects
+                .insert(key.clone(), progress_raw(ASSET, ID, "remote progress", 1));
+            assert!(
+                bundle(&cloud, &db, &p, &main, target)
+                    .await
+                    .unwrap()
+                    .progress_present
+            );
+            cloud.0.lock().unwrap().objects.remove(&key);
+            assert_eq!(
+                follow_with(&cloud, &db, &p).await.err().unwrap(),
+                "SYNC_AUTO_JOIN_SOURCE_MISSING"
+            );
+            assert_eq!(configured(&db), MAIN);
+            let snapshot =
+                crate::task_progress_store::snapshot(&mut db.connection.lock().unwrap()).unwrap();
+            assert_eq!(snapshot.generation, 0);
+            assert!(snapshot.etag.is_none());
+            assert_eq!(cloud.0.lock().unwrap().uploads, 0);
+        }
+    });
+}
 #[test]
 fn source_peer_metadata_and_completed_plan_are_preserved() {
     tauri::async_runtime::block_on(async {

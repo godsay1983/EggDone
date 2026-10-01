@@ -183,7 +183,7 @@ fn workflow_backup8_roundtrip_omitted_preserves_explicit_merges_and_validates() 
     waiting(&mut c, &id);
     let raw = crate::data_exchange::planning_test_export(&mut c).unwrap();
     let mut v: serde_json::Value = serde_json::from_str(&raw).unwrap();
-    assert_eq!(v["format_version"], 8);
+    assert_eq!(v["format_version"], 9);
     assert_eq!(
         v["task_workflow"]["states"][0]["reason"],
         "  private reason  "
@@ -198,6 +198,7 @@ fn workflow_backup8_roundtrip_omitted_preserves_explicit_merges_and_validates() 
     crate::data_exchange::planning_test_import(&mut target, &v.to_string()).unwrap();
     assert_eq!(list(&mut target, DAY).unwrap().entries.len(), 1);
     v["format_version"] = 6.into();
+    v.as_object_mut().unwrap().remove("task_progress");
     crate::data_exchange::planning_test_import(&mut target, &v.to_string()).unwrap();
     assert_eq!(list(&mut target, DAY).unwrap().entries.len(), 1);
     v["format_version"] = 8.into();

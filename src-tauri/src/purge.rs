@@ -192,6 +192,7 @@ fn fingerprint(connection: &Connection, target: &Target) -> Result<Option<String
         return Ok(None);
     }
     if target.kind == "todo" {
+        snapshot.push(rows(connection, "SELECT uuid,task_uuid,body,created_at,created_by,updated_at,updated_by,clock,deleted_at FROM task_progress_entries WHERE task_uuid=?1 ORDER BY uuid", &target.uuid)?);
         snapshot.push(rows(connection, "SELECT uuid,active,record_json FROM task_checklist_items WHERE todo_uuid=?1 ORDER BY uuid", &target.uuid)?);
         snapshot.push(rows(connection, "SELECT uuid,active,record_json FROM recurrence_rules WHERE current_todo_uuid=?1 ORDER BY uuid", &target.uuid)?);
         snapshot.push(rows(
@@ -349,13 +350,14 @@ pub fn status(connection: &Connection, operation: &str) -> Result<Plan, String> 
         )
         .map_err(db_error)?;
     if result.purged > 0 && (active || was_synced) {
-        result.sync_pending = connection.query_row("SELECT revision<>synced_revision OR etag IS NULL OR EXISTS(SELECT 1 FROM sync_runtime_state WHERE last_result<>'success' OR dirty_domains<>'[]') FROM lifecycle_sync_state WHERE id=1", [], |r| r.get::<_, bool>(0)).map_err(db_error)?;
+        // SyncRuntime adds progress dirty from its revision at read time, not in the stored JSON.
+        result.sync_pending = connection.query_row("SELECT revision<>synced_revision OR etag IS NULL OR EXISTS(SELECT 1 FROM sync_runtime_state WHERE last_result<>'success' OR dirty_domains<>'[]' OR EXISTS(SELECT 1 FROM task_progress_sync_state WHERE revision<>synced_revision)) FROM lifecycle_sync_state WHERE id=1", [], |r| r.get::<_, bool>(0)).map_err(db_error)?;
     }
     Ok(result)
 }
 
 pub fn unfinished(connection: &Connection) -> Result<Option<Plan>, String> {
-    let operation: Option<String> = connection.query_row("SELECT p.operation_uuid FROM purge_plans p WHERE state='running' OR EXISTS(SELECT 1 FROM purge_targets t JOIN purge_cleanup c ON t.kind='note' AND t.uuid=c.note_uuid WHERE t.operation_uuid=p.operation_uuid AND (c.local_done=0 OR c.remote_done=0)) OR (state='complete' AND length(target_epoch)>0 AND EXISTS(SELECT 1 FROM lifecycle_sync_state WHERE revision<>synced_revision OR etag IS NULL OR EXISTS(SELECT 1 FROM sync_runtime_state WHERE last_result<>'success' OR dirty_domains<>'[]'))) ORDER BY created_at DESC,p.operation_uuid LIMIT 1", [], |r| r.get(0)).optional().map_err(db_error)?;
+    let operation: Option<String> = connection.query_row("SELECT p.operation_uuid FROM purge_plans p WHERE state='running' OR EXISTS(SELECT 1 FROM purge_targets t JOIN purge_cleanup c ON t.kind='note' AND t.uuid=c.note_uuid WHERE t.operation_uuid=p.operation_uuid AND (c.local_done=0 OR c.remote_done=0)) OR (state='complete' AND length(target_epoch)>0 AND EXISTS(SELECT 1 FROM lifecycle_sync_state WHERE revision<>synced_revision OR etag IS NULL OR EXISTS(SELECT 1 FROM sync_runtime_state WHERE last_result<>'success' OR dirty_domains<>'[]' OR EXISTS(SELECT 1 FROM task_progress_sync_state WHERE revision<>synced_revision)))) ORDER BY created_at DESC,p.operation_uuid LIMIT 1", [], |r| r.get(0)).optional().map_err(db_error)?;
     operation.map(|id| status(connection, &id)).transpose()
 }
 

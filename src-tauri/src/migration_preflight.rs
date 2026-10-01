@@ -12,6 +12,7 @@ UNION ALL SELECT domain, revision, synced_revision, generation, etag FROM task_c
 UNION ALL SELECT 'templates', revision, synced_revision, generation, etag FROM task_template_sync_state WHERE id=1
 UNION ALL SELECT 'plans', revision, synced_revision, generation, etag FROM daily_plan_sync_state WHERE id=1
 UNION ALL SELECT 'workflow', revision, synced_revision, generation, etag FROM task_workflow_sync_state WHERE id=1
+UNION ALL SELECT 'progress', revision, synced_revision, generation, etag FROM task_progress_sync_state WHERE id=1
 ORDER BY domain";
 const INVENTORY_SQL: &str = "SELECT 'todos' AS name, COUNT(*) AS value FROM todos
 UNION ALL SELECT 'groups', COUNT(*) FROM groups
@@ -22,8 +23,13 @@ UNION ALL SELECT 'links', COUNT(*) FROM task_note_links
 UNION ALL SELECT 'items', COUNT(*) FROM task_checklist_items
 UNION ALL SELECT 'definitions', COUNT(*) FROM task_checklist_definitions
 UNION ALL SELECT 'templates', COUNT(*) FROM task_templates
-UNION ALL SELECT 'daily_planning_present', (SELECT COUNT(*) FROM daily_plans)+(SELECT COUNT(*) FROM daily_plan_events)+(SELECT COUNT(*) FROM daily_plan_completions)
-UNION ALL SELECT 'task_workflow_present', (SELECT COUNT(*) FROM task_workflow_states)+(SELECT COUNT(*) FROM daily_plan_events)
+UNION ALL SELECT 'plans', COUNT(*) FROM daily_plans
+UNION ALL SELECT 'plan_events', COUNT(*) FROM daily_plan_events
+UNION ALL SELECT 'plan_completions', COUNT(*) FROM daily_plan_completions
+UNION ALL SELECT 'local_plan_receipts', COUNT(*) FROM daily_plan_operations
+UNION ALL SELECT 'daily_planning_present', (SELECT COUNT(*) FROM daily_plan_events)+(SELECT COUNT(*) FROM daily_plans)+(SELECT COUNT(*) FROM daily_plan_completions)
+UNION ALL SELECT 'task_workflow_present', (SELECT COUNT(*) FROM daily_plan_events)+(SELECT COUNT(*) FROM task_workflow_states)
+UNION ALL SELECT 'task_progress_present', COUNT(*) FROM task_progress_entries
 UNION ALL SELECT 'recurrence_instances', COUNT(*) FROM app_metadata WHERE key LIKE 'recurrence.instance.v1:%'
 UNION ALL SELECT 'local_note_history', COUNT(*) FROM note_history
 UNION ALL SELECT 'local_checklist_receipts', COUNT(*) FROM task_checklist_operations
@@ -105,6 +111,7 @@ impl LocalMigrationSnapshot {
             "pending_purge_assets",
             "daily_planning_present",
             "task_workflow_present",
+            "task_progress_present",
         ] {
             if self
                 .inventory
@@ -119,6 +126,14 @@ impl LocalMigrationSnapshot {
 
     // Never clear dirty flags or accept an old preview just because the new state is also clean.
     pub fn require_unchanged(&self, current: &Self) -> Result<(), String> {
+        if self
+            .blockers()
+            .iter()
+            .chain(current.blockers().iter())
+            .any(|b| b == "task_progress_present")
+        {
+            return Err("MIGRATION_PROGRESS_ACTIVE".into());
+        }
         if self
             .blockers()
             .iter()
@@ -205,6 +220,7 @@ pub(crate) fn read(connection: &mut Connection) -> Result<LocalMigrationSnapshot
             "items",
             "links",
             "plans",
+            "progress",
             "rules",
             "templates",
             "workflow",

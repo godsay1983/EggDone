@@ -1,5 +1,6 @@
 <script lang="ts">
   import { translator } from '$lib/i18n';
+  import TaskProgressLauncher from './TaskProgressLauncher.svelte';
   import { dailyPlans, dailyPlanLocked, dailyPlanRows } from '$lib/stores/dailyPlanStore';
   import { taskWorkflow, waitingEntry } from '$lib/stores/taskWorkflowStore';
   import type { Todo } from '$lib/types';
@@ -51,7 +52,11 @@
       {#key $dailyPlans.date}
         <details class="completed-plans">
           <summary>{$translator('dailyPlan.completed', { count: filtered.completed.length })}</summary>
-          {#each filtered.completed as todo (todo.uuid)}<p class="completed-title">{todo.title}</p>{/each}
+          {#each filtered.completed as todo (todo.uuid)}
+            <div class="completed-row"><p class="completed-title">{todo.title}</p>
+              <TaskProgressLauncher uuid={todo.uuid} title={todo.title} />
+            </div>
+          {/each}
         </details>
       {/key}
     {/if}
@@ -61,6 +66,7 @@
         {#each filtered.previous as todo (todo.uuid)}
           <article class="previous-row" data-previous-uuid={todo.uuid}>
             <button class="task-title" onclick={() => onOpen(todo)}>{todo.title}</button>
+            <TaskProgressLauncher uuid={todo.uuid} title={todo.title} />
             <button class="action-button" disabled={locked} onclick={() => void dailyPlans.act(todo.uuid, 'add')}>{$translator('dailyPlan.continue')}</button>
           </article>
         {/each}
@@ -76,7 +82,10 @@
   .completed-title { text-decoration: line-through; overflow-wrap: anywhere; margin: 8px 4px; }
   .previous-plans { border-top: 1px solid var(--action-border); margin-top: 8px; padding-top: 8px; }
   h3 { font-size: 13px; margin: 0 0 6px; }
-  .previous-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: start; margin-bottom: 6px; }
+  .previous-row { display: flex; gap: 6px; align-items: start; flex-wrap: wrap; margin-bottom: 6px; }
+  .previous-row .task-title { flex: 1; }
+  .completed-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .completed-row .completed-title { flex: 1; min-width: 0; }
   .previous-row .action-button { max-width: 100px; }
   summary { cursor: pointer; overflow-wrap: anywhere; }
   summary:focus-visible, .task-title:focus-visible { outline: 2px solid var(--action-focus); outline-offset: 1px; }

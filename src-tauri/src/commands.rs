@@ -1362,6 +1362,7 @@ pub async fn sync_now(
     tray::update_task_badge(&app);
     let _ = app.emit_to("main", "todos-changed", ());
     let _ = app.emit_to("main", "notes-changed", ());
+    let _ = app.emit_to("main", "task-progress-changed", ());
     match outcome {
         Ok(result) => {
             let connection = lock_database(&database)?;
@@ -1594,6 +1595,10 @@ async fn sync_now_inner(
         workflow_remote_token: crate::task_workflow_session::final_token(
             database,
             &entities.workflow_receipt,
+        )?,
+        progress_remote_token: crate::task_progress_session::final_token(
+            database,
+            &entities.progress_receipt,
         )?,
         checklist_remote_token: entities.checklist_token,
         template_remote_token: entities.template_token,

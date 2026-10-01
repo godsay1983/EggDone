@@ -104,6 +104,7 @@
   import { contentSearchApi, type SearchItem, type SearchTarget } from "$lib/api/contentSearchApi";
   import SettingsPanel from "./SettingsPanel.svelte";
   import TodoItem from "./TodoItem.svelte";
+  import TaskProgressHost from './TaskProgressHost.svelte';
   import DailyPlanTabs from './DailyPlanTabs.svelte';
   import DailyPlanList from './DailyPlanList.svelte';
   import DailyPlanStatus from './DailyPlanStatus.svelte';
@@ -3721,6 +3722,7 @@
 {#if showTrash}
   <TrashDialog onClose={() => showTrash = false} afterCommit={refreshAfterTrash} />
 {/if}
+<TaskProgressHost />
 {#if showArchive}
   <ArchiveDialog initialItem={archiveInitial} onClose={closeArchive} afterCommit={refreshAfterTrash} onViewTask={viewArchiveTask} />
 {/if}

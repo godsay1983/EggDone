@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { RemotePollState } from "./remotePollState";
 
+describe('progress remote receipts', () => {
+  it('consumes only successful current-target receipts, not stale receipts or observations', () => {
+    const state = new RemotePollState(); const generation = state.beginSync();
+    expect(state.progressChanged(undefined)).toBe(false); expect(state.progressChanged('missing')).toBe(true);
+    state.acknowledgeProgress(generation, 'missing'); expect(state.progressChanged('missing')).toBe(false);
+    expect(state.progressChanged('peer')).toBe(true);
+    state.reset(); state.acknowledgeProgress(generation, 'peer'); expect(state.progressChanged('peer')).toBe(true);
+    state.acknowledgeProgress(state.beginSync(), 'peer'); expect(state.progressChanged('peer')).toBe(false);
+  });
+});
+
 describe("planning remote polling", () => {
   it('tracks workflow-only changes and rejects stale target receipts independently', () => {
     const state = new RemotePollState();

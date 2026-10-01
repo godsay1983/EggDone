@@ -31,6 +31,8 @@ export function ensureErrorCode(reason: unknown, code: EggDoneErrorCode): string
 
 export function localizedErrorMessage(reason: unknown): string {
   const raw = rawError(reason);
+  const progressKey = progressErrorKey(raw);
+  if (progressKey) return translate(getLanguageState().resolvedLocale, progressKey);
   if (raw.includes('SYNC_AUTO_JOIN_')) return translate(getLanguageState().resolvedLocale, 'sync.autoJoinFailed');
   const parsed = parseCodedError(raw);
   if (!parsed) return safeDetail(raw);
@@ -43,6 +45,23 @@ export function localizedErrorMessage(reason: unknown): string {
   }
   const [titleKey, actionKey] = MESSAGE_KEYS[parsed.code];
   return `${translate(locale, titleKey)} ${translate(locale, actionKey)}`;
+}
+
+export function progressErrorKey(raw: string): TranslationKey | null {
+  const code = raw.match(/\bPROGRESS_[A-Z_]+\b/)?.[0];
+  if (!code) return null;
+  const keys: Record<string, TranslationKey> = {
+    PROGRESS_INVALID: 'taskProgress.sync.invalid', PROGRESS_LIMIT: 'taskProgress.error.limit',
+    PROGRESS_CONFLICT: 'taskProgress.sync.conflict', PROGRESS_SYNC_CONFLICT: 'taskProgress.sync.conflict',
+    PROGRESS_ETAG_REQUIRED: 'taskProgress.sync.conflict', PROGRESS_NOT_EMPTY: 'taskProgress.sync.conflict',
+    PROGRESS_REMOTE_MISSING: 'taskProgress.sync.missing', PROGRESS_CONFIG_CHANGED: 'taskProgress.sync.target',
+    PROGRESS_KEY_INVALID: 'taskProgress.sync.key', PROGRESS_KEY_COLLISION: 'taskProgress.sync.key',
+    PROGRESS_DATABASE: 'taskProgress.sync.database', PROGRESS_NETWORK: 'taskProgress.sync.network',
+    PROGRESS_READ_ONLY: 'taskProgress.error.readOnly', PROGRESS_UNAVAILABLE: 'taskProgress.error.unavailable',
+    PROGRESS_DELETED: 'taskProgress.error.deleted',
+  };
+  if (code === 'PROGRESS_HTTP') return /PROGRESS_HTTP:(401|403)\b/.test(raw) ? 'taskProgress.sync.denied' : 'taskProgress.sync.network';
+  return keys[code] ?? 'taskProgress.sync.failed';
 }
 
 function parseCodedError(raw: string): { code: EggDoneErrorCode; detail: string } | null {

@@ -8,6 +8,14 @@
   import TaskChecklistDetails from './TaskChecklistDetails.svelte';
   import TaskChecklistDialog from './TaskChecklistDialog.svelte';
   import TaskTemplateDialog from './TaskTemplateDialog.svelte';
+  import TaskProgressBadge from './TaskProgressBadge.svelte';
+  import { taskProgressCounts, watchTaskProgress } from '$lib/stores/taskProgressCounts';
+  import { taskProgressPanel, openTaskProgress } from '$lib/stores/taskProgressPanel';
+  let progressRegistration: ReturnType<typeof taskProgressCounts.register> | null = null;
+  $: progressRegistration?.update([todo.uuid]);
+  $: progressOpen = $taskProgressPanel?.uuid === todo.uuid;
+  $: progressCount = $taskProgressCounts[todo.uuid] ?? 0;
+  function openProgress() { actionsOpen = false; openTaskProgress(todo.uuid, todo.title); }
   let templateOpen = false;
   import { readTaskCopyDraft } from '$lib/stores/taskChecklistEditorStore';
   import type { TaskCopyDraft } from '$lib/utils/taskCopyDraft';
@@ -146,7 +154,7 @@
   let repeatChoice: RepeatRule | "none" = "none";
   let groupSaving = false;
   let actionsOpen = false;
-  $: onEditingChange(waitingOpen || templateOpen || copyLoading || copyDraft!==null || checklistOpen || editing || saving || scheduleOpen || recurrenceOpen || scheduleSaving || noteOpen || noteSaving || groupSaving);
+  $: onEditingChange(progressOpen || waitingOpen || templateOpen || copyLoading || copyDraft!==null || checklistOpen || editing || saving || scheduleOpen || recurrenceOpen || scheduleSaving || noteOpen || noteSaving || groupSaving);
   let editInput: HTMLInputElement;
   let noteInput: HTMLTextAreaElement;
   let itemElement: HTMLElement;
@@ -168,6 +176,8 @@
   }
 
   onMount(() => {
+    progressRegistration = taskProgressCounts.register([todo.uuid]);
+    const stopProgress = watchTaskProgress();
     animationDuration = window.matchMedia("(prefers-reduced-motion: reduce)").matches
       ? 0
       : 140;
@@ -205,7 +215,7 @@
     }
 
     window.addEventListener("pointerdown", handlePointerDown, true);
-    return () => window.removeEventListener("pointerdown", handlePointerDown, true);
+    return () => { progressRegistration?.dispose(); stopProgress(); window.removeEventListener("pointerdown", handlePointerDown, true); };
   });
 
   async function beginEdit() {
@@ -598,8 +608,9 @@
           {notePreview}
         </button>
       {/if}
-      {#if waiting || inDailyPlan || checklistCount?.total || currentGroup || dueLabel || todo.pinned || todo.priority === 1 || todo.reminder_at !== null || todo.repeat_rule !== null || customSummary}
+      {#if progressCount || waiting || inDailyPlan || checklistCount?.total || currentGroup || dueLabel || todo.pinned || todo.priority === 1 || todo.reminder_at !== null || todo.repeat_rule !== null || customSummary}
         <div class="todo-meta">
+          <TaskProgressBadge uuid={todo.uuid} onOpen={openProgress} />
           {#if currentGroup}
             <span
               class="todo-group-badge"
@@ -843,6 +854,7 @@
           <button type="button" role="menuitem" disabled={copyLoading} onclick={()=>void copyTask()}>{$translator('todo.copy')}</button>
           <button type="button" role="menuitem" onclick={()=>{actionsOpen=false;templateOpen=true;}}>{$translator('templates.saveAs')}</button>
         <button type="button" role="menuitem" onclick={openChecklist}>{$translator('checklist.title')}</button>
+        <button type="button" role="menuitem" onclick={openProgress}>{$translator('taskProgress.title')}</button>
         <button type="button" role="menuitem" onclick={() => { actionsOpen = false; onManageLinks(todo); }}>
           {$translator("links.notes")}
         </button>

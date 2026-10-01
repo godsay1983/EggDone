@@ -37,6 +37,7 @@ fn workflow_conflict_restarts_entities_with_two_attempt_bound() {
             }
             if conflicts == 1 {
                 replies.extend([
+                    Reply::new(404, None, b""), // progress
                     Reply::new(404, None, b""),
                     Reply::new(200, None, b""),
                     Reply::new(404, None, b""),
@@ -93,6 +94,7 @@ fn workflow_event_after_plan_ack_restarts_and_returns_current_receipts() {
             ]);
         }
         replies.extend([
+            Reply::new(404, None, b""), // progress
             Reply::new(404, None, b""),
             Reply::new(200, None, b""),
             Reply::new(404, None, b""),

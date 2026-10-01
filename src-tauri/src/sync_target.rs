@@ -93,6 +93,9 @@ pub(crate) fn invalidate_in_transaction(tx: &Connection) -> Result<(), String> {
     }
     tx.execute("DELETE FROM task_workflow_operations", [])
         .map_err(|_| "SYNC_TARGET_DATABASE")?;
+    if tx.execute("UPDATE task_progress_sync_state SET revision=revision+1,synced_revision=0,generation=generation+1,etag=NULL WHERE id=1 AND revision<9007199254740991 AND generation<9007199254740991", []).map_err(|_| "SYNC_TARGET_DATABASE")? != 1 {
+        return Err("SYNC_TARGET_REVISION_LIMIT".into());
+    }
     Ok(())
 }
 

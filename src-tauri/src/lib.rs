@@ -105,7 +105,14 @@ pub mod task_note_link_sync;
 mod task_note_link_tests;
 mod task_note_link_transport;
 mod task_note_link_views;
+mod task_progress_backup;
+mod task_progress_commands;
+#[cfg(test)]
+mod task_progress_cross_client_tests;
 pub mod task_progress_protocol;
+mod task_progress_session;
+pub mod task_progress_store;
+pub mod task_progress_sync;
 mod task_template_backup;
 mod task_template_commands;
 pub mod task_template_protocol;
@@ -231,6 +238,10 @@ pub fn run() {
             daily_plan_commands::write_daily_plan,
             task_workflow_commands::list_task_workflow,
             task_workflow_commands::write_task_workflow,
+            task_progress_commands::list_task_progress,
+            task_progress_commands::write_task_progress,
+            task_progress_commands::count_task_progress,
+            task_progress_commands::dismiss_task_progress_notice,
             task_checklist_commands::save_task_checklist_editor,
             task_checklist_commands::create_task_checklist_editor,
             task_checklist_commands::resolve_checklist_rule_time,

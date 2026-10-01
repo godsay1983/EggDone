@@ -180,6 +180,10 @@
         <span>{preview.planning_metadata_included
           ? $translator("data.planningSummary", { relations: preview.planning_relations, completions: preview.planning_completions })
           : $translator("data.planningLegacy")}</span>
+        <span>{preview.progressMetadataIncluded
+          ? $translator('taskProgress.backupSummary', { total: preview.progressTotal ?? 0, added: preview.progressAdded ?? 0,
+              updated: preview.progressUpdated ?? 0, deleted: preview.progressDeleted ?? 0, unchanged: preview.progressUnchanged ?? 0 })
+          : $translator('taskProgress.backupLegacy')}</span>
         <span>{preview.workflow_metadata_included
           ? $translator('waiting.backupSummary', { count: preview.workflow_states ?? 0 })
           : $translator('waiting.backupLegacy')}</span>

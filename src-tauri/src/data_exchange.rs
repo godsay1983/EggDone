@@ -22,7 +22,7 @@ use crate::{
     tray::PanelState,
 };
 
-const FORMAT_VERSION: u32 = 8;
+const FORMAT_VERSION: u32 = 9;
 const BACKUP_FORMAT_VERSION: u32 = 1;
 const BACKUP_MAX_ENTRY_COUNT: usize = 10_000;
 const BACKUP_MAX_TOTAL_BYTES: u64 = 512 * 1024 * 1024;
@@ -116,6 +116,12 @@ struct TodoExport {
         deserialize_with = "crate::task_template_backup::deserialize"
     )]
     task_templates: Option<crate::task_template_protocol::TemplatesDocument>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::task_progress_backup::deserialize"
+    )]
+    task_progress: Option<crate::task_progress_protocol::Document>,
     #[serde(flatten)]
     extra: std::collections::BTreeMap<String, serde_json::Value>,
 }
@@ -173,6 +179,12 @@ pub struct ImportPreview {
     planning_completions: usize,
     workflow_metadata_included: bool,
     workflow_states: usize,
+    progress_metadata_included: bool,
+    progress_total: usize,
+    progress_added: usize,
+    progress_updated: usize,
+    progress_deleted: usize,
+    progress_unchanged: usize,
     attachment_added: usize,
     attachment_updated: usize,
     attachment_unchanged: usize,
@@ -1075,12 +1087,10 @@ fn capture_export(
     let workflow = crate::task_workflow_store::read_in_transaction(&tx)?.document;
     let has_workflow = !crate::task_workflow_protocol::is_empty(&workflow);
     let mut extra = std::collections::BTreeMap::new();
-    if !terminals.is_empty() || has_planning || has_workflow {
-        extra.insert(
-            "lifecycle_terminals".into(),
-            serde_json::to_value(&terminals).map_err(|_| "PURGE_LEDGER_INVALID")?,
-        );
-    }
+    extra.insert(
+        "lifecycle_terminals".into(),
+        serde_json::to_value(&terminals).map_err(|_| "PURGE_LEDGER_INVALID")?,
+    );
     if has_planning {
         extra.insert(
             "daily_planning".into(),
@@ -1094,15 +1104,7 @@ fn capture_export(
         );
     }
     let export = TodoExport {
-        format_version: if has_workflow {
-            8
-        } else if has_planning {
-            7
-        } else if terminals.is_empty() {
-            5
-        } else {
-            6
-        },
+        format_version: FORMAT_VERSION,
         exported_at,
         groups: read_all_groups(&tx)?,
         todos: read_all_todos(&tx)?,
@@ -1114,6 +1116,7 @@ fn capture_export(
         task_checklist_items: Some(checklist.items),
         task_checklist_definitions: Some(checklist.definitions),
         task_templates: Some(crate::task_template_store::read_in_transaction(&tx)?.document),
+        task_progress: Some(crate::task_progress_store::read_in_transaction(&tx)?.document),
         extra,
     };
     validate_import_mode(&export, full)?;
@@ -1141,6 +1144,10 @@ fn read_import_file(path: &Path) -> Result<TodoExport, String> {
 }
 
 #[cfg(test)]
+#[path = "task_progress_backup_tests.rs"]
+mod task_progress_backup_tests;
+
+#[cfg(test)]
 mod purge_backup_tests {
     use super::*;
     const ID: &str = "123e4567-e89b-42d3-a456-426614174000";
@@ -1158,7 +1165,7 @@ mod purge_backup_tests {
         merge_import(&mut db, read_import_file(Path::new(&input)).unwrap()).unwrap();
         assert!(!crate::purge::terminals(&db).unwrap().is_empty());
         let export = capture_export(&mut db, false, 4000).unwrap();
-        assert_eq!(export.format_version, 6);
+        assert_eq!(export.format_version, 9);
         fs::write(output, serde_json::to_vec(&export).unwrap()).unwrap();
     }
     #[test]
@@ -1170,7 +1177,7 @@ mod purge_backup_tests {
         let plan = crate::purge::prepare(&mut source, None, 20).unwrap();
         crate::purge::execute_batch(&mut source, &plan.operation_uuid, 30).unwrap();
         let export = capture_export(&mut source, false, 40).unwrap();
-        assert_eq!(export.format_version, 6);
+        assert_eq!(export.format_version, 9);
         let bytes = serde_json::to_string(&export).unwrap();
         assert!(!bytes.contains("private text"));
         let mut target = database();
@@ -1199,7 +1206,6 @@ mod purge_backup_tests {
         target.execute("INSERT INTO todos(uuid,title,sort_order,created_at,updated_at,updated_by) VALUES(?1,'keep',0,1,1,'test')",[ID]).unwrap();
         let mut empty = database();
         let mut export = capture_export(&mut empty, false, 10).unwrap();
-        export.format_version = 6;
         export.extra.insert("lifecycle_terminals".into(),serde_json::json!([{"kind":"todo","uuid":ID,"operation_uuid":uuid::Uuid::new_v4().to_string(),"purged_at":20}]));
         assert_eq!(
             merge_import(&mut target, export).unwrap_err(),
@@ -1233,7 +1239,7 @@ mod daily_plan_backup_tests {
         let mut c = db();
         merge_import(&mut c, read_import_file(Path::new(&input)).unwrap()).unwrap();
         let export = capture_export(&mut c, false, 4000).unwrap();
-        assert_eq!(export.format_version, 7);
+        assert_eq!(export.format_version, 9);
         fs::write(output, serde_json::to_vec(&export).unwrap()).unwrap();
     }
     #[test]
@@ -1259,7 +1265,7 @@ mod daily_plan_backup_tests {
         assert!(preview.planning_metadata_included);
         assert_eq!(preview.planning_relations, 1);
         assert_eq!(preview.planning_completions, 0);
-        assert_eq!(export.format_version, 7);
+        assert_eq!(export.format_version, 9);
         assert_eq!(export.extra.len(), 2);
         let raw = serde_json::to_string(&export).unwrap();
         let mut target = db();
@@ -1271,6 +1277,8 @@ mod daily_plan_backup_tests {
         invalid.format_version = 6;
         assert!(validate_import(&invalid).is_err());
         let mut invalid = export;
+        invalid.format_version = 7;
+        invalid.task_progress = None;
         invalid.extra.remove("daily_planning");
         assert!(validate_import(&invalid).is_err());
         target
@@ -1316,7 +1324,7 @@ mod task_workflow_backup_tests {
         };
         crate::task_workflow_store::write(&mut c, &request, 10, "device").unwrap();
         let export = capture_export(&mut c, false, 20).unwrap();
-        assert_eq!(export.format_version, 8);
+        assert_eq!(export.format_version, 9);
         let preview =
             serde_json::to_value(build_preview(&c, Path::new("workflow.json"), &export).unwrap())
                 .unwrap();
@@ -1354,10 +1362,10 @@ fn import_terminals(import: &TodoExport) -> Result<Vec<crate::purge::Terminal>, 
         }
         return Ok(Vec::new());
     }
-    if !matches!(import.format_version, 6 | 7 | 8)
+    if !matches!(import.format_version, 6 | 7 | 8 | 9)
         || (import.format_version < 8
             && import.extra.len() != if import.format_version == 7 { 2 } else { 1 })
-        || (import.format_version == 8
+        || (import.format_version >= 8
             && import.extra.keys().any(|k| {
                 !["lifecycle_terminals", "daily_planning", "task_workflow"].contains(&k.as_str())
             }))
@@ -1380,8 +1388,10 @@ fn import_planning(
     import: &TodoExport,
 ) -> Result<Option<crate::daily_plan_protocol::Document>, String> {
     match (import.format_version, import.extra.get("daily_planning")) {
-        (7 | 8, Some(value)) => Ok(Some(crate::daily_plan_protocol::parse(&value.to_string())?)),
-        (0..=6 | 8, None) => Ok(None),
+        (7 | 8 | 9, Some(value)) => {
+            Ok(Some(crate::daily_plan_protocol::parse(&value.to_string())?))
+        }
+        (0..=6 | 8 | 9, None) => Ok(None),
         _ => Err("PLAN_INVALID".into()),
     }
 }
@@ -1390,10 +1400,10 @@ fn import_workflow(
     import: &TodoExport,
 ) -> Result<Option<crate::task_workflow_protocol::Document>, String> {
     match (import.format_version, import.extra.get("task_workflow")) {
-        (8, Some(value)) => Ok(Some(crate::task_workflow_protocol::parse(
+        (8 | 9, Some(value)) => Ok(Some(crate::task_workflow_protocol::parse(
             &value.to_string(),
         )?)),
-        (0..=8, None) => Ok(None),
+        (0..=9, None) => Ok(None),
         _ => Err("WORKFLOW_INVALID".into()),
     }
 }
@@ -1407,6 +1417,7 @@ fn validate_complete_import(import: &TodoExport) -> Result<(), String> {
 }
 
 fn validate_import_mode(import: &TodoExport, expect_attachment_files: bool) -> Result<(), String> {
+    crate::task_progress_backup::validate(import.format_version, import.task_progress.as_ref())?;
     let terminals = import_terminals(import)?;
     import_planning(import)?;
     import_workflow(import)?;
@@ -1421,7 +1432,7 @@ fn validate_import_mode(import: &TodoExport, expect_attachment_files: bool) -> R
     }
     match (import.format_version, &import.recurrence) {
         (1, None) => {}
-        (2 | 3 | 4 | 5 | 6 | 7 | 8, Some(backup)) => {
+        (2 | 3 | 4 | 5 | 6 | 7 | 8 | 9, Some(backup)) => {
             crate::recurrence_backup::validate(backup)?;
             if backup
                 .instances
@@ -1435,7 +1446,7 @@ fn validate_import_mode(import: &TodoExport, expect_attachment_files: bool) -> R
     }
     match (import.format_version, &import.task_note_links) {
         (1 | 2, None) => {}
-        (3 | 4 | 5 | 6 | 7 | 8, Some(links)) => {
+        (3 | 4 | 5 | 6 | 7 | 8 | 9, Some(links)) => {
             crate::task_note_link_protocol::encode_document(links)?;
         }
         _ => return Err("INVALID_TASK_NOTE_LINK_BACKUP_VERSION".into()),
@@ -1446,8 +1457,8 @@ fn validate_import_mode(import: &TodoExport, expect_attachment_files: bool) -> R
         &import.task_checklist_definitions,
     ) {
         (1..=3, None, None) => {}
-        (4 | 5 | 6 | 7 | 8, Some(items), Some(definitions))
-            if import.extra.is_empty() || matches!(import.format_version, 6 | 7 | 8) =>
+        (4 | 5 | 6 | 7 | 8 | 9, Some(items), Some(definitions))
+            if import.extra.is_empty() || matches!(import.format_version, 6 | 7 | 8 | 9) =>
         {
             crate::task_checklist_protocol::encode_items(items)?;
             crate::task_checklist_protocol::encode_definitions(definitions)?;
@@ -1666,6 +1677,17 @@ fn build_preview(
         count_attachment_changes(connection, &import.note_attachments)?;
     let parent_uuids: HashSet<&str> = import.todos.iter().map(|todo| todo.uuid.as_str()).collect();
     let planning = import_planning(import)?;
+    let purged: HashSet<String> = crate::purge::terminals(connection)?
+        .into_iter()
+        .chain(import_terminals(import)?)
+        .filter(|t| t.kind == "todo")
+        .map(|t| t.uuid)
+        .collect();
+    let progress_changes = crate::task_progress_backup::changes(
+        &crate::task_progress_store::read_in_transaction(connection)?.document,
+        import.task_progress.as_ref(),
+        &purged,
+    )?;
 
     Ok(ImportPreview {
         path: path.to_string_lossy().into_owned(),
@@ -1726,6 +1748,12 @@ fn build_preview(
         workflow_states: import_workflow(import)?
             .as_ref()
             .map_or(0, |d| d.states.len()),
+        progress_metadata_included: import.task_progress.is_some(),
+        progress_total: import.task_progress.as_ref().map_or(0, |d| d.entries.len()),
+        progress_added: progress_changes.added,
+        progress_updated: progress_changes.updated,
+        progress_deleted: progress_changes.deleted,
+        progress_unchanged: progress_changes.unchanged,
         recurrence_total: import
             .recurrence
             .as_ref()
@@ -1872,6 +1900,7 @@ fn merge_import_in_transaction(
     if let Some(workflow) = workflow {
         crate::task_workflow_store::merge_in_transaction(connection, &workflow)?;
     }
+    crate::task_progress_backup::restore(connection, import.task_progress.as_ref())?;
     connection
         .execute(
             "UPDATE task_workflow_sync_state SET generation=generation+1 WHERE id=1",
@@ -2408,6 +2437,7 @@ mod tests {
             task_checklist_items: None,
             task_checklist_definitions: None,
             task_templates: None,
+            task_progress: None,
             extra: Default::default(),
         };
         let json = serde_json::to_string(&export).unwrap();
@@ -2493,6 +2523,7 @@ mod tests {
             task_checklist_items: None,
             task_checklist_definitions: None,
             task_templates: None,
+            task_progress: None,
             extra: Default::default(),
         };
         assert!(validate_import(&future).is_err());
@@ -2510,6 +2541,7 @@ mod tests {
             task_checklist_items: None,
             task_checklist_definitions: None,
             task_templates: None,
+            task_progress: None,
             extra: Default::default(),
         };
         assert!(validate_import(&duplicated).is_err());
@@ -2527,6 +2559,7 @@ mod tests {
             task_checklist_items: None,
             task_checklist_definitions: None,
             task_templates: None,
+            task_progress: None,
             extra: Default::default(),
         };
         assert!(validate_import(&falsely_complete).is_err());
@@ -2634,6 +2667,7 @@ mod tests {
                 task_checklist_items: None,
                 task_checklist_definitions: None,
                 task_templates: None,
+                task_progress: None,
                 extra: Default::default(),
             },
         )
@@ -2713,6 +2747,7 @@ mod tests {
             task_checklist_items: None,
             task_checklist_definitions: None,
             task_templates: None,
+            task_progress: None,
             extra: Default::default(),
         };
         let data = serde_json::to_vec(&export).unwrap();

@@ -28,6 +28,12 @@ export interface ImportPreview {
   planning_completions: number;
   workflow_metadata_included?: boolean;
   workflow_states?: number;
+  progressMetadataIncluded?: boolean;
+  progressTotal?: number;
+  progressAdded?: number;
+  progressUpdated?: number;
+  progressDeleted?: number;
+  progressUnchanged?: number;
   link_deleted: number;
   link_metadata_included: boolean;
   attachment_added: number;
@@ -58,6 +64,22 @@ export interface FullBackupExportResult {
   total_bytes: number;
 }
 
+interface SnakeProgressPreview {
+  progress_metadata_included?: boolean;
+  progress_total?: number;
+  progress_added?: number;
+  progress_updated?: number;
+  progress_deleted?: number;
+  progress_unchanged?: number;
+}
+function progressPreview(preview: (ImportPreview & SnakeProgressPreview) | null): ImportPreview | null {
+  if (!preview || preview.progressMetadataIncluded !== undefined || preview.progress_metadata_included === undefined) return preview;
+  // Existing desktop preview fields are snake_case; normalize only the new domain at the IPC boundary.
+  return { ...preview, progressMetadataIncluded: preview.progress_metadata_included,
+    progressTotal: preview.progress_total, progressAdded: preview.progress_added, progressUpdated: preview.progress_updated,
+    progressDeleted: preview.progress_deleted, progressUnchanged: preview.progress_unchanged };
+}
+
 export const dataApi = {
   exportTodos(): Promise<string | null> {
     return codedInvoke(invoke<string | null>("export_todos"), "DATA_EXCHANGE_FAILED");
@@ -68,7 +90,7 @@ export const dataApi = {
   },
 
   previewImport(): Promise<ImportPreview | null> {
-    return codedInvoke(invoke<ImportPreview | null>("preview_todo_import"), "DATA_EXCHANGE_FAILED");
+    return codedInvoke(invoke<(ImportPreview & SnakeProgressPreview) | null>("preview_todo_import"), "DATA_EXCHANGE_FAILED").then(progressPreview);
   },
 
   confirmImport(path: string): Promise<ImportResult> {
@@ -76,7 +98,7 @@ export const dataApi = {
   },
 
   previewFullBackupImport(): Promise<ImportPreview | null> {
-    return codedInvoke(invoke<ImportPreview | null>("preview_full_backup_import"), "DATA_EXCHANGE_FAILED");
+    return codedInvoke(invoke<(ImportPreview & SnakeProgressPreview) | null>("preview_full_backup_import"), "DATA_EXCHANGE_FAILED").then(progressPreview);
   },
 
   confirmFullBackupImport(path: string): Promise<ImportResult> {

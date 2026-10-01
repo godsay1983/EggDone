@@ -211,6 +211,7 @@ describe("auto sync", () => {
   });
   it.each([
     ['planToken', 'planRemoteToken'], ['workflowToken', 'workflowRemoteToken'],
+    ['progressToken', 'progressRemoteToken'],
   ] as const)("syncs a %s-only remote change and consumes only its successful receipt", async (token, receipt) => {
     vi.useFakeTimers();
     configureAutoSync(enabledSettings);

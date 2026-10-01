@@ -40,6 +40,7 @@ fn entity_replies() -> Vec<Reply> {
         Reply::new(404, None, b""), // templates
         Reply::new(404, None, b""), // planning
         Reply::new(404, None, b""), // workflow
+        Reply::new(404, None, b""), // progress
         Reply::new(404, None, b""),
         Reply::new(200, None, b""),
     ]
@@ -103,6 +104,13 @@ fn actual_signed_transport_entity_order_and_bounded_conflict_retry() {
                             .request()
                             .head
                             .starts_with(&format!("GET /rules-test/{workflow} ")));
+                        let progress =
+                            crate::task_progress_protocol::object_key("account/todos.json", &[])
+                                .unwrap();
+                        assert!(server
+                            .request()
+                            .head
+                            .starts_with(&format!("GET /rules-test/{progress} ")));
                     }
                     if key == "task-note-links.json" && method == "PUT" {
                         assert!(r.head.to_lowercase().contains("if-none-match: *"));

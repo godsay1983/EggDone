@@ -294,6 +294,7 @@ async function performSyncWithRetry(): Promise<ManualSyncResult> {
       if (result.templateRemoteToken !== undefined) pollState.acknowledgeTemplates(generation, result.templateRemoteToken);
       if (result.planRemoteToken !== undefined) pollState.acknowledgePlans(generation, result.planRemoteToken);
       if (result.workflowRemoteToken !== undefined) pollState.acknowledgeWorkflow(generation, result.workflowRemoteToken);
+      if (result.progressRemoteToken !== undefined) pollState.acknowledgeProgress(generation, result.progressRemoteToken);
       const cleanupNotice = result.message.includes("远端附件");
       let snapshot: SyncRuntimeSnapshot | null = null;
       try {
@@ -359,6 +360,7 @@ async function checkRemoteAndSync() {
       pollState.templatesChanged(remote.templateToken) ||
       pollState.plansChanged(remote.planToken) ||
       pollState.workflowChanged(remote.workflowToken) ||
+      pollState.progressChanged(remote.progressToken) ||
       !remoteStateInitialized ||
       remote.todoObjectExists !== (knownTodoRemoteEtag !== null) ||
       remote.todoEtag !== knownTodoRemoteEtag ||
@@ -446,6 +448,7 @@ function isRetryable(reason: unknown) {
     message.includes("权限") ||
     message.includes("配置") ||
     message.includes("recurrence_config_changed") ||
+    message.includes("progress_config_changed") ||
     message.includes("sync_target_save_incomplete") ||
     message.includes("sync_auto_join_") ||
     isConflict(message)
@@ -484,7 +487,7 @@ function isRetryable(reason: unknown) {
 }
 
 function isConflict(message: string) {
-  return message.includes("远端文件持续发生变化") || message.toLowerCase().includes("recurrence_sync_conflict") || message.toLowerCase().includes("task_note_link_sync_conflict");
+  return message.includes("远端文件持续发生变化") || /progress_(sync_)?conflict/i.test(message) || message.toLowerCase().includes("recurrence_sync_conflict") || message.toLowerCase().includes("task_note_link_sync_conflict");
 }
 
 function clearDebounce() {

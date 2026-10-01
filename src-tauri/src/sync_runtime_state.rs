@@ -5,6 +5,42 @@ use crate::db::now_millis;
 
 const STATE_ID: i64 = 1;
 
+pub(crate) fn record_progress_probe(
+    connection: &Connection,
+    epoch: &str,
+    token: &str,
+) -> Result<(), String> {
+    if epoch.is_empty()
+        || epoch.starts_with("pending:")
+        || !crate::sync_target::is_current(connection, epoch)?
+    {
+        return Err("PROGRESS_CONFIG_CHANGED".into());
+    }
+    if token == "missing" {
+        if crate::task_progress_sync::remote_seen(connection, epoch)?
+            || crate::task_progress_store::read_in_transaction(connection)?
+                .etag
+                .is_some()
+        {
+            return Err("PROGRESS_REMOTE_MISSING".into());
+        }
+    } else if let Some(etag) = token.strip_prefix("etag:") {
+        if !crate::task_checklist_transport::valid_etag(etag) {
+            return Err("PROGRESS_ETAG_REQUIRED".into());
+        }
+        // HEAD proves existence, not a document revision or an upload precondition.
+        connection
+            .execute(
+                "INSERT OR IGNORE INTO app_metadata(key,value) VALUES(?1,'1')",
+                [format!("task.progress.remote.seen.v1:{epoch}")],
+            )
+            .map_err(|_| "PROGRESS_DATABASE")?;
+    } else if token != "denied" {
+        return Err("PROGRESS_INVALID".into());
+    }
+    Ok(())
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SyncDomain {
     Todos,
@@ -66,7 +102,8 @@ pub fn get_snapshot(connection: &Connection) -> Result<SyncRuntimeSnapshot, Stri
                     EXISTS(SELECT 1 FROM task_checklist_sync_state WHERE revision>synced_revision),
                     EXISTS(SELECT 1 FROM task_template_sync_state WHERE revision>synced_revision),
                     EXISTS(SELECT 1 FROM daily_plan_sync_state WHERE revision>synced_revision),
-                    EXISTS(SELECT 1 FROM task_workflow_sync_state WHERE revision>synced_revision)
+                    EXISTS(SELECT 1 FROM task_workflow_sync_state WHERE revision>synced_revision),
+                    EXISTS(SELECT 1 FROM task_progress_sync_state WHERE revision>synced_revision)
              FROM sync_runtime_state WHERE id = ?1",
             params![STATE_ID],
             |row| {
@@ -87,6 +124,9 @@ pub fn get_snapshot(connection: &Connection) -> Result<SyncRuntimeSnapshot, Stri
                 }
                 if row.get::<_, bool>(14)? {
                     domains.push("workflow".into());
+                }
+                if row.get::<_, bool>(15)? {
+                    domains.push("progress".into());
                 }
                 Ok(SyncRuntimeSnapshot {
                     schema_version: row.get(0)?,

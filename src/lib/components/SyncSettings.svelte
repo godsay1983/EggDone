@@ -27,7 +27,7 @@
   } from "$lib/api/noteAttachmentApi";
   import { translator } from "$lib/i18n";
   import { syncSummaryTone } from "$lib/sync/syncSummary";
-  import { localizedErrorMessage } from "$lib/i18n/errors";
+  import { localizedErrorMessage, progressErrorKey } from "$lib/i18n/errors";
   import { formatFileSize, formatTime } from "$lib/i18n/formatters";
 
   let savedBaseline: SyncSettings | null = null;
@@ -181,6 +181,7 @@
   }
 
   function domainLabel(domain: SyncDirtyDomain) {
+    if (domain === "progress") return $translator("taskProgress.title");
     if (domain === "checklists") return $translator("sync.domainChecklists");
     if (domain === "templates") return $translator("sync.domainTemplates");
     if (domain === "plans") return $translator("sync.domainPlans");
@@ -258,6 +259,8 @@
   }
 
   function localizedSyncMessage(raw: string) {
+    const progressKey = progressErrorKey(raw);
+    if (progressKey) return $translator(progressKey);
     if (raw.includes('SYNC_AUTO_JOIN_')) return $translator('sync.autoJoinFailed');
     if (raw === "连接成功，已找到同步文件") return $translator("sync.connectionFound");
     if (raw === "连接成功，同步文件尚未创建") return $translator("sync.connectionMissing");
@@ -366,7 +369,7 @@
         </div>
       </dl>
       <div class="sync-domain-list">
-        {#each (["todos", "notes", "attachments", "links", "checklists", "templates", "plans"] as SyncDirtyDomain[]) as domain}
+        {#each (["todos", "notes", "attachments", "links", "checklists", "templates", "plans", "workflow", "progress"] as SyncDirtyDomain[]) as domain}
           <span class:dirty={$syncRuntimeSnapshot.dirtyDomains.includes(domain)}>
             {domainLabel(domain)}
           </span>

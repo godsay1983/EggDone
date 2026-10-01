@@ -29,6 +29,7 @@ export async function invoke(command,args){
  }
  if(command==='list_todos')return structuredClone(window.rows);
  if(command==='list_groups')return [{id:1,uuid:'work',name:'Work',color:'yellow',sort_order:0,created_at:1,updated_at:1,deleted_at:null}];
+ if(command==='count_task_progress')return [];
  if(command==='list_task_checklist_progress')return [{todo_uuid:'task-2',total:3,completed:1}];
  if(command==='list_notes')return [];
  if(command==='list_task_workflow')return window.workflowSnapshot(args.date);

@@ -9,7 +9,7 @@ use rusqlite::{params, Connection, Transaction};
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
-const CURRENT_SCHEMA_VERSION: i64 = 26;
+const CURRENT_SCHEMA_VERSION: i64 = 27;
 const DEVICE_ID_KEY: &str = "device_id";
 
 pub struct Database {
@@ -119,6 +119,9 @@ pub(crate) fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {
     })?;
     apply_migration(connection, 26, |transaction| {
         transaction.execute_batch(include_str!("migrations/026_task_workflow.sql"))
+    })?;
+    apply_migration(connection, 27, |transaction| {
+        transaction.execute_batch(include_str!("migrations/027_task_progress.sql"))
     })?;
     debug_assert_eq!(schema_version(connection)?, CURRENT_SCHEMA_VERSION);
     Ok(())
@@ -685,10 +688,18 @@ pub(crate) fn remove_daily_plan_schema_for_test(connection: &Connection) {
 
 #[cfg(test)]
 pub(crate) fn remove_task_workflow_schema_for_test(connection: &Connection) {
+    remove_task_progress_schema_for_test(connection);
     connection.execute_batch("DROP TRIGGER task_workflow_parent_removed; DROP TRIGGER task_workflow_parent_insert; DROP TRIGGER task_workflow_parent_update; DROP TRIGGER task_workflow_terminal;
         DROP TRIGGER task_workflow_event_insert; DROP TRIGGER task_workflow_event_update; DROP TRIGGER task_workflow_event_delete;
         DROP TABLE task_workflow_states; DROP TABLE task_workflow_operations; DROP TABLE task_workflow_sync_state;
         DELETE FROM schema_migrations WHERE version=26;").unwrap();
+}
+
+#[cfg(test)]
+pub(crate) fn remove_task_progress_schema_for_test(connection: &Connection) {
+    connection.execute_batch("DROP TRIGGER task_progress_parent_removed; DROP TRIGGER task_progress_terminal;
+        DROP TABLE task_progress_entries; DROP TABLE task_progress_operations; DROP TABLE task_progress_notices;
+        DROP TABLE task_progress_sync_state; DELETE FROM schema_migrations WHERE version=27;").unwrap();
 }
 
 #[cfg(test)]

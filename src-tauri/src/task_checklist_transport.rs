@@ -16,6 +16,7 @@ enum WireDomain {
     Templates,
     Planning,
     Workflow,
+    Progress,
 }
 impl WireDomain {
     fn canonical(self, raw: &str) -> Result<String, String> {
@@ -30,6 +31,16 @@ impl WireDomain {
             Self::Workflow => {
                 crate::task_workflow_protocol::encode(&crate::task_workflow_protocol::parse(raw)?)
             }
+            Self::Progress => {
+                crate::task_progress_protocol::encode(&crate::task_progress_protocol::parse(raw)?)
+            }
+        }
+    }
+    fn maximum(self) -> usize {
+        if self == Self::Progress {
+            crate::task_progress_protocol::MAX_BYTES
+        } else {
+            MAX_CHECKLIST_BYTES
         }
     }
 }
@@ -150,6 +161,18 @@ impl TaskChecklistTransport {
         )
     }
 
+    pub fn progress(
+        bucket: &Bucket,
+        todo_key: &str,
+        occupied_keys: &[String],
+    ) -> Result<Self, String> {
+        Self::for_key(
+            bucket,
+            crate::task_progress_protocol::object_key(todo_key, occupied_keys)?,
+            WireDomain::Progress,
+        )
+    }
+
     fn for_key(bucket: &Bucket, object_key: String, domain: WireDomain) -> Result<Self, String> {
         Ok(Self {
             bucket: bucket
@@ -188,7 +211,7 @@ impl TaskChecklistTransport {
         let etag = response_etag(response.headers())?;
         if response
             .content_length()
-            .is_some_and(|n| n > MAX_CHECKLIST_BYTES as u64)
+            .is_some_and(|n| n > self.domain.maximum() as u64)
         {
             return Err("CHECKLIST_DOCUMENT_TOO_LARGE".to_string());
         }
@@ -198,7 +221,7 @@ impl TaskChecklistTransport {
             .await
             .map_err(|_| "CHECKLIST_TRANSPORT_NETWORK")?
         {
-            if chunk.len() > MAX_CHECKLIST_BYTES - bytes.len() {
+            if chunk.len() > self.domain.maximum() - bytes.len() {
                 return Err("CHECKLIST_DOCUMENT_TOO_LARGE".to_string());
             }
             bytes.extend_from_slice(&chunk);
@@ -229,7 +252,7 @@ impl TaskChecklistTransport {
         let content = self.domain.canonical(document)?;
         crate::sync_space::require_existing(&self.object_key, remote.etag.as_deref())?;
         let content = crate::sync_space::encode(&self.object_key, &content)?;
-        if content.len() > MAX_CHECKLIST_BYTES {
+        if content.len() > self.domain.maximum() {
             return Err("CHECKLIST_DOCUMENT_TOO_LARGE".to_string());
         }
         let mut headers = HeaderMap::new();

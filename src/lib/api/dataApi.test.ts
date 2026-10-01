@@ -46,6 +46,15 @@ it('keeps a cancelled native file selection as null', async () => {
   expect(await dataApi.previewFullBackupImport()).toBeNull();
 });
 
+it.each(['json', 'backup'] as const)('normalizes %s progress preview counts from either serializer without applying writes', async kind => {
+  const method = kind === 'json' ? dataApi.previewImport : dataApi.previewFullBackupImport;
+  const camel = { progressMetadataIncluded: true, progressTotal: 10, progressAdded: 3, progressUpdated: 2, progressDeleted: 1, progressUnchanged: 4 };
+  invoke.mockResolvedValue({ ...preview(false, 0, 0), ...camel }); expect(await method()).toMatchObject(camel);
+  invoke.mockResolvedValue({ ...preview(false, 0, 0), progress_metadata_included: true, progress_total: 10,
+    progress_added: 3, progress_updated: 2, progress_deleted: 1, progress_unchanged: 4 }); expect(await method()).toMatchObject(camel);
+  expect(invoke.mock.calls.every(call => call[0].startsWith('preview_'))).toBe(true);
+});
+
 it('distinguishes explicit zero counts from absent planning data in both locales', () => {
   expect(translate('zh-CN', 'data.planningSummary', { relations: 12, completions: 3 }))
     .toBe('今日计划关系 12 条，完成记录 3 条');

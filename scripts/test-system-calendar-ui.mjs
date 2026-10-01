@@ -33,7 +33,7 @@ export async function invoke(command,args){
  if(command==='get_remote_sync_state')return {recurrenceToken:'',todoObjectExists:false,noteObjectExists:false,
    noteAttachmentObjectExists:false,todoEtag:null,noteEtag:null,noteAttachmentEtag:null};
  if(command==='list_todos')return structuredClone(window.rows);
- if(['list_groups','list_notes','list_task_checklist_progress'].includes(command))return [];
+ if(['list_groups','list_notes','list_task_checklist_progress','count_task_progress'].includes(command))return [];
  if(command==='list_daily_plans')return {date:args.date,revision:'0',current:[],previous:[]};
  if(command==='list_task_workflow')return {date:args.date,revision:'0',entries:[]};
  if(command==='recurrence_editor_context')return {rules:[],device_id:'fixture'};

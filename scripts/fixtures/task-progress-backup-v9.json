@@ -1,0 +1,91 @@
+{
+  "format_version": 9,
+  "exported_at": 1000,
+  "groups": [],
+  "todos": [
+    {
+      "uuid": "123e4567-e89b-42d3-a456-426614174000",
+      "title": "Progress backup task",
+      "completed": false,
+      "sort_order": 0,
+      "created_at": 1,
+      "updated_at": 100
+    }
+  ],
+  "notes": [],
+  "note_attachments": [],
+  "attachment_files_included": false,
+  "recurrence": {
+    "document": {
+      "format_version": 1,
+      "rules": []
+    },
+    "instances": []
+  },
+  "task_note_links": {
+    "format_version": 1,
+    "links": []
+  },
+  "task_checklist_items": {
+    "format_version": 1,
+    "items": []
+  },
+  "task_checklist_definitions": {
+    "format_version": 1,
+    "definitions": []
+  },
+  "task_templates": {
+    "format_version": 1,
+    "templates": []
+  },
+  "lifecycle_terminals": [],
+  "daily_planning": {
+    "format_version": 1,
+    "events": [],
+    "plans": [],
+    "completions": []
+  },
+  "task_workflow": {
+    "format_version": 1,
+    "events": [],
+    "states": []
+  },
+  "task_progress": {
+    "format_version": 1,
+    "entries": [
+      {
+        "uuid": "11111111-1111-4111-8111-000000000001",
+        "task_uuid": "123e4567-e89b-42d3-a456-426614174000",
+        "body": "Finished mapping\nNext: test Unicode \u4e2d\u6587 \ud83d\ude00",
+        "created_at": 10,
+        "created_by": "desktop",
+        "updated_at": 20,
+        "updated_by": "harmony",
+        "clock": 2,
+        "deleted_at": null
+      },
+      {
+        "uuid": "11111111-1111-4111-8111-000000000002",
+        "task_uuid": "123e4567-e89b-42d3-a456-426614174000",
+        "body": "",
+        "created_at": 11,
+        "created_by": "desktop",
+        "updated_at": 21,
+        "updated_by": "harmony",
+        "clock": 2,
+        "deleted_at": 21
+      },
+      {
+        "uuid": "11111111-1111-4111-8111-000000000003",
+        "task_uuid": "123e4567-e89b-42d3-a456-426614174099",
+        "body": "Unknown parent retained but hidden",
+        "created_at": 12,
+        "created_by": "desktop",
+        "updated_at": 12,
+        "updated_by": "desktop",
+        "clock": 1,
+        "deleted_at": null
+      }
+    ]
+  }
+}

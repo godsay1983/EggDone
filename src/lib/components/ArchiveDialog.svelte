@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import PanelToolButton from "./PanelToolButton.svelte";
+  import TaskProgressLauncher from './TaskProgressLauncher.svelte';
   import "./management-dialog.css";
   import { languageState, translator, type TranslationKey } from "$lib/i18n";
   import { createArchiveStore } from "$lib/stores/archiveStore";
@@ -49,7 +50,7 @@
   }
   onMount(() => {
     const escape = (event: KeyboardEvent) => {
-      if (dialog.open && event.key === "Escape") { event.preventDefault(); event.stopImmediatePropagation(); back(); }
+      if (dialog.open && event.key === "Escape" && !document.querySelector('dialog.progress-dialog[open]')) { event.preventDefault(); event.stopImmediatePropagation(); back(); }
     };
     window.addEventListener("keydown", escape, true);
     dialog.showModal();
@@ -271,6 +272,7 @@
       <p class="body">{notePreview.content}</p>
     {:else if pending}
       <h3>{pending.title}</h3>
+      <TaskProgressLauncher uuid={pending.expected.uuid} title={pending.title} readOnly always disabled={busy} />
       <p class="meta">{$translator(pending.completed ? "trash.completed" : "trash.incomplete")}
         {#if pending.group_name} · {pending.group_name}{/if}</p>
       <p class="meta">{$translator("archive.archivedOn")}: {date(pending.archived_at)}</p>
@@ -315,7 +317,9 @@
           <strong>{item.title}</strong>
           <span class="meta">{$translator(item.completed ? "trash.completed" : "trash.incomplete")} · {listDate(item.archived_at)}{#if item.group_name} · {item.group_name}{/if}</span>
           {#if item.content}<span class="excerpt">{item.content}</span>{/if}
-        </button></li>
+        </button>
+          <TaskProgressLauncher uuid={item.expected.uuid} title={item.title} readOnly disabled={busy || selecting} />
+        </li>
       {/each}</ul>
       {#if cursor}<button class="action-button" disabled={busy || loadFailed} onclick={() => load(false)}>{$translator("trash.more")}</button>{/if}
     {/if}
