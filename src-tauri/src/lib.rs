@@ -134,6 +134,8 @@ mod tray;
 #[cfg(target_os = "linux")]
 mod tray_ksni;
 mod window_preferences;
+mod work_review;
+mod work_review_commands;
 
 use serde::Serialize;
 use tauri::{Emitter, Manager, WindowEvent};
@@ -242,6 +244,9 @@ pub fn run() {
             task_progress_commands::write_task_progress,
             task_progress_commands::count_task_progress,
             task_progress_commands::dismiss_task_progress_notice,
+            work_review_commands::list_work_review,
+            work_review_commands::snapshot_work_review,
+            work_review_commands::validate_work_review,
             task_checklist_commands::save_task_checklist_editor,
             task_checklist_commands::create_task_checklist_editor,
             task_checklist_commands::resolve_checklist_rule_time,

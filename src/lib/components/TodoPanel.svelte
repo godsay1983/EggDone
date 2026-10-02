@@ -105,6 +105,12 @@
   import SettingsPanel from "./SettingsPanel.svelte";
   import TodoItem from "./TodoItem.svelte";
   import TaskProgressHost from './TaskProgressHost.svelte';
+  import WorkReviewDialog from './WorkReviewDialog.svelte';
+  let workReviewOpen = false;
+  function openWorkReview() {
+    if (captureRequest || captureLoading || contentSearchSession || showArchive || showTrash) return;
+    summaryMenuOpen = false; workReviewOpen = true;
+  }
   import DailyPlanTabs from './DailyPlanTabs.svelte';
   import DailyPlanList from './DailyPlanList.svelte';
   import DailyPlanStatus from './DailyPlanStatus.svelte';
@@ -213,7 +219,7 @@
   let captureReadAgain = false;
 
   async function readCapture() {
-    if (showArchive || archiveOpening || contentSearchSession || contentSearchOpening) return;
+    if (workReviewOpen || showArchive || archiveOpening || contentSearchSession || contentSearchOpening) return;
     if (captureRequest) return;
     if (captureLoading) { captureReadAgain = true; return; }
     captureLoading = true;
@@ -2056,6 +2062,7 @@
       showAbout ||
       showDataManager ||
       showTrash ||
+      workReviewOpen ||
       showArchive || archiveOpening ||
       contentSearchActive || contentSearchOpening ||
       showSettings ||
@@ -3047,6 +3054,7 @@
           <button type="button" role="menuitem" onclick={()=>{summaryMenuOpen=false;templatesOpen=true;}}>{$translator('templates.title')}</button>
           <button type="button" role="menuitem" onclick={() => { summaryMenuOpen = false; waitingListOpen = true; }}>{$translator('waiting.title')}</button>
           <button type="button" role="menuitem" onclick={openBatch}>{$translator('batch.title')}</button>
+          <button type="button" role="menuitem" onclick={openWorkReview}>{$translator('workReview.title')}</button>
           <button
             class:active={showSearch}
             type="button"
@@ -3723,6 +3731,7 @@
   <TrashDialog onClose={() => showTrash = false} afterCommit={refreshAfterTrash} />
 {/if}
 <TaskProgressHost />
+{#if workReviewOpen}<WorkReviewDialog onClose={() => { workReviewOpen = false; void readCapture(); }} />{/if}
 {#if showArchive}
   <ArchiveDialog initialItem={archiveInitial} onClose={closeArchive} afterCommit={refreshAfterTrash} onViewTask={viewArchiveTask} />
 {/if}

@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "time_zone": "UTC",
+  "dates": { "start": "2026-09-28", "end": "2026-10-04" },
+  "query": { "start_at": 1790553600000, "end_at": 1791158400000, "group_scope": "all", "group_uuid": null, "keyword": "" },
+  "snapshot": {
+    "matching_entry_count": 3,
+    "matching_task_count": 2,
+    "snapshot_token": "synthetic-fixture-token-not-a-backend-hash",
+    "rows": [
+      { "record_uuid": "10000000-0000-4000-8000-000000000003", "task_uuid": "20000000-0000-4000-8000-000000000001", "task_title": "IAAS", "group_uuid": null, "group_name": null, "group_color": null, "completed": false, "archived": false, "body": "Paths verified.\nNext: large files.", "created_at": 1790959200000, "updated_at": 1790959200000 },
+      { "record_uuid": "10000000-0000-4000-8000-000000000002", "task_uuid": "20000000-0000-4000-8000-000000000002", "task_title": "Network client", "group_uuid": null, "group_name": null, "group_color": null, "completed": true, "archived": true, "body": "Connection status complete.", "created_at": 1790953200000, "updated_at": 1790953200001 },
+      { "record_uuid": "10000000-0000-4000-8000-000000000001", "task_uuid": "20000000-0000-4000-8000-000000000001", "task_title": "IAAS", "group_uuid": null, "group_name": null, "group_color": null, "completed": false, "archived": false, "body": "Mapped 100%_done\\ok.", "created_at": 1790936400000, "updated_at": 1790959200001 }
+    ]
+  },
+  "expected_summary": {
+    "zh-CN": "工作回顾 | 2026-09-28 至 2026-10-04\n分组：全部分组\n涉及 2 个任务，3 条进展\n\n2026-10-02\nIAAS\n- 16:40 Paths verified.\n  Next: large files.\n- 10:20 Mapped 100%_done\\ok.\n\nNetwork client\n- 15:00 Connection status complete.",
+    "en-US": "Work Review | 2026-09-28 to 2026-10-04\nGroup: All groups\n2 tasks, 3 progress entries\n\n2026-10-02\nIAAS\n- 16:40 Paths verified.\n  Next: large files.\n- 10:20 Mapped 100%_done\\ok.\n\nNetwork client\n- 15:00 Connection status complete."
+  },
+  "keyword_cases": [
+    { "input": "  \uFEFFIAAS \u0085", "normalized": "iaas", "record_uuids": ["10000000-0000-4000-8000-000000000003", "10000000-0000-4000-8000-000000000001"] },
+    { "input": "%_done\\", "normalized": "%_done\\", "record_uuids": ["10000000-0000-4000-8000-000000000001"] },
+    { "input": "中文", "normalized": "中文", "record_uuids": [] }
+  ],
+  "date_cases": [
+    { "time_zone": "America/New_York", "dates": { "start": "2026-03-08", "end": "2026-03-08" }, "start_at": 1772946000000, "end_at": 1773028800000, "hours": 23 },
+    { "time_zone": "America/New_York", "dates": { "start": "2026-11-01", "end": "2026-11-01" }, "start_at": 1793505600000, "end_at": 1793595600000, "hours": 25 }
+  ]
+}
