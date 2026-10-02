@@ -1,0 +1,160 @@
+{
+  "format_version": 1,
+  "display_timezone": "UTC",
+  "draft_uuid": "d30b19ec-36c6-4aad-83d3-6b63f492c6f2",
+  "labels": {
+    "en-US": {
+      "fallback": "Calendar Todo",
+      "title": "Event",
+      "time": "Time",
+      "allDay": "All day",
+      "zone": "Display time zone",
+      "location": "Location",
+      "calendar": "Calendar"
+    },
+    "zh-CN": {
+      "fallback": "日程待办",
+      "title": "日程",
+      "time": "时间",
+      "allDay": "全天",
+      "zone": "显示时区",
+      "location": "地点",
+      "calendar": "日历"
+    }
+  },
+  "cases": [
+    {
+      "id": "timed-cross-day-unknown-zone",
+      "occurrence": {
+        "id": "private-occurrence",
+        "calendarId": "private-calendar",
+        "title": "明天 项目会议",
+        "startTime": 1790982000000,
+        "endTime": 1790989200000,
+        "isAllDay": false,
+        "startDate": "2026-10-02",
+        "endDateExclusive": "2026-10-04",
+        "timeZone": "unknown/untrusted",
+        "location": "Room A"
+      },
+      "calendar": "Work",
+      "expected_title": "明天 项目会议",
+      "expected_note_en": "Event: 明天 项目会议\nTime: 2026-10-02 23:00 - 2026-10-03 01:00\nDisplay time zone: UTC\nLocation: Room A\nCalendar: Work",
+      "expected_note_zh": "日程: 明天 项目会议\n时间: 2026-10-02 23:00 - 2026-10-03 01:00\n显示时区: UTC\n地点: Room A\n日历: Work"
+    },
+    {
+      "id": "all-day-multiday",
+      "occurrence": {
+        "id": "private-occurrence",
+        "calendarId": "private-calendar",
+        "title": "明天 项目会议",
+        "startTime": 1790982000000,
+        "endTime": 1790989200000,
+        "isAllDay": true,
+        "startDate": "2026-10-02",
+        "endDateExclusive": "2026-10-04",
+        "timeZone": "unknown/untrusted",
+        "location": "Room A"
+      },
+      "calendar": "Work",
+      "expected_note_en": "Event: 明天 项目会议\nAll day: 2026-10-02 - 2026-10-03\nLocation: Room A\nCalendar: Work"
+    },
+    {
+      "id": "all-day-single",
+      "occurrence": {
+        "id": "private-occurrence",
+        "calendarId": "private-calendar",
+        "title": "明天 项目会议",
+        "startTime": 1790982000000,
+        "endTime": 1790989200000,
+        "isAllDay": true,
+        "startDate": "2026-10-02",
+        "endDateExclusive": "2026-10-03",
+        "timeZone": "unknown/untrusted",
+        "location": "Room A"
+      },
+      "calendar": "",
+      "expected_note_en": "Event: 明天 项目会议\nAll day: 2026-10-02\nLocation: Room A"
+    },
+    {
+      "id": "empty-title-location-calendar",
+      "occurrence": {
+        "id": "private-occurrence",
+        "calendarId": "private-calendar",
+        "title": " \n ",
+        "startTime": 1790982000000,
+        "endTime": 1790989200000,
+        "isAllDay": false,
+        "startDate": "2026-10-02",
+        "endDateExclusive": "2026-10-04",
+        "timeZone": "unknown/untrusted",
+        "location": " "
+      },
+      "calendar": "",
+      "expected_title": "Calendar Todo",
+      "expected_note_en": "Event: Calendar Todo\nTime: 2026-10-02 23:00 - 2026-10-03 01:00\nDisplay time zone: UTC"
+    },
+    {
+      "id": "recurring-instance-only",
+      "occurrence": {
+        "id": "repeat-instance-only",
+        "calendarId": "private-calendar",
+        "title": "Weekly review",
+        "startTime": 1790982000000,
+        "endTime": 1790989200000,
+        "isAllDay": false,
+        "startDate": "2026-10-02",
+        "endDateExclusive": "2026-10-04",
+        "timeZone": "unknown/untrusted",
+        "location": "Room A"
+      },
+      "calendar": "Work",
+      "expected_title": "Weekly review",
+      "expected_note_en": "Event: Weekly review\nTime: 2026-10-02 23:00 - 2026-10-03 01:00\nDisplay time zone: UTC\nLocation: Room A\nCalendar: Work"
+    },
+    {
+      "id": "long-emoji-no-truncation",
+      "occurrence": {
+        "id": "private-occurrence",
+        "calendarId": "private-calendar",
+        "title": "明天 项目会议",
+        "startTime": 1790982000000,
+        "endTime": 1790989200000,
+        "isAllDay": false,
+        "startDate": "2026-10-02",
+        "endDateExclusive": "2026-10-04",
+        "timeZone": "unknown/untrusted",
+        "location": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
+      },
+      "calendar": "Work",
+      "expected_issue": "note"
+    },
+    {
+      "id": "long-title-no-truncation",
+      "occurrence": {
+        "id": "private-occurrence",
+        "calendarId": "private-calendar",
+        "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "startTime": 1790982000000,
+        "endTime": 1790989200000,
+        "isAllDay": false,
+        "startDate": "2026-10-02",
+        "endDateExclusive": "2026-10-04",
+        "timeZone": "unknown/untrusted",
+        "location": "Room A"
+      },
+      "calendar": "Work",
+      "expected_issue": "title"
+    }
+  ],
+  "defaults": {
+    "group_uuid": null,
+    "due_date": null,
+    "due_at": null,
+    "reminder_at": null,
+    "repeat_rule": null,
+    "priority": 0,
+    "pinned": false,
+    "completed": false
+  }
+}

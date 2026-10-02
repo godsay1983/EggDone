@@ -276,6 +276,8 @@ pub fn run() {
             content_search_commands::resolve_search_target,
             commands::create_todo,
             commands::create_captured_todo,
+            commands::calendar_todo::create_calendar_todo,
+            commands::calendar_todo::resolve_calendar_todo,
             commands::create_group,
             commands::create_note,
             commands::update_note,

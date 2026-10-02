@@ -483,6 +483,18 @@ describe("todo store", () => {
     expect(get(store).items.map((todo) => todo.id)).toEqual([2, 1, 3]);
   });
 
+  it("publishes confirmed calendar tasks immediately, deduplicated, with ordinary autosync", async () => {
+    const existing = makeTodo(1);
+    const api = createApi([existing]), onChanged = vi.fn();
+    const store = createTodoStore(api, onChanged); await store.load();
+    const committed = makeTodo(2, { note: 'Calendar summary' });
+    store.calendarCommitted(committed); store.calendarCommitted({ ...committed, title: 'Current edit' });
+    expect(get(store).items).toHaveLength(2);
+    expect(get(store).items.find(item => item.uuid === committed.uuid)?.title).toBe('Current edit');
+    expect(onChanged).toHaveBeenCalledTimes(2);
+    expect(api.list).toHaveBeenCalledTimes(1);
+  });
+
   it("restores the previous order when persistence fails", async () => {
     const first = makeTodo(1, { sort_order: 0 });
     const second = makeTodo(2, { sort_order: 1024 });

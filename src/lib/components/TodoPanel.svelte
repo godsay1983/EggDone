@@ -3506,7 +3506,7 @@
           {/if}
         </section>
         <div class="agenda-sections">
-          <SystemCalendar dates={selectedAgendaDate ? [selectedAgendaDate] : calendarPeriodCells(agendaWeekStartAt, calendarViewMode).filter(day => day.inMonth).map(day => day.dateKey)} now={filterNow.getTime()} />
+          <SystemCalendar dates={selectedAgendaDate ? [selectedAgendaDate] : calendarPeriodCells(agendaWeekStartAt, calendarViewMode).filter(day => day.inMonth).map(day => day.dateKey)} now={filterNow.getTime()} onViewTodo={uuid => void focusTodoByUuid(uuid)} />
           {#if selectedAgendaDate}
             {#key selectedAgendaDate}
               {@const sectionTodos = agendaDateTodos(renderedTodos, selectedAgendaDate)}

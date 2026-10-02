@@ -1,6 +1,6 @@
 # EggDone（蛋定 Todo）
 
-双端工作回顾与日程创建待办（2026-10-02）：见[实现方案](docs/WORK_REVIEW_CALENDAR_TODO_IMPLEMENTATION_PLAN.md)、[Roadmap](docs/WORK_REVIEW_CALENDAR_TODO_ROADMAP.md)和[验收记录](docs/WORK_REVIEW_CALENDAR_TODO_ACCEPTANCE.md)。工作回顾已接入“更多 → 工作回顾”，可按日期、当前分组和关键词汇总已有进展，打开原记录或复制完整摘要；包括已完成和归档任务，排除回收站任务。日程创建待办尚未实现。版本、数据库和同步格式不变，设备验收范围以验收记录为准。
+双端工作回顾与日程创建待办（2026-10-02）：见[实现方案](docs/WORK_REVIEW_CALENDAR_TODO_IMPLEMENTATION_PLAN.md)、[Roadmap](docs/WORK_REVIEW_CALENDAR_TODO_ROADMAP.md)和[验收记录](docs/WORK_REVIEW_CALENDAR_TODO_ACCEPTANCE.md)。工作回顾已接入“更多 → 工作回顾”，可按日期、当前分组和关键词汇总已有进展，打开原记录或复制完整摘要；包括已完成和归档任务，排除回收站任务。两端均可在可见日程的展开详情中“创建待办”，确认可编辑的标题、备注和分组后保存为普通独立任务，支持查看任务和正常任务同步。同草稿保存重试不会重复创建；取消不写入，不回写日历、不自动添加截止时间或提醒。用户确认测试通过，本轮按要求提交日程创建待办；版本、数据库和同步格式不变，未推送或发布。
 
 当前候选版本（2026-10-01）：**桌面 1.5.0**，配套 **鸿蒙 1.6.0 / 1000036**。任务进展记录及界面修正已提交，用户确认核心测试通过；本轮整理发布包与交接，不推送或发布。schema 27、备份内层数据 v9、进展格式 v1；升级前请保留备份，旧应用不能导入 v9。验证证据及未覆盖设备/网络矩阵见[验收记录](docs/TASK_PROGRESS_ACCEPTANCE.md)，下方版本和待验收描述为历史记录。
 

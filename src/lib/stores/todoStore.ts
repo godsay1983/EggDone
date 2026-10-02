@@ -32,6 +32,13 @@ export function createTodoStore(api = todoApi, onChanged = scheduleAutoSync) {
   return {
     subscribe,
 
+    calendarCommitted(todo: Todo) {
+      update((state) => ({ ...state,
+        items: [todo, ...state.items.filter(item => item.uuid !== todo.uuid)].sort(sortTodos), error: null,
+      }));
+      onChanged();
+    },
+
     async load() {
       update((state) => ({ ...state, loading: true, error: null }));
       try {

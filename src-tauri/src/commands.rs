@@ -6,6 +6,9 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, LogicalSize, Manager, Size, State, WebviewWindow};
 use uuid::Uuid;
 
+#[path = "calendar_todo.rs"]
+pub(crate) mod calendar_todo;
+
 use crate::{
     db::{device_id, now_millis, Database},
     i18n::{AppLocale, I18nState},
@@ -1825,6 +1828,15 @@ fn create_todo_in_connection(
     title: &str,
     group_uuid: Option<String>,
 ) -> Result<Todo, String> {
+    create_todo_with_uuid_in_connection(connection, title, group_uuid, &Uuid::new_v4().to_string())
+}
+
+fn create_todo_with_uuid_in_connection(
+    connection: &Connection,
+    title: &str,
+    group_uuid: Option<String>,
+    uuid: &str,
+) -> Result<Todo, String> {
     let title = title.trim();
     if title.is_empty() {
         return Err("任务内容不能为空".to_string());
@@ -1832,7 +1844,6 @@ fn create_todo_in_connection(
     let group_uuid = normalize_group_uuid(connection, group_uuid)?;
 
     let now = now_millis();
-    let uuid = Uuid::new_v4().to_string();
     let updated_by = device_id(connection).map_err(database_error)?;
     let sort_order: i64 = connection
         .query_row(

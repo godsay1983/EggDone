@@ -6,10 +6,17 @@
     calendarOccurrencesOnDate, calendarOwnerLabel, calendarAllDayLastDate } from '$lib/utils/systemCalendarDates';
   import { calendarErrorKind } from '$lib/utils/systemCalendarErrors';
   import type { CalendarOccurrence } from '$lib/types/systemCalendar';
+  import type { CalendarTodoDraft } from '$lib/api/calendarTodoApi';
+  import { calendarTodoDraft } from '$lib/utils/calendarTodoDraft';
+  import { todos } from '$lib/stores/todoStore';
+  import CalendarTodoDialog from './CalendarTodoDialog.svelte';
 
   export let dates: string[];
   export let now: number;
+  export let onViewTodo: (uuid: string) => void = () => {};
   let detailsOpen = false;
+  let expandedEvent: string | null = null;
+  let todoDraft: CalendarTodoDraft | null = null;
 
   $: document = $systemCalendar.document;
   $: if (document?.state !== 'active' || $systemCalendar.changingTarget) detailsOpen = false;
@@ -19,6 +26,18 @@
   $: sourceNames = new Map(document?.calendars.map(source => [source.id, source.title]) ?? []);
   $: locale = $languageState.resolvedLocale;
   $: errorKind = calendarErrorKind($systemCalendar.error);
+  $: canCreate = document?.state === 'active' && !$systemCalendar.changingTarget && $systemCalendar.configured;
+  $: if (!canCreate) expandedEvent = null;
+
+  function createTodo(item: CalendarOccurrence) {
+    if (!canCreate || !days.some(day => day.coverage !== 'outside' && day.items.some(event => event === item))) return;
+    todoDraft = calendarTodoDraft(item, sourceNames.get(item.calendarId) ?? '', {
+      fallback: $translator('calendarTodo.fallback'), title: $translator('calendarTodo.eventTitle'),
+      time: $translator('calendarTodo.time'), allDay: $translator('calendarTodo.allDay'),
+      zone: $translator('calendarTodo.zone'), location: $translator('calendarTodo.location'),
+      calendar: $translator('calendarTodo.calendar'),
+    });
+  }
 
   function timeLabel(item: CalendarOccurrence) {
     if (item.isAllDay) return $translator('systemCalendar.allDay');
@@ -108,6 +127,10 @@
                 <span class="event-time">{timeLabel(item)}</span>
                 <div class="event-content">
                   <strong>{item.title || $translator('systemCalendar.untitled')}</strong>
+                  <button type="button" class="event-toggle" aria-expanded={expandedEvent === day.date + ':' + item.id}
+                    onclick={() => expandedEvent = expandedEvent === day.date + ':' + item.id ? null : day.date + ':' + item.id}>
+                    {$translator(expandedEvent === day.date + ':' + item.id ? 'calendarTodo.collapse' : 'calendarTodo.details')}</button>
+                  {#if expandedEvent === day.date + ':' + item.id}
                   {#if item.isAllDay && calendarAllDayLastDate(item.endDateExclusive) !== item.startDate}
                     <span class="all-day-span">{$translator('systemCalendar.allDaySpan', {
                       start: item.startDate, end: calendarAllDayLastDate(item.endDateExclusive) })}</span>
@@ -116,6 +139,8 @@
                   {#if item.location}<span class="location">{item.location}</span>{/if}
                   {#if item.timeZone && item.timeZone !== document.source_timezone}
                     <span class="event-zone">{$translator('systemCalendar.eventTimezone', { zone: item.timeZone })}</span>
+                  {/if}
+                  {#if canCreate && day.coverage !== 'outside'}<button type="button" class="action-button create-todo" onclick={() => createTodo(item)}>{$translator('calendarTodo.title')}</button>{/if}
                   {/if}
                 </div>
               </li>
@@ -126,6 +151,8 @@
     </div>
   {/if}
 </section>
+
+{#if todoDraft}<CalendarTodoDialog draft={todoDraft} groups={$todos.groups} onClose={() => todoDraft = null} onView={onViewTodo} />{/if}
 
 <style>
   .system-calendar { --calendar-muted: #686b65; --calendar-line: #d8dcd5; --calendar-accent: #316457;
@@ -155,6 +182,9 @@
   .event-time { font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
   .event-content { display: grid; gap: 3px; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
   .event-content > span { font-size: 11px; }
+  .event-toggle { justify-self: start; padding: 0; border: 0; background: none; color: var(--calendar-muted); font: inherit; font-size: 11px; cursor: pointer; }
+  .event-toggle:focus-visible { outline: 2px solid var(--calendar-accent); outline-offset: 2px; }
+  .create-todo { justify-self: start; margin-top: 4px; }
   :global(html[data-theme='dark']) .system-calendar { --calendar-muted: #b7c1b7; --calendar-line: #50574f; --calendar-accent: #a4d4bd; }
   :global(html[data-theme='dark']) .warning { color: #f4ad97; }
 </style>
